@@ -3,21 +3,21 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // Neutros de Fundo (Slate / Dark Mode)
-val ArcboxDarkBg = Color(0xFF0F172A)
-val ArcboxDarkCard = Color(0xFF1E293B)
-val ArcboxDarkBorder = Color(0xFF334155)
+val ArcboxDarkBg = Color(0xFF090B12)
+val ArcboxDarkCard = Color(0xFF111522)
+val ArcboxDarkBorder = Color(0xFF252B3A)
 
-val ArcboxLightBg = Color(0xFFF0F7FF) // Branco Gelo: branco com leve tom de azul claro
+val ArcboxLightBg = Color(0xFFF5F7FB)
 val ArcboxLightCard = Color(0xFFFFFFFF)
-val ArcboxLightBorder = Color(0xFFD8E6F5)
+val ArcboxLightBorder = Color(0xFFE3E8F2)
 
 // Accent Colors (Chave de Destaque Arcbox)
-val ArcboxBlue = Color(0xFF2563EB)
-val ArcboxEmerald = Color(0xFF059669)
-val ArcboxFuchsia = Color(0xFFC026D3)
-val ArcboxRose = Color(0xFFE11D48)
-val ArcboxAmber = Color(0xFFD97706)
-val ArcboxIndigo = Color(0xFF4F46E5)
+val ArcboxBlue = Color(0xFF3D7BFF)
+val ArcboxEmerald = Color(0xFF1DBE92)
+val ArcboxFuchsia = Color(0xFFD05CE3)
+val ArcboxRose = Color(0xFFF05D78)
+val ArcboxAmber = Color(0xFFF0A44B)
+val ArcboxIndigo = Color(0xFF765BFF)
 
 // Cores por Categoria de Arquivo
 val ColorFolder = Color(0xFF3B82F6)
@@ -40,19 +40,19 @@ enum class AccentColorOption(val label: String, val color: Color, val darkColor:
 }
 
 // Clean Minimalism Dark Theme Colors (Zinc/Slate #09090B canvas)
-val SlateBackgroundDark = Color(0xFF09090B)
-val SlateSurfaceDark = Color(0xFF18181B)
-val SlateSurfaceVariantDark = Color(0xFF27272A)
-val SlateOnBackgroundDark = Color(0xFFFAFAFA)
-val SlateOnSurfaceDark = Color(0xFFF4F4F5)
-val SlateBorderDark = Color(0xFF27272A)
+val SlateBackgroundDark = Color(0xFF090B12)
+val SlateSurfaceDark = Color(0xFF111522)
+val SlateSurfaceVariantDark = Color(0xFF1A2030)
+val SlateOnBackgroundDark = Color(0xFFF6F8FC)
+val SlateOnSurfaceDark = Color(0xFFE9EDF7)
+val SlateBorderDark = Color(0xFF293146)
 
 // Light Theme Colors (Branco Gelo com leve tom de azul claro)
 val LightBackground = ArcboxLightBg
 val LightSurface = ArcboxLightCard
-val LightSurfaceVariant = Color(0xFFE2EFFD)
-val LightOnBackground = Color(0xFF0F172A)
-val LightOnSurface = Color(0xFF1E293B)
+val LightSurfaceVariant = Color(0xFFEEF2F8)
+val LightOnBackground = Color(0xFF101522)
+val LightOnSurface = Color(0xFF182033)
 val LightBorder = ArcboxLightBorder
 
 // File Type Specific Category Colors
@@ -63,7 +63,7 @@ val FileColorAudio = ColorAudio
 val FileColorDocument = ColorDocument
 val FileColorApk = ColorApk
 val FileColorArchive = ColorArchive
-val FileColorCode = Color(0xFF06B6D4)
-val FileColorTrash = Color(0xFF64748B)
+val FileColorCode = Color(0xFF27B8D9)
+val FileColorTrash = Color(0xFF77839A)
 
 

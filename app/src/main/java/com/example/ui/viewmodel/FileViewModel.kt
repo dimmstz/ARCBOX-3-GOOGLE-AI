@@ -560,6 +560,18 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun createFile(name: String) {
+        viewModelScope.launch {
+            val success = repository.createFile(_uiState.value.currentPath, name)
+            if (success) {
+                showToast("Arquivo \"$name\" criado com sucesso!")
+                refreshFiles()
+            } else {
+                showToast("Não foi possível criar o arquivo.")
+            }
+        }
+    }
+
     fun renameItem(item: FileItem, newName: String) {
         viewModelScope.launch {
             val success = repository.renameFile(item.path, newName)

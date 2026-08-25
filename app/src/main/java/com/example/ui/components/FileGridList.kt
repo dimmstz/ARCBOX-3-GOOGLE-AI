@@ -27,6 +27,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -118,9 +119,9 @@ fun ArcboxFileGridList(
                 if (mode == ViewMode.GRID) {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
-                        contentPadding = PaddingValues(10.dp, 10.dp, 10.dp, 88.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(14.dp, 12.dp, 14.dp, 104.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(files, key = { it.id }) { item ->
@@ -142,8 +143,8 @@ fun ArcboxFileGridList(
                     }
                 } else {
                     LazyColumn(
-                        contentPadding = PaddingValues(12.dp, 12.dp, 12.dp, 88.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(14.dp, 12.dp, 14.dp, 104.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(files, key = { it.id }) { item ->
@@ -470,16 +471,16 @@ fun FileGridCard(
     val categoryColor = item.fileType.getCategoryColor()
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = if (isSelected) 4.dp else 1.dp,
+        shape = RoundedCornerShape(20.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        tonalElevation = if (isSelected) 3.dp else 0.dp,
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(0.95f)
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
-                shape = RoundedCornerShape(18.dp)
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f),
+                shape = RoundedCornerShape(20.dp)
             )
             .combinedClickable(
                 onClick = onClick,
@@ -526,9 +527,13 @@ fun FileGridCard(
                 // Category Icon / Thumbnail Badge
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(categoryColor.copy(alpha = 0.15f)),
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(categoryColor.copy(alpha = 0.24f), categoryColor.copy(alpha = 0.07f))
+                            )
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     FileThumbnailImage(
@@ -580,15 +585,15 @@ fun FileListItem(
     val categoryColor = item.fileType.getCategoryColor()
 
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = if (isSelected) 3.dp else 1.dp,
+        shape = RoundedCornerShape(18.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        tonalElevation = if (isSelected) 3.dp else 0.dp,
         modifier = Modifier
             .fillMaxWidth()
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(16.dp)
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(18.dp)
             )
             .combinedClickable(
                 onClick = onClick,
@@ -600,13 +605,17 @@ fun FileListItem(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(14.dp)
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(categoryColor.copy(alpha = 0.15f)),
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(categoryColor.copy(alpha = 0.22f), categoryColor.copy(alpha = 0.06f))
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 FileThumbnailImage(
@@ -617,7 +626,7 @@ fun FileListItem(
                 )
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(13.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(

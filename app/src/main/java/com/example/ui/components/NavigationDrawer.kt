@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -56,11 +57,21 @@ fun ArcboxNavigationDrawerContent(
         ) {
             // Header Section
             Surface(
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp)
+                                            modifier = Modifier
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f),
+                                    MaterialTheme.colorScheme.surface
+                                )
+                            )
+                        )
+                        .padding(20.dp)
+
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -72,7 +83,11 @@ fun ArcboxNavigationDrawerContent(
                                 modifier = Modifier
                                     .size(42.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.primary),
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
+                                        )
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -110,7 +125,8 @@ fun ArcboxNavigationDrawerContent(
                             },
                             shape = RoundedCornerShape(14.dp),
                             color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 2.dp,
+                            tonalElevation = 1.dp,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {

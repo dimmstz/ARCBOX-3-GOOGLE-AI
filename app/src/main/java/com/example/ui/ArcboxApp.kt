@@ -88,6 +88,7 @@ fun ArcboxApp(
             }
         ) {
             Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
                 snackbarHost = { },
                 topBar = {
                     Column {
@@ -302,8 +303,8 @@ fun ArcboxApp(
                 uiState.operationStatusText?.let { statusText ->
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                        tonalElevation = 8.dp,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 10.dp,
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(24.dp)
@@ -473,7 +474,7 @@ fun ArcboxApp(
         if (showNewFileDialog) {
             AlertDialog(
                 onDismissRequest = { showNewFileDialog = false },
-                title = { Text("Criar Novo Arquivo") },
+                title = { Text("Criar novo arquivo") },
                 text = {
                     OutlinedTextField(
                         value = inputName,
@@ -486,7 +487,7 @@ fun ArcboxApp(
                 confirmButton = {
                     Button(onClick = {
                         if (inputName.isNotBlank()) {
-                            viewModel.createFolder(inputName.trim()) // or createFile
+                            viewModel.createFile(inputName.trim())
                         }
                         showNewFileDialog = false
                     }) {
