@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.Color
 import com.example.ui.theme.*
 
 enum class FileType {
-    FOLDER, IMAGE, VIDEO, AUDIO, DOCUMENT, APK, ARCHIVE, CODE, OTHER;
+    FOLDER, IMAGE, VIDEO, AUDIO, DOCUMENT, APK, ARCHIVE, CODE, TEMP_RESIDUAL, OTHER;
 
     @Composable
     fun getCategoryColor(): Color = when (this) {
@@ -18,6 +18,7 @@ enum class FileType {
         APK -> FileColorApk
         ARCHIVE -> FileColorArchive
         CODE -> FileColorCode
+        TEMP_RESIDUAL -> Color(0xFFFF7043)
         OTHER -> FileColorTrash
     }
 }
@@ -79,7 +80,9 @@ data class ApkInfo(
     val appName: String,
     val permissions: List<String>,
     val abis: List<String>,
-    val apkFilePath: String
+    val apkFilePath: String,
+    val isInstalledApp: Boolean = false,
+    val appCategory: String? = null
 )
 
 data class ZipEntryItem(
@@ -119,3 +122,16 @@ data class CategoryDetailInfo(
     val totalFiles: Int,
     val folders: List<CategoryFolderInfo>
 )
+
+fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    if (bytes < 1024) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024) return "%.1f KB".format(java.util.Locale.US, kb)
+    val mb = kb / 1024.0
+    if (mb < 1024) return "%.1f MB".format(java.util.Locale.US, mb)
+    val gb = mb / 1024.0
+    if (gb < 1024) return "%.1f GB".format(java.util.Locale.US, gb)
+    val tb = gb / 1024.0
+    return "%.1f TB".format(java.util.Locale.US, tb)
+}

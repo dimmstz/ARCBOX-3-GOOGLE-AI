@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,14 +17,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.models.FileType
 import com.example.data.models.StorageVolume
 import com.example.data.models.ThemeMode
 import com.example.util.formatFileSize
+import com.example.ui.theme.*
 
 @Composable
 fun ArcboxNavigationDrawerContent(
@@ -33,13 +38,30 @@ fun ArcboxNavigationDrawerContent(
     trashCount: Int,
     favoritesCount: Int = 0,
     isFavoritesOnly: Boolean = false,
+    isAppManagerOpen: Boolean = false,
     currentThemeMode: ThemeMode,
+    isMegaConnected: Boolean = false,
+    isDriveConnected: Boolean = false,
+    isMediafireConnected: Boolean = false,
+    isOnedriveConnected: Boolean = false,
+    isDropboxConnected: Boolean = false,
+    isWebdavConnected: Boolean = false,
+    megaEmail: String = "",
+    driveEmail: String = "",
+    mediafireEmail: String = "",
+    onedriveEmail: String = "",
+    dropboxEmail: String = "",
+    webdavEmail: String = "",
     onSelectVolume: (StorageVolume) -> Unit,
+    onStartOAuthFlow: (CloudProvider) -> Unit = {},
     onSelectFavorites: () -> Unit = {},
     onSelectCategory: (FileType?) -> Unit,
+    onOpenAppManager: () -> Unit = {},
     onOpenStorageDashboard: () -> Unit,
     onOpenTrashBin: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenCloudManager: () -> Unit = {},
+    onOpenWelcomeOnboarding: () -> Unit = {},
     onToggleThemeMode: (ThemeMode) -> Unit,
     onCloseDrawer: () -> Unit
 ) {
@@ -56,11 +78,14 @@ fun ArcboxNavigationDrawerContent(
         ) {
             // Header Section
             Surface(
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                modifier = Modifier.fillMaxWidth()
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp)
+                    modifier = Modifier.padding(16.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -68,27 +93,17 @@ fun ArcboxNavigationDrawerContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.primary),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.FolderSpecial,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
+                            ArcboxLogoIcon(
+                                modifier = Modifier.size(42.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
                                     text = "Arcbox",
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Text(
                                     text = "Gerenciador de Arquivos",
@@ -108,9 +123,9 @@ fun ArcboxNavigationDrawerContent(
                                 onSelectVolume(volume)
                                 onCloseDrawer()
                             },
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 2.dp,
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
@@ -119,7 +134,10 @@ fun ArcboxNavigationDrawerContent(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    ) {
                                         Icon(
                                             when (volume.typeKey) {
                                                 "SDCARD" -> Icons.Default.SdCard
@@ -134,24 +152,19 @@ fun ArcboxNavigationDrawerContent(
                                         Text(
                                             text = volume.name,
                                             style = MaterialTheme.typography.labelLarge,
-                                            fontWeight = FontWeight.Bold
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                         )
                                     }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "${(volume.usedRatio * 100).toInt()}%",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Icon(
-                                            Icons.Default.ChevronRight,
-                                            contentDescription = "Abrir diretório",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Icon(
+                                        Icons.Default.ChevronRight,
+                                        contentDescription = "Abrir diretório",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 LinearProgressIndicator(
@@ -161,15 +174,31 @@ fun ArcboxNavigationDrawerContent(
                                         .height(6.dp)
                                         .clip(CircleShape),
                                     color = MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                    strokeCap = StrokeCap.Round,
+                                    gapSize = 0.dp,
+                                    drawStopIndicator = {}
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "${formatFileSize(volume.usedBytes)} de ${formatFileSize(volume.totalBytes)} usados",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${formatFileSize(volume.usedBytes)} de ${formatFileSize(volume.totalBytes)} usados",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    Text(
+                                        text = "${(volume.usedRatio * 100).toInt()}%",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
@@ -199,11 +228,13 @@ fun ArcboxNavigationDrawerContent(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
 
+            val headerColor = MaterialTheme.colorScheme.primary
+
             // Section Header: Categorias & Atalhos
             Text(
                 text = "CATEGORIAS DE ARQUIVOS",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = headerColor,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
@@ -254,10 +285,10 @@ fun ArcboxNavigationDrawerContent(
             )
 
             DrawerCategoryItem(
-                label = "Aplicativos",
+                label = "Arquivos APK",
                 icon = Icons.Default.Android,
                 color = FileType.APK.getCategoryColor(),
-                isSelected = currentFilterCategory == FileType.APK,
+                isSelected = currentFilterCategory == FileType.APK && !isAppManagerOpen,
                 onClick = {
                     onSelectCategory(FileType.APK)
                     onCloseDrawer()
@@ -265,7 +296,7 @@ fun ArcboxNavigationDrawerContent(
             )
 
             DrawerCategoryItem(
-                label = "Compactados (ZIP)",
+                label = "Compactados",
                 icon = Icons.Default.FolderZip,
                 color = FileType.ARCHIVE.getCategoryColor(),
                 isSelected = currentFilterCategory == FileType.ARCHIVE,
@@ -288,61 +319,93 @@ fun ArcboxNavigationDrawerContent(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
 
-            // Storage Volume Switcher inside drawer
-            if (storageVolumes.isNotEmpty()) {
-                Text(
-                    text = "UNIDADES DE DISCO & NUVENS",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
-                )
-
-                storageVolumes.forEach { volume ->
-                    val isSelected = selectedVolume?.id == volume.id
-                    NavigationDrawerItem(
-                        label = { Text(volume.name) },
-                        selected = isSelected,
-                        onClick = {
-                            onSelectVolume(volume)
-                            onCloseDrawer()
-                        },
-                        icon = {
-                            Icon(
-                                when (volume.typeKey) {
-                                    "SDCARD" -> Icons.Default.SdCard
-                                    "CLOUD" -> Icons.Default.Cloud
-                                    else -> Icons.Default.Storage
-                                },
-                                contentDescription = null
-                            )
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                    )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
-            }
-
-            // Section Header: Ferramentas & Armazenamento
+            // Section 1: Discos Locais / Dispositivo
+            val localVolumes = storageVolumes.filter { it.typeKey != "CLOUD" }
             Text(
-                text = "FERRAMENTAS DE DISCO",
+                text = "DISPOSITIVO & DISCOS LOCAIS",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = headerColor,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
             )
 
+            localVolumes.forEach { volume ->
+                val isSelected = selectedVolume?.id == volume.id && !isFavoritesOnly && currentFilterCategory == null
+
+                NavigationDrawerItem(
+                    label = {
+                        Column {
+                            Text(
+                                text = volume.name,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                            if (volume.totalBytes > 0) {
+                                Text(
+                                    text = "${formatFileSize(volume.usedBytes)} / ${formatFileSize(volume.totalBytes)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    },
+                    selected = isSelected,
+                    onClick = {
+                        onSelectVolume(volume)
+                        onCloseDrawer()
+                    },
+                    icon = {
+                        Icon(
+                            when (volume.typeKey) {
+                                "SDCARD" -> Icons.Default.SdCard
+                                "OTG", "USB" -> Icons.Default.Usb
+                                "ROOT" -> Icons.Default.Security
+                                else -> Icons.Default.Storage
+                            },
+                            contentDescription = null,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
+
+            // Section Header: Ferramentas & Armazenamento
+            Text(
+                text = "FERRAMENTAS DE DISCO",
+                style = MaterialTheme.typography.labelSmall,
+                color = headerColor,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+            )
+
+            val toolIconTint = MaterialTheme.colorScheme.primary
+
             NavigationDrawerItem(
-                label = { Text("Análise de Armazenamento") },
+                label = { Text("Aplicativos instalados") },
+                selected = isAppManagerOpen,
+                onClick = {
+                    onOpenAppManager()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Default.Apps, contentDescription = null, tint = toolIconTint) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            NavigationDrawerItem(
+                label = { Text("Análise e Limpeza") },
                 selected = false,
                 onClick = {
                     onOpenStorageDashboard()
                     onCloseDrawer()
                 },
-                icon = { Icon(Icons.Outlined.PieChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                icon = { Icon(Icons.Outlined.PieChart, contentDescription = null, tint = toolIconTint) },
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
             )
 
@@ -353,7 +416,12 @@ fun ArcboxNavigationDrawerContent(
                     onOpenTrashBin()
                     onCloseDrawer()
                 },
-                icon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                icon = {
+                    ModernTrashCanCanvas(
+                        modifier = Modifier.size(20.dp),
+                        accentColor = toolIconTint
+                    )
+                },
                 badge = {
                     if (trashCount > 0) {
                         Badge(containerColor = MaterialTheme.colorScheme.error) {
@@ -370,7 +438,7 @@ fun ArcboxNavigationDrawerContent(
             Text(
                 text = "CONFIGURAÇÕES",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = headerColor,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
@@ -383,7 +451,18 @@ fun ArcboxNavigationDrawerContent(
                     onOpenSettings()
                     onCloseDrawer()
                 },
-                icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                icon = { Icon(Icons.Outlined.Settings, contentDescription = null, tint = toolIconTint) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            NavigationDrawerItem(
+                label = { Text("Recursos & Permissões") },
+                selected = false,
+                onClick = {
+                    onOpenWelcomeOnboarding()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Default.Info, contentDescription = null, tint = toolIconTint) },
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
             )
 
@@ -400,21 +479,45 @@ fun DrawerCategoryItem(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val iconTint = color
+
     NavigationDrawerItem(
-        label = { Text(label) },
+        label = {
+            Text(
+                text = label,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) color else MaterialTheme.colorScheme.onSurface
+            )
+        },
         selected = isSelected,
         onClick = onClick,
         icon = {
-            Box(
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Color.Transparent,
+                border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.35f)),
                 modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(color.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
+                    .size(30.dp)
+                    .background(getVibrantBadgeGradient(color), RoundedCornerShape(10.dp))
             ) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+                }
             }
         },
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
     )
 }
+
+data class CloudDrawerEntry(
+    val provider: CloudProvider,
+    val isConnected: Boolean,
+    val email: String,
+    val volumePath: String,
+    val defaultVolumeName: String,
+    val totalBytes: Long,
+    val usedBytes: Long
+)

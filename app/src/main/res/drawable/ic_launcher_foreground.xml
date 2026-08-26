@@ -1,8 +1,82 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:width="66dp"
-        android:height="66dp"
-        android:drawable="@drawable/arcbox_app_icon_fg_1785858068188"
-        android:gravity="center" />
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Main 'A' Arch Path - Left Leg (Cyan to Blue Gradient) -->
+    <path
+        android:pathData="M26,80 L54,26"
+        android:strokeWidth="15"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="26"
+                android:startY="80"
+                android:endX="54"
+                android:endY="26"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#0099FF" />
+                <item android:offset="0.6" android:color="#0284C7" />
+                <item android:offset="1.0" android:color="#2563EB" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Main 'A' Arch Path - Right Leg (Indigo to Purple Gradient) -->
+    <path
+        android:pathData="M54,26 L82,80"
+        android:strokeWidth="15"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="54"
+                android:startY="26"
+                android:endX="82"
+                android:endY="80"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#3B82F6" />
+                <item android:offset="0.5" android:color="#6366F1" />
+                <item android:offset="1.0" android:color="#8B5CF6" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Blue File Folders inside the Box -->
+    <!-- Back Folder Tab -->
+    <path
+        android:pathData="M40,51 H53 L56,54 H68 C69.7,54 71,55.3 71,57 V62 H37 V54 C37,52.3 38.3,51 40,51 Z"
+        android:fillColor="#0284C7" />
+
+    <!-- Front Folder -->
+    <path
+        android:pathData="M38,55 H52 L55,57 H70 C71.1,57 72,57.9 72,59 V64 H36 V57 C36,55.9 36.9,55 38,55 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="36"
+                android:startY="55"
+                android:endX="72"
+                android:endY="64"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#38BDF8" />
+                <item android:offset="1.0" android:color="#2563EB" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- White Storage Drawer Box -->
+    <!-- Box Body with Rounded Corners -->
+    <path
+        android:pathData="M37,60 H71 C73.2,60 75,61.8 75,64 V78 C75,80.2 73.2,82 71,82 H37 C34.8,82 33,80.2 33,78 V64 C33,61.8 34.8,60 37,60 Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#E2E8F0"
+        android:strokeWidth="1" />
+
+    <!-- Drawer Handle Notch -->
+    <path
+        android:pathData="M49,69 H59 C60.1,69 61,69.9 61,71 C61,72.1 60.1,73 59,73 H49 C47.9,73 47,72.1 47,71 C47,69.9 47.9,69 49,69 Z"
+        android:fillColor="#CBD5E1" />
+
+</vector>

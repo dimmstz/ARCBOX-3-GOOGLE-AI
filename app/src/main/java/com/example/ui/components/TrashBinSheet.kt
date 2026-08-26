@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -44,6 +45,14 @@ fun ArcboxTrashBinModal(
 ) {
     var selectedItems by remember { mutableStateOf(setOf<TrashEntity>()) }
     val isMultiSelecting = selectedItems.isNotEmpty()
+
+    var itemToDelete by remember { mutableStateOf<TrashEntity?>(null) }
+    var showConfirmDeleteSelected by remember { mutableStateOf(false) }
+    var showConfirmEmptyTrash by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isMultiSelecting) {
+        selectedItems = emptySet()
+    }
 
     Dialog(
         onDismissRequest = onClose,
@@ -108,8 +117,7 @@ fun ArcboxTrashBinModal(
                                 )
                             }
                             IconButton(onClick = {
-                                onDeleteSelected(selectedItems)
-                                selectedItems = emptySet()
+                                showConfirmDeleteSelected = true
                             }) {
                                 Icon(
                                     Icons.Default.DeleteForever,
@@ -131,7 +139,7 @@ fun ArcboxTrashBinModal(
                             }
                         } else {
                             if (trashItems.isNotEmpty()) {
-                                TextButton(onClick = onEmptyTrash) {
+                                TextButton(onClick = { showConfirmEmptyTrash = true }) {
                                     Text(
                                         text = "Esvaziar Lixeira",
                                         color = MaterialTheme.colorScheme.error,
@@ -160,33 +168,24 @@ fun ArcboxTrashBinModal(
                             verticalArrangement = Arrangement.Center,
                             modifier = Modifier.padding(32.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(80.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.DeleteSweep,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(40.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
+                            ModernEmptyTrashHero(
+                                size = 110.dp
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
                             Text(
                                 text = "A Lixeira está vazia",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = "Os arquivos excluídos permanecerão aqui por 30 dias antes de serem permanentemente removidos.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 32.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                modifier = Modifier.padding(horizontal = 24.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                lineHeight = 20.sp
                             )
                         }
                     }
@@ -300,7 +299,7 @@ fun ArcboxTrashBinModal(
                                                     tint = MaterialTheme.colorScheme.primary
                                                 )
                                             }
-                                            IconButton(onClick = { onDeletePermanently(item) }) {
+                                            IconButton(onClick = { itemToDelete = item }) {
                                                 Icon(
                                                     Icons.Default.DeleteForever,
                                                     contentDescription = "Excluir Definitivamente",
@@ -317,9 +316,92 @@ fun ArcboxTrashBinModal(
             }
         }
     }
+
+    // Confirmation dialogs for deletion
+    itemToDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { itemToDelete = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            title = { Text("Excluir permanentemente?") },
+            text = { Text("O item \"${item.displayName}\" será excluído permanentemente da Lixeira. Esta ação não poderá ser desfeita.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeletePermanently(item)
+                        itemToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Excluir", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToDelete = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showConfirmDeleteSelected && selectedItems.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDeleteSelected = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            title = { Text("Excluir permanentemente?") },
+            text = { Text("Deseja excluir permanentemente os ${selectedItems.size} itens selecionados? Esta ação não poderá ser desfeita.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteSelected(selectedItems)
+                        selectedItems = emptySet()
+                        showConfirmDeleteSelected = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Excluir", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDeleteSelected = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showConfirmEmptyTrash) {
+        AlertDialog(
+            onDismissRequest = { showConfirmEmptyTrash = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            title = { Text("Esvaziar Lixeira?") },
+            text = { Text("Todos os ${trashItems.size} itens da Lixeira serão excluídos permanentemente. Esta ação não poderá ser desfeita.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onEmptyTrash()
+                        showConfirmEmptyTrash = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Esvaziar Lixeira", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmEmptyTrash = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
 
+private val trashDateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+
 private fun formatTimestamp(time: Long): String {
-    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-    return sdf.format(Date(time))
+    return synchronized(trashDateFormat) {
+        trashDateFormat.format(Date(time))
+    }
 }

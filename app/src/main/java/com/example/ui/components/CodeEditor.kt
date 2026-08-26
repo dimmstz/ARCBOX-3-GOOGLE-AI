@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
@@ -34,9 +35,11 @@ fun ArcboxCodeEditorModal(
     onClose: () -> Unit
 ) {
     var textContent by remember(initialContent) { mutableStateOf(initialContent) }
+    var lastSavedContent by remember(initialContent) { mutableStateOf(initialContent) }
     var searchQuery by remember { mutableStateOf("") }
     var isSearchVisible by remember { mutableStateOf(false) }
 
+    val isSaved = textContent == lastSavedContent
     val lines = textContent.split('\n')
     val scrollState = rememberScrollState()
 
@@ -76,13 +79,31 @@ fun ArcboxCodeEditorModal(
                             Icon(Icons.Default.Search, contentDescription = "Buscar no texto")
                         }
                         Button(
-                            onClick = { onSaveContent(textContent) },
+                            onClick = {
+                                onSaveContent(textContent)
+                                lastSavedContent = textContent
+                            },
                             shape = RoundedCornerShape(12.dp),
+                            colors = if (isSaved) {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            } else {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            },
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(
+                                if (isSaved) Icons.Default.Check else Icons.Default.Save,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Salvar")
+                            Text(if (isSaved) "Salvo" else "Salvar")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

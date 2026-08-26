@@ -10,7 +10,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
@@ -23,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.ApkInfo
@@ -31,7 +34,11 @@ import com.example.data.models.ApkInfo
 @Composable
 fun ArcboxApkInspectorModal(
     apkInfo: ApkInfo,
+    onInstall: (String) -> Unit = {},
+    onUninstall: (String) -> Unit = {},
+    onRemoveSystemApp: (String) -> Unit = {},
     onShare: (ApkInfo) -> Unit = {},
+    onOpenPackage: (ApkInfo) -> Unit = {},
     onLaunchApp: (String) -> Unit = {},
     onOpenSettings: (String) -> Unit = {},
     onClose: () -> Unit
@@ -65,8 +72,8 @@ fun ArcboxApkInspectorModal(
                         contentAlignment = Alignment.Center
                     ) {
                         AppIconImage(
-                            packageName = apkInfo.packageName,
-                            apkPath = apkInfo.packageName,
+                            packageName = if (apkInfo.isInstalledApp) apkInfo.packageName else null,
+                            apkPath = apkInfo.apkFilePath,
                             modifier = Modifier.size(36.dp)
                         )
                     }
@@ -85,43 +92,105 @@ fun ArcboxApkInspectorModal(
                         )
                     }
                 }
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, contentDescription = "Fechar")
-                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Action Buttons Row: Compartilhar, Abrir, Configurações
+            // Action Buttons Row: Compartilhar, Instalar/Desinstalar, Configurações
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
                     onClick = { onShare(apkInfo) },
-                    modifier = Modifier.weight(1.2f),
-                    shape = RoundedCornerShape(12.dp)
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                 ) {
-                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Compartilhar APK", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Compartilhar",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
                 }
 
-                OutlinedButton(
-                    onClick = { onLaunchApp(apkInfo.packageName) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Abrir", style = MaterialTheme.typography.labelMedium)
+                when (apkInfo.appCategory) {
+                    "USER" -> {
+                        Button(
+                            onClick = { onUninstall(apkInfo.packageName) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Desinstalar",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    "SYSTEM" -> {
+                        Button(
+                            onClick = { onRemoveSystemApp(apkInfo.packageName) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Desinstalar\nAtualização",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 13.sp,
+                                maxLines = 2
+                            )
+                        }
+                    }
+                    else -> {
+                        FilledTonalButton(
+                            onClick = { onInstall(apkInfo.apkFilePath) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Instalar",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
 
                 IconButton(
                     onClick = { onOpenSettings(apkInfo.packageName) },
                     modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(Icons.Default.Settings, contentDescription = "Configurações do Sistema")
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Configurações do Sistema",
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
 
@@ -146,6 +215,13 @@ fun ArcboxApkInspectorModal(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            val apkFileSize = try {
+                val f = java.io.File(apkInfo.apkFilePath)
+                if (f.exists()) com.example.util.formatFileSize(f.length()) else "Pacote APK"
+            } catch (_: Exception) {
+                "Pacote APK"
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -156,56 +232,10 @@ fun ArcboxApkInspectorModal(
                     modifier = Modifier.weight(1f)
                 )
                 ApkSpecCard(
-                    title = "Permissões",
-                    value = "${apkInfo.permissions.size} solicitadas",
+                    title = "Tamanho",
+                    value = apkFileSize,
                     modifier = Modifier.weight(1f)
                 )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "Permissões Declaradas (${apkInfo.permissions.size})",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 240.dp)
-            ) {
-                items(apkInfo.permissions) { perm ->
-                    val cleanPerm = perm.substringAfterLast('.')
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Security,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = cleanPerm,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -215,9 +245,7 @@ fun ArcboxApkInspectorModal(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Análise Concluída")
+                Text("Fechar")
             }
 
             Spacer(modifier = Modifier.height(16.dp))

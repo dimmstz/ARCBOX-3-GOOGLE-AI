@@ -1,8 +1,10 @@
 package com.example.ui.components
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -19,9 +21,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.models.FileType
 import com.example.data.models.SortOption
 import com.example.data.models.SortOrder
@@ -29,6 +33,7 @@ import com.example.data.models.StorageVolume
 import com.example.data.models.ViewMode
 
 import com.example.util.formatFileSize
+import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +53,7 @@ fun ArcboxTopBar(
     onOpenStorageDashboard: () -> Unit,
     onOpenTrashBin: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenCloudManager: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     trashCount: Int = 0,
     isGlobalSearch: Boolean = false,
@@ -62,6 +68,7 @@ fun ArcboxTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
+            .statusBarsPadding()
     ) {
         // Main Top Bar Row
         Row(
@@ -98,53 +105,51 @@ fun ArcboxTopBar(
                     )
                 )
             } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu Lateral")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    IconButton(
+                        onClick = onOpenDrawer,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu Lateral", modifier = Modifier.size(22.dp))
                     }
 
                     // Logo & Volume Selector
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
+                            .weight(1f, fill = false)
                             .clip(RoundedCornerShape(16.dp))
                             .clickable { showVolumeDropdown = true }
                             .padding(horizontal = 6.dp, vertical = 4.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.FolderSpecial,
-                                contentDescription = "Arcbox",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f, fill = false)) {
                             Text(
                                 text = "Arcbox",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                val accentLabelColor = MaterialTheme.colorScheme.primary
                                 Text(
-                                    text = selectedVolume?.name ?: "Armazenamento",
+                                    text = selectedVolume?.name ?: "Armazenamento Interno",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontSize = 11.sp
+                                    color = accentLabelColor,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                                 Icon(
                                     Icons.Default.ArrowDropDown,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = accentLabelColor
                                 )
                             }
                         }
@@ -154,16 +159,46 @@ fun ArcboxTopBar(
                         expanded = showVolumeDropdown,
                         onDismissRequest = { showVolumeDropdown = false }
                     ) {
+                        val iconTint = MaterialTheme.colorScheme.primary
                         storageVolumes.forEach { volume ->
+                            val isCloud = volume.typeKey == "CLOUD"
+                            val cloudColor = when {
+                                volume.name.contains("Mega", ignoreCase = true) -> Color(0xFFD9272E)
+                                volume.name.contains("Drive", ignoreCase = true) -> Color(0xFF4285F4)
+                                volume.name.contains("OneDrive", ignoreCase = true) -> Color(0xFF0078D4)
+                                volume.name.contains("Mediafire", ignoreCase = true) -> Color(0xFF1262D3)
+                                volume.name.contains("Dropbox", ignoreCase = true) -> Color(0xFF0061FF)
+                                else -> iconTint
+                            }
+
                             DropdownMenuItem(
                                 text = {
                                     Column {
-                                        Text(volume.name, fontWeight = FontWeight.SemiBold)
-                                        Text(
-                                            "${formatFileSize(volume.usedBytes)} / ${formatFileSize(volume.totalBytes)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(volume.name, fontWeight = FontWeight.SemiBold)
+                                            if (isCloud) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = cloudColor.copy(alpha = 0.15f)
+                                                ) {
+                                                    Text(
+                                                        "NUVEM",
+                                                        fontSize = 8.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = cloudColor,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        if (volume.totalBytes > 0) {
+                                            Text(
+                                                "${formatFileSize(volume.usedBytes)} / ${formatFileSize(volume.totalBytes)}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 },
                                 onClick = {
@@ -171,40 +206,58 @@ fun ArcboxTopBar(
                                     showVolumeDropdown = false
                                 },
                                 leadingIcon = {
-                                    Icon(
-                                        when (volume.typeKey) {
-                                            "SDCARD" -> Icons.Default.SdCard
-                                            "DOWNLOADS" -> Icons.Default.Download
-                                            "DOCUMENTS" -> Icons.Default.Description
-                                            "PICTURES" -> Icons.Default.Image
-                                            "CLOUD" -> Icons.Default.Cloud
-                                            else -> Icons.Default.Storage
-                                        },
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
+                                    if (isCloud) {
+                                        CloudBrandIconByName(
+                                            nameOrId = volume.name,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            when (volume.typeKey) {
+                                                "SDCARD" -> Icons.Default.SdCard
+                                                "OTG", "USB" -> Icons.Default.Usb
+                                                "ROOT" -> Icons.Default.Security
+                                                else -> Icons.Default.Storage
+                                            },
+                                            contentDescription = null,
+                                            tint = iconTint
+                                        )
+                                    }
                                 }
                             )
                         }
                     }
                 }
 
-                // Action Icons (Search, View Mode, Sort, Dashboard, Trash, Settings)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { isSearchActive = true }) {
-                        Icon(Icons.Default.Search, contentDescription = "Buscar")
+                // Action Icons (Search, View Mode, Sort)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(
+                        onClick = { isSearchActive = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = "Buscar", modifier = Modifier.size(20.dp))
                     }
 
-                    IconButton(onClick = onToggleViewMode) {
+                    IconButton(
+                        onClick = onToggleViewMode,
+                        modifier = Modifier.size(36.dp)
+                    ) {
                         Icon(
                             if (viewMode == ViewMode.GRID) Icons.Default.ViewList else Icons.Default.GridView,
-                            contentDescription = "Modo de Visualização"
+                            contentDescription = "Modo de Visualização",
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
                     Box {
-                        IconButton(onClick = { showSortDropdown = true }) {
-                            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Ordenar")
+                        IconButton(
+                            onClick = { showSortDropdown = true },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Ordenar", modifier = Modifier.size(20.dp))
                         }
                         DropdownMenu(
                             expanded = showSortDropdown,
@@ -290,45 +343,81 @@ fun ArcboxTopBar(
         } else {
             // Category Filter Chips Row
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 item {
+                    val isAllSelected = filterCategory == null
                     FilterChip(
-                        selected = filterCategory == null,
+                        selected = isAllSelected,
                         onClick = { onFilterCategorySelected(null) },
-                        label = { Text("Todos") },
+                        label = {
+                            Text(
+                                text = "Todos",
+                                fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                            selectedLabelColor = MaterialTheme.colorScheme.primary,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.primary
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isAllSelected,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                            selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                            borderWidth = 1.dp,
+                            selectedBorderWidth = 1.2.dp
+                        ),
                         leadingIcon = {
-                            if (filterCategory == null) {
+                            if (isAllSelected) {
                                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                             }
                         }
                     )
                 }
                 items(FileType.values().filterNot { it == FileType.FOLDER }) { cat ->
+                    val isSelected = filterCategory == cat
+                    val catColor = cat.getCategoryColor()
                     FilterChip(
-                        selected = filterCategory == cat,
+                        selected = isSelected,
                         onClick = { onFilterCategorySelected(if (filterCategory == cat) null else cat) },
                         label = {
                             Text(
-                                when (cat) {
+                                text = when (cat) {
                                     FileType.IMAGE -> "Imagens"
                                     FileType.VIDEO -> "Vídeos"
                                     FileType.AUDIO -> "Áudios"
                                     FileType.DOCUMENT -> "Docs"
-                                    FileType.APK -> "Aplicativos"
+                                    FileType.APK -> "APK"
                                     FileType.ARCHIVE -> "ZIPs"
                                     FileType.CODE -> "Código"
                                     else -> "Outros"
-                                }
+                                },
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                             )
                         },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = catColor.copy(alpha = 0.16f),
+                            selectedLabelColor = catColor,
+                            selectedLeadingIconColor = catColor
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                            selectedBorderColor = catColor.copy(alpha = 0.85f),
+                            borderWidth = 1.dp,
+                            selectedBorderWidth = 1.2.dp
+                        ),
                         leadingIcon = {
                             Box(
                                 modifier = Modifier
-                                    .size(10.dp)
+                                    .size(11.dp)
                                     .clip(CircleShape)
-                                    .background(cat.getCategoryColor())
+                                    .background(getVibrantHorizontalGradient(catColor))
                             )
                         }
                     )
@@ -338,9 +427,118 @@ fun ArcboxTopBar(
     }
 }
 
+@Composable
+fun StorageVolumeChip(
+    volume: StorageVolume,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onManageStorage: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val containerColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    }
+
+    val iconTint = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val progressValue = if (volume.totalBytes > 0) {
+        (volume.usedBytes.toFloat() / volume.totalBytes).coerceIn(0f, 1f)
+    } else 0f
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+        tonalElevation = if (isSelected) 2.dp else 0.dp,
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    when (volume.typeKey) {
+                        "SDCARD" -> Icons.Default.SdCard
+                        "OTG", "USB" -> Icons.Default.Usb
+                        "CLOUD" -> Icons.Default.Cloud
+                        "ROOT" -> Icons.Default.Security
+                        else -> Icons.Default.Storage
+                    },
+                    contentDescription = volume.name,
+                    tint = iconTint,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = volume.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                }
+
+                if (volume.totalBytes > 0) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${formatFileSize(volume.usedBytes)} / ${formatFileSize(volume.totalBytes)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    LinearProgressIndicator(
+                        progress = { progressValue },
+                        modifier = Modifier
+                            .width(80.dp)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                        trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
+                }
+            }
+        }
+    }
+}
+
 fun formatFileSize(bytes: Long): String {
     if (bytes <= 0) return "0 B"
-    val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
-    return String.format("%.1f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+    if (bytes < 1024) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024) return "%.1f KB".format(java.util.Locale.US, kb)
+    val mb = kb / 1024.0
+    if (mb < 1024) return "%.1f MB".format(java.util.Locale.US, mb)
+    val gb = mb / 1024.0
+    if (gb < 1024) return "%.1f GB".format(java.util.Locale.US, gb)
+    val tb = gb / 1024.0
+    return "%.1f TB".format(java.util.Locale.US, tb)
 }

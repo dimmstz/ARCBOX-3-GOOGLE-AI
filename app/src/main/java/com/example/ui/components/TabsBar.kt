@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,12 +48,16 @@ fun ArcboxTabsBar(
             ) {
                 items(tabs, key = { it.id }) { tab ->
                     val isActive = tab.id == currentTabId
+                    val activeContainerColor = MaterialTheme.colorScheme.primaryContainer
+                    val activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    val activeIconTint = MaterialTheme.colorScheme.primary
 
                     Surface(
                         onClick = { onSwitchTab(tab.id) },
                         shape = RoundedCornerShape(12.dp),
-                        color = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        tonalElevation = if (isActive) 3.dp else 0.dp,
+                        color = if (isActive) activeContainerColor else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = if (isActive) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)) else null,
+                        shadowElevation = if (isActive) 1.dp else 0.dp,
                         modifier = Modifier.widthIn(max = 160.dp)
                     ) {
                         Row(
@@ -63,14 +68,14 @@ fun ArcboxTabsBar(
                                 Icons.Default.Folder,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
-                                tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (isActive) activeIconTint else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = tab.title,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (isActive) activeContentColor else MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
@@ -84,7 +89,7 @@ fun ArcboxTabsBar(
                                         .size(14.dp)
                                         .clip(RoundedCornerShape(4.dp))
                                         .clickable { onCloseTab(tab.id) },
-                                    tint = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = if (isActive) activeContentColor else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -93,6 +98,8 @@ fun ArcboxTabsBar(
             }
 
             Spacer(modifier = Modifier.width(6.dp))
+
+            val addIconTint = MaterialTheme.colorScheme.primary
 
             // Add tab button
             IconButton(
@@ -103,7 +110,7 @@ fun ArcboxTabsBar(
                     Icons.Default.Add,
                     contentDescription = "Nova Aba",
                     modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = addIconTint
                 )
             }
         }

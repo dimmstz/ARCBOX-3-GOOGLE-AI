@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Unarchive
@@ -29,8 +30,11 @@ fun ArcboxArchiveViewerModal(
     zipItem: FileItem,
     zipEntries: List<ZipEntryItem>,
     onExtractAll: () -> Unit,
+    onOpen: () -> Unit,
     onClose: () -> Unit
 ) {
+    val themeCategoryColor = zipItem.fileType.getCategoryColor()
+
     ModalBottomSheet(
         onDismissRequest = onClose,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -52,13 +56,13 @@ fun ArcboxArchiveViewerModal(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFFEC4899).copy(alpha = 0.15f)),
+                            .background(themeCategoryColor.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Default.FolderZip,
                             contentDescription = null,
-                            tint = Color(0xFFEC4899),
+                            tint = themeCategoryColor,
                             modifier = Modifier.size(28.dp)
                         )
                     }
@@ -84,16 +88,35 @@ fun ArcboxArchiveViewerModal(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Extract Action Button
-            Button(
-                onClick = onExtractAll,
+            // Action Buttons Row (Descompactar Tudo & Abrir)
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Descompactar Tudo")
+                Button(
+                    onClick = onExtractAll,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Extrair", maxLines = 1)
+                }
+
+                FilledTonalButton(
+                    onClick = onOpen,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                ) {
+                    Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Abrir", maxLines = 1)
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -2,9 +2,11 @@ package com.example.ui.components
 
 import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -19,22 +21,30 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.models.ThemeMode
 import com.example.ui.theme.AccentColorOption
+import com.example.ui.theme.PredefinedCustomColors
+import com.example.ui.theme.CustomColorPreset
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArcboxSettingsModal(
     currentThemeMode: ThemeMode,
     currentAccent: AccentColorOption,
+    customAccentColorHex: Long = 0xFF4F46E5L,
     deletePermanently: Boolean,
     onToggleDeletePermanently: (Boolean) -> Unit,
     confirmDelete: Boolean,
@@ -43,6 +53,7 @@ fun ArcboxSettingsModal(
     onToggleShowThumbnails: (Boolean) -> Unit = {},
     onSelectThemeMode: (ThemeMode) -> Unit,
     onSelectAccent: (AccentColorOption) -> Unit,
+    onSelectCustomColor: (Long) -> Unit = {},
     isMegaConnected: Boolean,
     onToggleMegaConnected: (Boolean) -> Unit,
     isDriveConnected: Boolean,
@@ -53,6 +64,18 @@ fun ArcboxSettingsModal(
     onToggleOnedriveConnected: (Boolean) -> Unit,
     isDropboxConnected: Boolean,
     onToggleDropboxConnected: (Boolean) -> Unit,
+    megaEmail: String = "conta.mega@arcbox.com",
+    driveEmail: String = "usuario.drive@gmail.com",
+    mediafireEmail: String = "usuario.mfire@mediafire.com",
+    onedriveEmail: String = "usuario.office@outlook.com",
+    dropboxEmail: String = "usuario.dbx@dropbox.com",
+    isRootAvailable: Boolean = false,
+    isRootGranted: Boolean = false,
+    rootStatusDetails: String = "",
+    onRequestRootAccess: () -> Unit = {},
+    onRemountSystemRw: () -> Unit = {},
+    onOpenCloudManager: () -> Unit = {},
+    onOpenWelcomeOnboarding: () -> Unit = {},
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
@@ -67,9 +90,8 @@ fun ArcboxSettingsModal(
     var keepHistory by remember { mutableStateOf(true) }
     var biometricLock by remember { mutableStateOf(false) }
     var autoLockVault by remember { mutableStateOf(true) }
-    var autoHttpServer by remember { mutableStateOf(false) }
     var parallelDirectoryReading by remember { mutableStateOf(true) }
-    var compressionLevel by remember { mutableStateOf("Balanceada (Padrão)") }
+    var compressionLevel by remember { mutableStateOf("Balanceada") }
     var trashAutoCleanDays by remember { mutableStateOf("30 Dias") }
     var cacheSizeMb by remember { mutableStateOf(42.5f) }
 
@@ -199,58 +221,264 @@ fun ArcboxSettingsModal(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            AccentColorOption.values().toList().chunked(4).forEach { rowOptions ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    rowOptions.forEach { option ->
-                                        val isSelected = currentAccent == option
-                                        Surface(
-                                            onClick = { onSelectAccent(option) },
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = if (isSelected) option.color.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                            border = androidx.compose.foundation.BorderStroke(
-                                                width = if (isSelected) 2.dp else 1.dp,
-                                                color = if (isSelected) option.color else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                                            ),
-                                            modifier = Modifier.weight(1f)
+                            val isDark = isSystemInDarkTheme()
+                            val activeCustomPreset = remember(customAccentColorHex) {
+                                PredefinedCustomColors.find { it.hexValue == customAccentColorHex }
+                            }
+                            val activeCustomColor = remember(customAccentColorHex, activeCustomPreset) {
+                                activeCustomPreset?.color ?: Color(customAccentColorHex)
+                            }
+
+                            // 4 Cores Principais no Topo (Azul Claro, Roxo, Preto/Branco, Personalizado)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                AccentColorOption.values().forEach { option ->
+                                    val isSelected = currentAccent == option
+                                    val isPersonalizado = option == AccentColorOption.PERSONALIZADO
+                                    val isPreto = option == AccentColorOption.PRETO
+
+                                    val customGradient = remember {
+                                        Brush.sweepGradient(
+                                            colors = listOf(
+                                                Color(0xFFEF4444),
+                                                Color(0xFFF97316),
+                                                Color(0xFFEAB308),
+                                                Color(0xFF22C55E),
+                                                Color(0xFF06B6D4),
+                                                Color(0xFF6366F1),
+                                                Color(0xFFA855F7),
+                                                Color(0xFFEF4444)
+                                            )
+                                        )
+                                    }
+
+                                    val isDark = isSystemInDarkTheme()
+                                    val cardBorderColor = if (isSelected) {
+                                        when {
+                                            isPreto -> if (isDark) Color(0xFFE2E8F0) else Color(0xFF18181B)
+                                            isPersonalizado -> activeCustomColor
+                                            else -> option.color
+                                        }
+                                    } else {
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                                    }
+
+                                    val cardBgColor = if (isSelected) {
+                                        when {
+                                            isPreto -> if (isDark) Color(0xFF27272A) else Color(0xFF18181B).copy(alpha = 0.08f)
+                                            isPersonalizado -> activeCustomColor.copy(alpha = 0.12f)
+                                            else -> option.color.copy(alpha = 0.12f)
+                                        }
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    }
+
+                                    Surface(
+                                        onClick = { onSelectAccent(option) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = cardBgColor,
+                                        shadowElevation = 0.dp,
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            width = if (isSelected) 1.5.dp else 1.dp,
+                                            color = cardBorderColor
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
                                         ) {
-                                            Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(26.dp)
+                                                    .clip(CircleShape)
+                                                    .then(
+                                                        if (isPersonalizado) {
+                                                            Modifier.background(customGradient).border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                                                        } else if (isPreto) {
+                                                            val pretoBg = if (isDark) Color(0xFFE2E8F0) else Color(0xFF18181B)
+                                                            Modifier.background(pretoBg).border(1.dp, Color(0xFF71717A), CircleShape)
+                                                        } else {
+                                                            Modifier.background(option.color).border(1.dp, Color.White, CircleShape)
+                                                        }
+                                                    ),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(26.dp)
-                                                        .clip(CircleShape)
-                                                        .background(option.color)
-                                                        .border(1.dp, Color.White, CircleShape),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    if (isSelected) {
-                                                        Icon(
-                                                            Icons.Default.Check,
-                                                            contentDescription = null,
-                                                            tint = Color.White,
-                                                            modifier = Modifier.size(14.dp)
-                                                        )
-                                                    }
+                                                if (isSelected) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = if (isPreto && isDark) Color(0xFF0F172A) else Color.White,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
                                                 }
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text(
-                                                    text = option.label,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                    fontSize = 10.5.sp,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = option.label,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                fontSize = 10.sp,
+                                                color = if (isSelected) {
+                                                    when {
+                                                        isPreto -> if (isDark) Color.White else Color(0xFF18181B)
+                                                        isPersonalizado -> activeCustomColor
+                                                        else -> option.color
+                                                    }
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                },
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // 16 Cores Variadas e Exclusivas Abaixo
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (currentAccent == AccentColorOption.PERSONALIZADO) activeCustomColor.copy(alpha = 0.35f)
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Default.Palette,
+                                                contentDescription = null,
+                                                tint = if (currentAccent == AccentColorOption.PERSONALIZADO) activeCustomColor else MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "16 Cores & Variações",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        if (currentAccent == AccentColorOption.PERSONALIZADO) {
+                                            Surface(
+                                                shape = RoundedCornerShape(20.dp),
+                                                color = activeCustomColor.copy(alpha = 0.15f),
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, activeCustomColor.copy(alpha = 0.4f))
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(10.dp)
+                                                            .clip(CircleShape)
+                                                            .background(activeCustomColor)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(5.dp))
+                                                    Text(
+                                                        text = activeCustomPreset?.name ?: "Personalizada",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = activeCustomColor,
+                                                        fontSize = 11.sp
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                    if (rowOptions.size < 4) {
-                                        repeat(4 - rowOptions.size) {
-                                            Spacer(modifier = Modifier.weight(1f))
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Grade 4x4 com as 16 cores
+                                    PredefinedCustomColors.chunked(4).forEach { colorRow ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 3.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            colorRow.forEach { preset ->
+                                                val isPresetSelected = currentAccent == AccentColorOption.PERSONALIZADO && customAccentColorHex == preset.hexValue
+
+                                                Surface(
+                                                    onClick = {
+                                                        onSelectAccent(AccentColorOption.PERSONALIZADO)
+                                                        onSelectCustomColor(preset.hexValue)
+                                                    },
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = if (isPresetSelected) preset.color.copy(alpha = 0.18f) else Color.Transparent,
+                                                    border = androidx.compose.foundation.BorderStroke(
+                                                        width = if (isPresetSelected) 1.5.dp else 0.5.dp,
+                                                        color = if (isPresetSelected) preset.color else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                                    ),
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(58.dp)
+                                                ) {
+                                                    Column(
+                                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                                        verticalArrangement = Arrangement.Center,
+                                                        modifier = Modifier.padding(2.dp)
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(24.dp)
+                                                                .clip(CircleShape)
+                                                                .background(preset.color)
+                                                                .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            if (isPresetSelected) {
+                                                                val isLightBg = preset.name == "Amarelo" || preset.name == "Rosa Claro"
+                                                                Icon(
+                                                                    Icons.Default.Check,
+                                                                    contentDescription = null,
+                                                                    tint = if (isLightBg) Color(0xFF0F172A) else Color.White,
+                                                                    modifier = Modifier.size(14.dp)
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Spacer(modifier = Modifier.height(2.dp))
+
+                                                        Text(
+                                                            text = preset.name,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            fontSize = 9.5.sp,
+                                                            fontWeight = if (isPresetSelected) FontWeight.Bold else FontWeight.Normal,
+                                                            color = if (isPresetSelected) {
+                                                                if (isDark) preset.darkColor else preset.color
+                                                            } else {
+                                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                                            },
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            textAlign = TextAlign.Center
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            if (colorRow.size < 4) {
+                                                repeat(4 - colorRow.size) {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -350,16 +578,26 @@ fun ArcboxSettingsModal(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            listOf("Rápida", "Balanceada (Padrão)", "Máxima").forEach { level ->
-                                val isSelected = compressionLevel == level
+                            listOf("Rápida", "Balanceada", "Máxima").forEach { level ->
+                                val isSelected = compressionLevel == level || (level == "Balanceada" && compressionLevel.startsWith("Balanceada"))
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { compressionLevel = level },
-                                    label = { Text(level, fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    label = {
+                                        Text(
+                                            text = level,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    },
                                     leadingIcon = if (isSelected) {
-                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp)) }
                                     } else null
                                 )
                             }
@@ -398,7 +636,7 @@ fun ArcboxSettingsModal(
                             Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Algoritmo de Criptografia: AES-256 GCM (Hardware Acceleration)",
+                                text = "Criptografia: AES-256 GCM",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -423,7 +661,7 @@ fun ArcboxSettingsModal(
 
                         SwitchSettingRow(
                             title = "Excluir permanentemente",
-                            subtitle = "Ative para excluir de forma permanente e desative para enviar à lixeira por padrão",
+                            subtitle = "Exclui direto sem enviar para a Lixeira",
                             icon = Icons.Outlined.DeleteForever,
                             checked = deletePermanentlyLocal,
                             onCheckedChange = {
@@ -434,7 +672,7 @@ fun ArcboxSettingsModal(
 
                         SwitchSettingRow(
                             title = "Salvar Histórico de Operações",
-                            subtitle = "Registra cópias, movimentações e exclusões para auditoria",
+                            subtitle = "Registra cópias e movimentações realizadas",
                             icon = Icons.Outlined.History,
                             checked = keepHistory,
                             onCheckedChange = { keepHistory = it }
@@ -452,34 +690,30 @@ fun ArcboxSettingsModal(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             listOf("Nunca", "7 Dias", "30 Dias").forEach { opt ->
                                 val isSelected = trashAutoCleanDays == opt
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { trashAutoCleanDays = opt },
-                                    label = { Text(opt, fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    label = {
+                                        Text(
+                                            text = opt,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    },
                                     leadingIcon = if (isSelected) {
-                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp)) }
                                     } else null
                                 )
                             }
                         }
-                    }
-
-                    // CATEGORY 6: REDE & NUVEM
-                    SettingsSectionCard(
-                        title = "Rede & Transferência Wi-Fi",
-                        icon = Icons.Default.Wifi
-                    ) {
-                        SwitchSettingRow(
-                            title = "Iniciar Servidor HTTP com o App",
-                            subtitle = "Permite acessar arquivos pelo navegador no computador",
-                            icon = Icons.Outlined.Http,
-                            checked = autoHttpServer,
-                            onCheckedChange = { autoHttpServer = it }
-                        )
                     }
 
                     // CATEGORY: CLOUD SYNC & STORAGE UNITS
@@ -488,15 +722,28 @@ fun ArcboxSettingsModal(
                         icon = Icons.Default.Cloud
                     ) {
                         Text(
-                            text = "Conecte suas contas de armazenamento em nuvem para sincronizar arquivos e exibi-los em suas unidades de disco.",
+                            text = "Acesse seus arquivos no Mega, Google Drive, Mediafire, OneDrive e Dropbox com login e senha.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
+
+                        OutlinedButton(
+                            onClick = onOpenCloudManager,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Abrir Gerenciador de Nuvem", fontWeight = FontWeight.Bold)
+                        }
                         
                         CloudSyncRow(
                             name = "Mega",
                             isConnected = isMegaConnected,
+                            userEmail = megaEmail,
                             onToggleConnect = onToggleMegaConnected
                         )
                         
@@ -505,6 +752,7 @@ fun ArcboxSettingsModal(
                         CloudSyncRow(
                             name = "Google Drive",
                             isConnected = isDriveConnected,
+                            userEmail = driveEmail,
                             onToggleConnect = onToggleDriveConnected
                         )
                         
@@ -513,6 +761,7 @@ fun ArcboxSettingsModal(
                         CloudSyncRow(
                             name = "Mediafire",
                             isConnected = isMediafireConnected,
+                            userEmail = mediafireEmail,
                             onToggleConnect = onToggleMediafireConnected
                         )
                         
@@ -521,6 +770,7 @@ fun ArcboxSettingsModal(
                         CloudSyncRow(
                             name = "OneDrive",
                             isConnected = isOnedriveConnected,
+                            userEmail = onedriveEmail,
                             onToggleConnect = onToggleOnedriveConnected
                         )
                         
@@ -529,11 +779,85 @@ fun ArcboxSettingsModal(
                         CloudSyncRow(
                             name = "Dropbox",
                             isConnected = isDropboxConnected,
+                            userEmail = dropboxEmail,
                             onToggleConnect = onToggleDropboxConnected
                         )
                     }
 
-                    // CATEGORY 7: SOBRE O APP
+                    // CATEGORY 7: ACESSO SUPERUSUÁRIO (ROOT)
+                    SettingsSectionCard(
+                        title = "Acesso Superusuário (Root)",
+                        icon = Icons.Default.Security
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isRootGranted) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            } else if (isRootAvailable) {
+                                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(14.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isRootGranted) Icons.Default.CheckCircle else if (isRootAvailable) Icons.Default.Security else Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = if (isRootGranted) MaterialTheme.colorScheme.primary else if (isRootAvailable) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = if (isRootGranted) "Superusuário Concedido (UID 0)" else if (isRootAvailable) "Binário SU Detectado" else "Sem Acesso Root",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = if (isRootGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = if (rootStatusDetails.isNotBlank()) rootStatusDetails else if (isRootAvailable) "Dispositivo rooteado. A unidade 'Raiz' está disponível para exploração total." else "O armazenamento 'Raiz' só é exibido quando privilégios de superusuário estão disponíveis.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Button(
+                                onClick = onRequestRootAccess,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isRootGranted) "Reverificar Root" else "Solicitar Root (su)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            if (isRootAvailable) {
+                                OutlinedButton(
+                                    onClick = onRemountSystemRw,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Remontar R/W", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    // CATEGORY 8: SOBRE O APP
                     SettingsSectionCard(
                         title = "Sobre o Arcbox Storage",
                         icon = Icons.Default.Info
@@ -542,37 +866,21 @@ fun ArcboxSettingsModal(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.FolderSpecial,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(26.dp)
-                                    )
-                                }
-                            }
+                            ArcboxLogoIcon(
+                                modifier = Modifier.size(48.dp),
+                                shape = CircleShape
+                            )
                             Spacer(modifier = Modifier.width(14.dp))
                             Column {
                                 Text(
-                                    text = "Arcbox File Manager Pro",
+                                    text = "Arcbox File Manager",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Versão 2.8.5 • Build 2026 Android 10-16",
+                                    text = "Versão 2.8.5",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "Kotlin Nativo • Jetpack Compose • Clean Architecture",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontSize = 10.sp
                                 )
                             }
                         }
@@ -716,6 +1024,7 @@ fun ThemeModeCard(
 fun CloudSyncRow(
     name: String,
     isConnected: Boolean,
+    userEmail: String = "",
     onToggleConnect: (Boolean) -> Unit
 ) {
     Row(
@@ -742,7 +1051,7 @@ fun CloudSyncRow(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (isConnected) "Sincronizado • Exibido em unidades" else "Nuvem não conectada",
+                    text = if (isConnected) "Conectado • ${userEmail.ifEmpty { "Sincronizado" }}" else "Não conectado",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
