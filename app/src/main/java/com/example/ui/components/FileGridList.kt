@@ -694,36 +694,56 @@ fun FileGridCard(
                     iconSize = 26.dp
                 )
 
-                // Bottom text overlay with subtle outline shadow (no dark vignette box)
+                // Bottom text overlay with gradient scrim for high legibility & fast rendering
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.72f)
+                                )
+                            )
+                        )
                         .padding(horizontal = 4.dp, vertical = 4.dp)
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedGridText(
+                        Text(
                             text = displayName,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                shadow = androidx.compose.ui.graphics.Shadow(
+                                    color = Color.Black,
+                                    offset = Offset(0f, 1f),
+                                    blurRadius = 3f
+                                )
+                            ),
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Center,
-                            textColor = Color.White
+                            color = Color.White
                         )
-                        OutlinedGridText(
+                        Text(
                             text = formatFileSize(item.size),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                shadow = androidx.compose.ui.graphics.Shadow(
+                                    color = Color.Black,
+                                    offset = Offset(0f, 1f),
+                                    blurRadius = 3f
+                                )
+                            ),
                             fontWeight = FontWeight.Normal,
                             fontSize = 10.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Clip,
                             textAlign = TextAlign.Center,
-                            textColor = Color.White.copy(alpha = 0.95f)
+                            color = Color.White.copy(alpha = 0.95f)
                         )
                     }
                 }
@@ -1321,9 +1341,10 @@ fun FileThumbnailImage(
                 val imageRequest = remember(item.path, item.lastModified) {
                     ImageRequest.Builder(context)
                         .data(java.io.File(item.path))
-                        .size(128, 128)
-                        .memoryCacheKey(item.path)
-                        .diskCacheKey(item.path)
+                        .size(180, 180)
+                        .precision(coil.size.Precision.INEXACT)
+                        .memoryCacheKey("${item.path}_${item.lastModified}")
+                        .diskCacheKey("${item.path}_${item.lastModified}")
                         .crossfade(false)
                         .build()
                 }
@@ -1355,10 +1376,11 @@ fun FileThumbnailImage(
                 val imageRequest = remember(item.path, item.lastModified) {
                     ImageRequest.Builder(context)
                         .data(java.io.File(item.path))
-                        .size(128, 128)
+                        .size(180, 180)
+                        .precision(coil.size.Precision.INEXACT)
                         .videoFrameMillis(1000)
-                        .memoryCacheKey("video_${item.path}")
-                        .diskCacheKey("video_${item.path}")
+                        .memoryCacheKey("video_${item.path}_${item.lastModified}")
+                        .diskCacheKey("video_${item.path}_${item.lastModified}")
                         .crossfade(false)
                         .build()
                 }

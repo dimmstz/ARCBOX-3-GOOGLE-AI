@@ -34,10 +34,10 @@ class ArcboxApplication : Application(), ImageLoaderFactory {
             .components {
                 add(VideoFrameDecoder.Factory())
             }
-            .fetcherDispatcher(Dispatchers.IO.limitedParallelism(6))
-            .decoderDispatcher(Dispatchers.IO.limitedParallelism(3))
+            .fetcherDispatcher(Dispatchers.IO.limitedParallelism(8))
+            .decoderDispatcher(Dispatchers.Default.limitedParallelism(4))
             .transformationDispatcher(Dispatchers.Default.limitedParallelism(2))
-            .allowHardware(false)
+            .allowHardware(true)
             .allowRgb565(true)
             .respectCacheHeaders(false)
             .crossfade(false)
