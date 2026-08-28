@@ -17,30 +17,34 @@ import kotlinx.coroutines.Dispatchers
 class ArcboxApplication : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader {
-        return ImageLoader.Builder(this)
-            .memoryCache {
-                MemoryCache.Builder(this)
-                    // Allocate 30% of available app memory for fast thumbnail caching
-                    .maxSizePercent(0.30)
-                    .strongReferencesEnabled(true)
-                    .build()
-            }
-            .diskCache {
-                DiskCache.Builder()
-                    .directory(cacheDir.resolve("arcbox_thumbnails"))
-                    .maxSizeBytes(150L * 1024 * 1024) // 150 MB disk cache
-                    .build()
-            }
-            .components {
-                add(VideoFrameDecoder.Factory())
-            }
-            .fetcherDispatcher(Dispatchers.IO.limitedParallelism(8))
-            .decoderDispatcher(Dispatchers.Default.limitedParallelism(4))
-            .transformationDispatcher(Dispatchers.Default.limitedParallelism(2))
-            .allowHardware(true)
-            .allowRgb565(true)
-            .respectCacheHeaders(false)
-            .crossfade(false)
-            .build()
+        return try {
+            val cacheFolder = java.io.File(cacheDir, "arcbox_thumbnails").apply { mkdirs() }
+            ImageLoader.Builder(this)
+                .memoryCache {
+                    MemoryCache.Builder(this)
+                        .maxSizePercent(0.25)
+                        .strongReferencesEnabled(true)
+                        .build()
+                }
+                .diskCache {
+                    DiskCache.Builder()
+                        .directory(cacheFolder)
+                        .maxSizeBytes(100L * 1024 * 1024)
+                        .build()
+                }
+                .components {
+                    add(VideoFrameDecoder.Factory())
+                }
+                .dispatcher(Dispatchers.IO)
+                .allowHardware(true)
+                .allowRgb565(true)
+                .respectCacheHeaders(false)
+                .crossfade(false)
+                .build()
+        } catch (e: Throwable) {
+            ImageLoader.Builder(this)
+                .crossfade(false)
+                .build()
+        }
     }
 }

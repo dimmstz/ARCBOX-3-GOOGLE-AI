@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.activity.compose.BackHandler
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -438,6 +439,10 @@ fun ArcboxImageViewerScreen(
             rotation = 0f
         }
         onClose()
+    }
+
+    BackHandler(enabled = true) {
+        handleClose()
     }
 
     val backgroundModifier = when (backgroundModeIndex) {

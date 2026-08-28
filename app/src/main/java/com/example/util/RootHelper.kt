@@ -52,7 +52,7 @@ object RootHelper {
     )
 
     /**
-     * Checks if the SU binary or root capability exists on the device.
+     * Checks if the SU binary or root capability exists on the device without executing shell commands.
      */
     fun isRootAvailable(forceRefresh: Boolean = false): Boolean {
         if (!forceRefresh && cachedIsAvailable != null) {
@@ -84,32 +84,6 @@ object RootHelper {
             }
         } catch (_: Exception) {}
 
-        // 3. Test execution of which su
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("which", "su"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val line = reader.readLine()
-            process.waitFor()
-            if (process.exitValue() == 0 && !line.isNullOrBlank()) {
-                cachedSuPath = line.trim()
-                cachedIsAvailable = true
-                return true
-            }
-        } catch (_: Exception) {}
-
-        // 4. Test quick su version check
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-v"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val version = reader.readLine()
-            process.waitFor()
-            if (process.exitValue() == 0 && !version.isNullOrBlank()) {
-                cachedSuVersion = version.trim()
-                cachedIsAvailable = true
-                return true
-            }
-        } catch (_: Exception) {}
-
         cachedIsAvailable = false
         return false
     }
@@ -138,11 +112,11 @@ object RootHelper {
 
     suspend fun getRootStatus(forceRefresh: Boolean = false): RootStatus = withContext(Dispatchers.IO) {
         val available = isRootAvailable(forceRefresh)
-        val granted = if (available) requestRootPermission() else false
+        val granted = cachedIsGranted == true
 
         val details = when {
             granted -> "Acesso Root (Superusuário) ativo e concedido com privilégios de sistema (UID 0)."
-            available -> "Binário SU encontrado (${cachedSuPath ?: "disponível"}), permissão de superusuário pendente de confirmação."
+            available -> "Binário SU encontrado (${cachedSuPath ?: "disponível"}). Toque para solicitar permissão."
             else -> "Nenhum binário de superusuário (su) detectado. Modo padrão de armazenamento ativado."
         }
 
@@ -156,18 +130,19 @@ object RootHelper {
     }
 
     /**
-     * Executes a shell command with superuser privileges.
+     * Executes a shell command with superuser privileges with a strict timeout to prevent hangs.
      */
     suspend fun executeCommand(command: String): RootCommandResult = withContext(Dispatchers.IO) {
-        try {
-            val process = ProcessBuilder("su", "-c", command).start()
-            val stdout = process.inputStream.bufferedReader().use { it.readText() }
-            val stderr = process.errorStream.bufferedReader().use { it.readText() }
-            val exitCode = process.waitFor()
-            RootCommandResult(exitCode, stdout.trim(), stderr.trim())
-        } catch (e: Exception) {
-            RootCommandResult(-1, "", e.localizedMessage ?: "Erro ao executar comando root")
-        }
+        kotlinx.coroutines.withTimeoutOrNull(2500L) {
+            try {
+                val process = ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
+                val output = process.inputStream.bufferedReader().use { it.readText() }
+                val exitCode = process.waitFor()
+                RootCommandResult(exitCode, output.trim(), "")
+            } catch (e: Exception) {
+                RootCommandResult(-1, "", e.localizedMessage ?: "Erro ao executar comando root")
+            }
+        } ?: RootCommandResult(-1, "", "Timeout ao executar comando root")
     }
 
     /**

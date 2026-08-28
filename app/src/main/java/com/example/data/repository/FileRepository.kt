@@ -79,7 +79,6 @@ class FileRepository(private val context: Context) {
     // STORAGE VOLUMES & ROOTS
     // -------------------------------------------------------------
     suspend fun getStorageVolumes(): List<StorageVolume> = withContext(Dispatchers.IO) {
-        ensureMockFilesExist()
         val list = mutableListOf<StorageVolume>()
 
         // Primary Internal Storage
@@ -1952,8 +1951,9 @@ class FileRepository(private val context: Context) {
         }
     }
 
-    private fun ensureMockFilesExist() {
+    fun ensureMockFilesExist() {
         if (mockFilesCreated) return
+        if (!com.example.util.PermissionHelper.hasAllFilesAccess(context)) return
         mockFilesCreated = true
         try {
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)

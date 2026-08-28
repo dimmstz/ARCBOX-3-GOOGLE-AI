@@ -109,6 +109,8 @@ fun PermissionWelcomeScreen(
     BackHandler(enabled = true) {
         if (hasStoragePermission) {
             onDismiss()
+        } else {
+            (context as? android.app.Activity)?.moveTaskToBack(true)
         }
     }
 

@@ -28,5 +28,6 @@ class ExampleRobolectricTest {
   @Test
   fun `verify MainActivity loads completely without crashing`() {
     assertNotNull(composeTestRule.activity)
+    composeTestRule.waitForIdle()
   }
 }

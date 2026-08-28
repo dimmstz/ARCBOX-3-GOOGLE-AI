@@ -1341,8 +1341,10 @@ fun FileThumbnailImage(
                 val imageRequest = remember(item.path, item.lastModified) {
                     ImageRequest.Builder(context)
                         .data(java.io.File(item.path))
-                        .size(180, 180)
+                        .size(160, 160)
                         .precision(coil.size.Precision.INEXACT)
+                        .allowRgb565(true)
+                        .allowHardware(true)
                         .memoryCacheKey("${item.path}_${item.lastModified}")
                         .diskCacheKey("${item.path}_${item.lastModified}")
                         .crossfade(false)
@@ -1376,8 +1378,10 @@ fun FileThumbnailImage(
                 val imageRequest = remember(item.path, item.lastModified) {
                     ImageRequest.Builder(context)
                         .data(java.io.File(item.path))
-                        .size(180, 180)
+                        .size(160, 160)
                         .precision(coil.size.Precision.INEXACT)
+                        .allowRgb565(true)
+                        .allowHardware(true)
                         .videoFrameMillis(1000)
                         .memoryCacheKey("video_${item.path}_${item.lastModified}")
                         .diskCacheKey("video_${item.path}_${item.lastModified}")

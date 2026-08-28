@@ -227,10 +227,13 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadInitialData() {
         viewModelScope.launch(Dispatchers.IO) {
-            // Clean old trash items (30 days) asynchronously in background without delaying startup
+            // Clean old trash items (30 days) and ensure mock files asynchronously in background without delaying startup
             launch(Dispatchers.IO) {
                 try {
                     repository.cleanOldTrashItems(30)
+                } catch (_: Exception) {}
+                try {
+                    repository.ensureMockFilesExist()
                 } catch (_: Exception) {}
             }
             
