@@ -31,7 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
@@ -64,6 +68,7 @@ fun ArcboxFileGridList(
     files: List<FileItem>,
     viewMode: ViewMode,
     showThumbnails: Boolean = true,
+    showExtensions: Boolean = true,
     selectedItems: Set<FileItem>,
     onItemClick: (FileItem) -> Unit,
     onItemLongClick: (FileItem) -> Unit,
@@ -159,6 +164,7 @@ fun ArcboxFileGridList(
                             FileGridCard(
                                 item = item,
                                 showThumbnails = showThumbnails,
+                                showExtensions = showExtensions,
                                 isSelected = selectedItemIds.contains(item.id),
                                 isSelectionMode = isMultiSelecting,
                                 onClick = {
@@ -191,6 +197,7 @@ fun ArcboxFileGridList(
                             FileListItem(
                                 item = item,
                                 showThumbnails = showThumbnails,
+                                showExtensions = showExtensions,
                                 isSelected = selectedItemIds.contains(item.id),
                                 isSelectionMode = isMultiSelecting,
                                 onClick = {
@@ -295,7 +302,7 @@ fun ArcboxFileGridList(
                 }
             }
 
-            val isDarkTheme = isSystemInDarkTheme()
+            val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
             val primaryColor = MaterialTheme.colorScheme.primary
             val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
 
@@ -639,6 +646,7 @@ private fun handleItemClick(
 fun FileGridCard(
     item: FileItem,
     showThumbnails: Boolean = true,
+    showExtensions: Boolean = true,
     isSelected: Boolean,
     isSelectionMode: Boolean = false,
     onClick: () -> Unit,
@@ -652,6 +660,9 @@ fun FileGridCard(
     val haptic = LocalHapticFeedback.current
     val categoryColor = item.fileType.getCategoryColor()
     val isMedia = item.fileType == FileType.IMAGE || item.fileType == FileType.VIDEO
+    val displayName = remember(item.name, item.isDirectory, showExtensions) {
+        if (showExtensions || item.isDirectory || !item.name.contains('.')) item.name else item.name.substringBeforeLast('.')
+    }
 
     Surface(
         shape = RoundedCornerShape(18.dp),
@@ -683,40 +694,36 @@ fun FileGridCard(
                     iconSize = 26.dp
                 )
 
-                // Bottom scrim and text overlay
+                // Bottom text overlay with subtle outline shadow (no dark vignette box)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
-                        .background(
-                            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                            )
-                        )
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = item.name,
+                        OutlinedGridText(
+                            text = displayName,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Center,
-                            color = Color.White,
-                            modifier = Modifier
-                                .fillMaxWidth()
+                            textColor = Color.White
                         )
-                        Text(
+                        OutlinedGridText(
                             text = formatFileSize(item.size),
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Normal,
                             fontSize = 10.sp,
-                            textAlign = TextAlign.Center
+                            maxLines = 1,
+                            overflow = TextOverflow.Clip,
+                            textAlign = TextAlign.Center,
+                            textColor = Color.White.copy(alpha = 0.95f)
                         )
                     }
                 }
@@ -769,7 +776,7 @@ fun FileGridCard(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = item.name,
+                        text = displayName,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
@@ -879,6 +886,7 @@ fun FileGridCard(
 fun FileListItem(
     item: FileItem,
     showThumbnails: Boolean = true,
+    showExtensions: Boolean = true,
     isSelected: Boolean,
     isSelectionMode: Boolean = false,
     onClick: () -> Unit,
@@ -893,6 +901,9 @@ fun FileListItem(
 ) {
     val haptic = LocalHapticFeedback.current
     val categoryColor = item.fileType.getCategoryColor()
+    val displayName = remember(item.name, item.isDirectory, showExtensions) {
+        if (showExtensions || item.isDirectory || !item.name.contains('.')) item.name else item.name.substringBeforeLast('.')
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Surface(
@@ -987,7 +998,7 @@ fun FileListItem(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = item.name,
+                        text = displayName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -1402,3 +1413,69 @@ fun FileThumbnailImage(
         }
     }
 }
+
+@Composable
+private fun OutlinedGridText(
+    text: String,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    fontWeight: FontWeight = FontWeight.SemiBold,
+    textColor: Color = Color.White,
+    outlineColor: Color = Color.Black.copy(alpha = 0.95f),
+    maxLines: Int = 1,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
+    textAlign: TextAlign = TextAlign.Center,
+    style: TextStyle = MaterialTheme.typography.bodySmall,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        val outlineOffsets = remember {
+            listOf(
+                Offset(-1.2f, -1.2f),
+                Offset(1.2f, -1.2f),
+                Offset(-1.2f, 1.2f),
+                Offset(1.2f, 1.2f),
+                Offset(0f, 1.5f)
+            )
+        }
+        for (offset in outlineOffsets) {
+            Text(
+                text = text,
+                style = style.copy(
+                    shadow = Shadow(
+                        color = outlineColor,
+                        offset = offset,
+                        blurRadius = 3f
+                    )
+                ),
+                fontWeight = fontWeight,
+                fontSize = fontSize,
+                maxLines = maxLines,
+                overflow = overflow,
+                textAlign = textAlign,
+                color = outlineColor,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Text(
+            text = text,
+            style = style.copy(
+                shadow = Shadow(
+                    color = Color.Black,
+                    offset = Offset(0f, 1f),
+                    blurRadius = 3f
+                )
+            ),
+            fontWeight = fontWeight,
+            fontSize = fontSize,
+            maxLines = maxLines,
+            overflow = overflow,
+            textAlign = textAlign,
+            color = textColor,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+

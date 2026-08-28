@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -38,6 +39,9 @@ import com.example.data.models.ThemeMode
 import com.example.ui.theme.AccentColorOption
 import com.example.ui.theme.PredefinedCustomColors
 import com.example.ui.theme.CustomColorPreset
+import com.example.ui.theme.findCustomColorPreset
+import com.example.util.BiometricAuthHelper
+import com.example.util.findFragmentActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +55,23 @@ fun ArcboxSettingsModal(
     onToggleConfirmDelete: (Boolean) -> Unit,
     showThumbnails: Boolean = true,
     onToggleShowThumbnails: (Boolean) -> Unit = {},
+    showHiddenFiles: Boolean = false,
+    onToggleShowHiddenFiles: (Boolean) -> Unit = {},
+    showExtensions: Boolean = true,
+    onToggleShowExtensions: (Boolean) -> Unit = {},
+    parallelDirectoryReading: Boolean = true,
+    onToggleParallelDirectoryReading: (Boolean) -> Unit = {},
+    compressionLevel: String = "Normal",
+    onSelectCompressionLevel: (String) -> Unit = {},
+    biometricLock: Boolean = false,
+    onToggleBiometricLock: (Boolean) -> Unit = {},
+    autoLockVault: Boolean = true,
+    onToggleAutoLockVault: (Boolean) -> Unit = {},
+    keepHistory: Boolean = true,
+    onToggleKeepHistory: (Boolean) -> Unit = {},
+    trashAutoCleanDays: String = "30 dias",
+    onSelectTrashAutoCleanDays: (String) -> Unit = {},
+    onRestoreDefaults: () -> Unit = {},
     onSelectThemeMode: (ThemeMode) -> Unit,
     onSelectAccent: (AccentColorOption) -> Unit,
     onSelectCustomColor: (Long) -> Unit = {},
@@ -79,20 +100,9 @@ fun ArcboxSettingsModal(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findFragmentActivity() }
     val scrollState = rememberScrollState()
 
-    // Config states (toggles & preferences)
-    var showHiddenFiles by remember { mutableStateOf(false) }
-    var showExtensions by remember { mutableStateOf(true) }
-    var hdThumbnails by remember { mutableStateOf(true) }
-    var confirmDeleteLocal by remember(confirmDelete) { mutableStateOf(confirmDelete) }
-    var deletePermanentlyLocal by remember(deletePermanently) { mutableStateOf(deletePermanently) }
-    var keepHistory by remember { mutableStateOf(true) }
-    var biometricLock by remember { mutableStateOf(false) }
-    var autoLockVault by remember { mutableStateOf(true) }
-    var parallelDirectoryReading by remember { mutableStateOf(true) }
-    var compressionLevel by remember { mutableStateOf("Balanceada") }
-    var trashAutoCleanDays by remember { mutableStateOf("30 Dias") }
     var cacheSizeMb by remember { mutableStateOf(42.5f) }
 
     Dialog(
@@ -134,18 +144,7 @@ fun ArcboxSettingsModal(
                     actions = {
                         TextButton(
                             onClick = {
-                                onSelectThemeMode(ThemeMode.LIGHT)
-                                onSelectAccent(AccentColorOption.AZUL_CLARO)
-                                showHiddenFiles = false
-                                showExtensions = true
-                                hdThumbnails = true
-                                confirmDeleteLocal = true
-                                deletePermanentlyLocal = false
-                                onToggleConfirmDelete(true)
-                                onToggleDeletePermanently(false)
-                                keepHistory = true
-                                biometricLock = false
-                                Toast.makeText(context, "Configurações restauradas para o padrão", Toast.LENGTH_SHORT).show()
+                                onRestoreDefaults()
                             }
                         ) {
                             Text("Restaurar", color = MaterialTheme.colorScheme.primary)
@@ -221,12 +220,21 @@ fun ArcboxSettingsModal(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            val isDark = isSystemInDarkTheme()
-                            val activeCustomPreset = remember(customAccentColorHex) {
-                                PredefinedCustomColors.find { it.hexValue == customAccentColorHex }
+                            val systemDark = isSystemInDarkTheme()
+                            val isDark = when (currentThemeMode) {
+                                ThemeMode.DARK -> true
+                                ThemeMode.LIGHT -> false
+                                ThemeMode.SYSTEM -> systemDark
                             }
-                            val activeCustomColor = remember(customAccentColorHex, activeCustomPreset) {
-                                activeCustomPreset?.color ?: Color(customAccentColorHex)
+                            val activeCustomPreset = remember(customAccentColorHex) {
+                                findCustomColorPreset(customAccentColorHex)
+                            }
+                            val activeCustomColor = remember(customAccentColorHex, activeCustomPreset, isDark) {
+                                if (activeCustomPreset != null) {
+                                    if (isDark) activeCustomPreset.darkColor else activeCustomPreset.color
+                                } else {
+                                    Color(customAccentColorHex)
+                                }
                             }
 
                             // 4 Cores Principais no Topo (Azul Claro, Roxo, Preto/Branco, Personalizado)
@@ -254,12 +262,11 @@ fun ArcboxSettingsModal(
                                         )
                                     }
 
-                                    val isDark = isSystemInDarkTheme()
                                     val cardBorderColor = if (isSelected) {
                                         when {
                                             isPreto -> if (isDark) Color(0xFFE2E8F0) else Color(0xFF18181B)
                                             isPersonalizado -> activeCustomColor
-                                            else -> option.color
+                                            else -> if (isDark) option.darkColor else option.color
                                         }
                                     } else {
                                         MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
@@ -269,7 +276,7 @@ fun ArcboxSettingsModal(
                                         when {
                                             isPreto -> if (isDark) Color(0xFF27272A) else Color(0xFF18181B).copy(alpha = 0.08f)
                                             isPersonalizado -> activeCustomColor.copy(alpha = 0.12f)
-                                            else -> option.color.copy(alpha = 0.12f)
+                                            else -> (if (isDark) option.darkColor else option.color).copy(alpha = 0.12f)
                                         }
                                     } else {
                                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -299,7 +306,7 @@ fun ArcboxSettingsModal(
                                                             Modifier.background(customGradient).border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape)
                                                         } else if (isPreto) {
                                                             val pretoBg = if (isDark) Color(0xFFE2E8F0) else Color(0xFF18181B)
-                                                            Modifier.background(pretoBg).border(1.dp, Color(0xFF71717A), CircleShape)
+                                                            Modifier.background(pretoBg).border(1.dp, if (isDark) Color(0xFF94A3B8) else Color(0xFF71717A), CircleShape)
                                                         } else {
                                                             Modifier.background(option.color).border(1.dp, Color.White, CircleShape)
                                                         }
@@ -320,12 +327,12 @@ fun ArcboxSettingsModal(
                                                 text = option.label,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                fontSize = 10.sp,
+                                                fontSize = if (option == AccentColorOption.PRETO || option == AccentColorOption.PERSONALIZADO) 8.5.sp else 9.5.sp,
                                                 color = if (isSelected) {
                                                     when {
                                                         isPreto -> if (isDark) Color.White else Color(0xFF18181B)
                                                         isPersonalizado -> activeCustomColor
-                                                        else -> option.color
+                                                        else -> if (isDark) option.darkColor else option.color
                                                     }
                                                 } else {
                                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -413,8 +420,10 @@ fun ArcboxSettingsModal(
                                                 .padding(vertical = 3.dp),
                                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            colorRow.forEach { preset ->
-                                                val isPresetSelected = currentAccent == AccentColorOption.PERSONALIZADO && customAccentColorHex == preset.hexValue
+                                             colorRow.forEach { preset ->
+                                                val isPresetSelected = currentAccent == AccentColorOption.PERSONALIZADO && 
+                                                    (customAccentColorHex == preset.hexValue || activeCustomPreset?.name == preset.name)
+                                                val targetPresetColor = if (isDark) preset.darkColor else preset.color
 
                                                 Surface(
                                                     onClick = {
@@ -422,10 +431,10 @@ fun ArcboxSettingsModal(
                                                         onSelectCustomColor(preset.hexValue)
                                                     },
                                                     shape = RoundedCornerShape(10.dp),
-                                                    color = if (isPresetSelected) preset.color.copy(alpha = 0.18f) else Color.Transparent,
+                                                    color = if (isPresetSelected) targetPresetColor.copy(alpha = 0.18f) else Color.Transparent,
                                                     border = androidx.compose.foundation.BorderStroke(
                                                         width = if (isPresetSelected) 1.5.dp else 0.5.dp,
-                                                        color = if (isPresetSelected) preset.color else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                                        color = if (isPresetSelected) targetPresetColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
                                                     ),
                                                     modifier = Modifier
                                                         .weight(1f)
@@ -445,7 +454,7 @@ fun ArcboxSettingsModal(
                                                             contentAlignment = Alignment.Center
                                                         ) {
                                                             if (isPresetSelected) {
-                                                                val isLightBg = preset.name == "Amarelo" || preset.name == "Rosa Claro"
+                                                                val isLightBg = preset.color.luminance() > 0.55f
                                                                 Icon(
                                                                     Icons.Default.Check,
                                                                     contentDescription = null,
@@ -493,7 +502,7 @@ fun ArcboxSettingsModal(
                             subtitle = "Exibe itens que começam com ponto (.) no sistema",
                             icon = Icons.Outlined.Visibility,
                             checked = showHiddenFiles,
-                            onCheckedChange = { showHiddenFiles = it }
+                            onCheckedChange = { onToggleShowHiddenFiles(it) }
                         )
 
                         SwitchSettingRow(
@@ -501,7 +510,7 @@ fun ArcboxSettingsModal(
                             subtitle = "Exibe o sufixo .pdf, .jpg, .zip nos arquivos",
                             icon = Icons.Outlined.Extension,
                             checked = showExtensions,
-                            onCheckedChange = { showExtensions = it }
+                            onCheckedChange = { onToggleShowExtensions(it) }
                         )
                     }
 
@@ -523,7 +532,7 @@ fun ArcboxSettingsModal(
                             subtitle = "Acelera a abertura de pastas com milhares de itens",
                             icon = Icons.Outlined.Bolt,
                             checked = parallelDirectoryReading,
-                            onCheckedChange = { parallelDirectoryReading = it }
+                            onCheckedChange = { onToggleParallelDirectoryReading(it) }
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -552,6 +561,14 @@ fun ArcboxSettingsModal(
                             }
                             Button(
                                 onClick = {
+                                    try {
+                                        val coilLoader = coil.Coil.imageLoader(context)
+                                        coilLoader.memoryCache?.clear()
+                                        coilLoader.diskCache?.clear()
+                                    } catch (_: Exception) {}
+                                    try {
+                                        context.cacheDir.resolve("arcbox_thumbnails").deleteRecursively()
+                                    } catch (_: Exception) {}
                                     cacheSizeMb = 0.0f
                                     Toast.makeText(context, "Cache limpo com sucesso!", Toast.LENGTH_SHORT).show()
                                 },
@@ -580,11 +597,11 @@ fun ArcboxSettingsModal(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            listOf("Rápida", "Balanceada", "Máxima").forEach { level ->
-                                val isSelected = compressionLevel == level || (level == "Balanceada" && compressionLevel.startsWith("Balanceada"))
+                            listOf("Rápida", "Normal", "Máxima").forEach { level ->
+                                val isSelected = compressionLevel.equals(level, ignoreCase = true) || (level == "Normal" && (compressionLevel.equals("Balanceada", ignoreCase = true) || compressionLevel.equals("Normal", ignoreCase = true)))
                                 FilterChip(
                                     selected = isSelected,
-                                    onClick = { compressionLevel = level },
+                                    onClick = { onSelectCompressionLevel(level) },
                                     modifier = Modifier.weight(1f),
                                     label = {
                                         Text(
@@ -604,43 +621,31 @@ fun ArcboxSettingsModal(
                         }
                     }
 
-                    // CATEGORY 4: SEGURANÇA & COFRE
+                    // CATEGORY 4: SEGURANÇA DO APLICATIVO
                     SettingsSectionCard(
-                        title = "Segurança & Cofre Criptografado",
+                        title = "Segurança do Aplicativo",
                         icon = Icons.Default.Security
                     ) {
                         SwitchSettingRow(
-                            title = "Bloqueio por PIN / Biometria",
-                            subtitle = "Exigir autenticação ao abrir o gerenciador",
+                            title = "Bloqueio por Biometria",
+                            subtitle = "Exigir autenticação biométrica ao abrir o aplicativo",
                             icon = Icons.Outlined.Fingerprint,
                             checked = biometricLock,
-                            onCheckedChange = { biometricLock = it }
+                            onCheckedChange = { targetState ->
+                                if (targetState && activity != null) {
+                                    BiometricAuthHelper.promptBiometric(
+                                        activity = activity,
+                                        title = "Ativar Bloqueio por Biometria",
+                                        subtitle = "Confirme sua digital ou credencial do dispositivo",
+                                        onSuccess = { onToggleBiometricLock(true) },
+                                        onError = { _, _ -> /* cancelled or failed */ },
+                                        onFailed = { /* failed */ }
+                                    )
+                                } else {
+                                    onToggleBiometricLock(targetState)
+                                }
+                            }
                         )
-
-                        SwitchSettingRow(
-                            title = "Autobloqueio do Cofre ao Sair",
-                            subtitle = "Bloqueia automaticamente o cofre ao minimizar o app",
-                            icon = Icons.Outlined.Lock,
-                            checked = autoLockVault,
-                            onCheckedChange = { autoLockVault = it }
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Criptografia: AES-256 GCM",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
 
                     // CATEGORY 5: GERENCIAMENTO & LIXEIRA
@@ -652,22 +657,16 @@ fun ArcboxSettingsModal(
                             title = "Solicitar Confirmação ao Excluir",
                             subtitle = "Evita exclusões acidentais antes de mover para a Lixeira",
                             icon = Icons.Outlined.Warning,
-                            checked = confirmDeleteLocal,
-                            onCheckedChange = { 
-                                confirmDeleteLocal = it
-                                onToggleConfirmDelete(it)
-                            }
+                            checked = confirmDelete,
+                            onCheckedChange = { onToggleConfirmDelete(it) }
                         )
 
                         SwitchSettingRow(
                             title = "Excluir permanentemente",
                             subtitle = "Exclui direto sem enviar para a Lixeira",
                             icon = Icons.Outlined.DeleteForever,
-                            checked = deletePermanentlyLocal,
-                            onCheckedChange = {
-                                deletePermanentlyLocal = it
-                                onToggleDeletePermanently(it)
-                            }
+                            checked = deletePermanently,
+                            onCheckedChange = { onToggleDeletePermanently(it) }
                         )
 
                         SwitchSettingRow(
@@ -675,7 +674,7 @@ fun ArcboxSettingsModal(
                             subtitle = "Registra cópias e movimentações realizadas",
                             icon = Icons.Outlined.History,
                             checked = keepHistory,
-                            onCheckedChange = { keepHistory = it }
+                            onCheckedChange = { onToggleKeepHistory(it) }
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
@@ -692,11 +691,11 @@ fun ArcboxSettingsModal(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            listOf("Nunca", "7 Dias", "30 Dias").forEach { opt ->
-                                val isSelected = trashAutoCleanDays == opt
+                            listOf("Nunca", "7 dias", "30 dias").forEach { opt ->
+                                val isSelected = trashAutoCleanDays.equals(opt, ignoreCase = true)
                                 FilterChip(
                                     selected = isSelected,
-                                    onClick = { trashAutoCleanDays = opt },
+                                    onClick = { onSelectTrashAutoCleanDays(opt) },
                                     modifier = Modifier.weight(1f),
                                     label = {
                                         Text(
@@ -884,20 +883,6 @@ fun ArcboxSettingsModal(
                                 )
                             }
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Button(
-                        onClick = onClose,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Salvar & Concluir", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))

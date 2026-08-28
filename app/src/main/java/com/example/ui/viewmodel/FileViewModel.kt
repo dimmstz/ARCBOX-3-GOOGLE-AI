@@ -93,6 +93,15 @@ data class FileUiState(
     val deletePermanently: Boolean = false,
     val confirmDelete: Boolean = true,
     val showThumbnails: Boolean = true,
+    val showHiddenFiles: Boolean = false,
+    val showExtensions: Boolean = true,
+    val parallelDirectoryReading: Boolean = true,
+    val compressionLevel: String = "Normal",
+    val biometricLock: Boolean = false,
+    val isAppLocked: Boolean = false,
+    val autoLockVault: Boolean = true,
+    val keepHistory: Boolean = true,
+    val trashAutoCleanDays: String = "30 dias",
     val isMegaConnected: Boolean = false,
     val isDriveConnected: Boolean = false,
     val isMediafireConnected: Boolean = false,
@@ -132,6 +141,14 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             val deletePermanently = prefs.getBoolean("delete_permanently", false)
             val confirmDelete = prefs.getBoolean("confirm_delete", true)
             val showThumbnails = prefs.getBoolean("show_thumbnails", true)
+            val showHiddenFiles = prefs.getBoolean("show_hidden_files", false)
+            val showExtensions = prefs.getBoolean("show_extensions", true)
+            val parallelDirectoryReading = prefs.getBoolean("parallel_directory_reading", true)
+            val compressionLevel = prefs.getString("compression_level", "Normal") ?: "Normal"
+            val biometricLock = prefs.getBoolean("biometric_lock", false)
+            val autoLockVault = prefs.getBoolean("auto_lock_vault", true)
+            val keepHistory = prefs.getBoolean("keep_history", true)
+            val trashAutoCleanDays = prefs.getString("trash_auto_clean_days", "30 dias") ?: "30 dias"
 
             val savedThemeModeName = prefs.getString("theme_mode", ThemeMode.LIGHT.name) ?: ThemeMode.LIGHT.name
             val loadedThemeMode = try { ThemeMode.valueOf(savedThemeModeName) } catch (_: Exception) { ThemeMode.LIGHT }
@@ -163,6 +180,15 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 deletePermanently = deletePermanently,
                 confirmDelete = confirmDelete,
                 showThumbnails = showThumbnails,
+                showHiddenFiles = showHiddenFiles,
+                showExtensions = showExtensions,
+                parallelDirectoryReading = parallelDirectoryReading,
+                compressionLevel = compressionLevel,
+                biometricLock = biometricLock,
+                isAppLocked = biometricLock,
+                autoLockVault = autoLockVault,
+                keepHistory = keepHistory,
+                trashAutoCleanDays = trashAutoCleanDays,
                 isMegaConnected = isMegaConnected,
                 isDriveConnected = isDriveConnected,
                 isMediafireConnected = isMediafireConnected,
@@ -279,7 +305,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun fetchFilesInternal() {
         val state = uiState.value
-        val volumes = repository.getStorageVolumes()
+        val volumes = state.storageVolumes.ifEmpty { repository.getStorageVolumes() }
         val files = if (state.isFavoritesOnly) {
             repository.getFavoriteFiles(
                 sortOption = state.sortOption,
@@ -296,7 +322,9 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 filterCategory = state.filterCategory,
                 appSubFilter = state.appSubFilter,
                 isGlobalSearch = false,
-                isAppManagerMode = state.isAppManagerOpen
+                isAppManagerMode = state.isAppManagerOpen,
+                showHiddenFiles = state.showHiddenFiles,
+                parallelDirectoryReading = state.parallelDirectoryReading
             ).filter { !it.isDirectory }
         } else {
             repository.listFiles(
@@ -308,7 +336,9 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 filterCategory = state.filterCategory,
                 appSubFilter = state.appSubFilter,
                 isGlobalSearch = state.isGlobalSearch,
-                isAppManagerMode = state.isAppManagerOpen
+                isAppManagerMode = state.isAppManagerOpen,
+                showHiddenFiles = state.showHiddenFiles,
+                parallelDirectoryReading = state.parallelDirectoryReading
             )
         }
         _uiState.update { 
@@ -768,6 +798,96 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     fun setConfirmDelete(enabled: Boolean) {
         prefs.edit().putBoolean("confirm_delete", enabled).apply()
         _uiState.update { it.copy(confirmDelete = enabled) }
+    }
+
+    fun toggleShowHiddenFiles(enabled: Boolean) {
+        prefs.edit().putBoolean("show_hidden_files", enabled).apply()
+        _uiState.update { it.copy(showHiddenFiles = enabled) }
+        refreshFiles()
+    }
+
+    fun toggleShowExtensions(enabled: Boolean) {
+        prefs.edit().putBoolean("show_extensions", enabled).apply()
+        _uiState.update { it.copy(showExtensions = enabled) }
+    }
+
+    fun toggleParallelDirectoryReading(enabled: Boolean) {
+        prefs.edit().putBoolean("parallel_directory_reading", enabled).apply()
+        _uiState.update { it.copy(parallelDirectoryReading = enabled) }
+        refreshFiles()
+    }
+
+    fun setCompressionLevel(level: String) {
+        prefs.edit().putString("compression_level", level).apply()
+        _uiState.update { it.copy(compressionLevel = level) }
+    }
+
+    fun toggleBiometricLock(enabled: Boolean) {
+        prefs.edit().putBoolean("biometric_lock", enabled).apply()
+        _uiState.update { it.copy(biometricLock = enabled, isAppLocked = false) }
+    }
+
+    fun unlockApp() {
+        _uiState.update { it.copy(isAppLocked = false) }
+    }
+
+    fun lockApp() {
+        if (_uiState.value.biometricLock) {
+            _uiState.update { it.copy(isAppLocked = true) }
+        }
+    }
+
+    fun toggleAutoLockVault(enabled: Boolean) {
+        prefs.edit().putBoolean("auto_lock_vault", enabled).apply()
+        _uiState.update { it.copy(autoLockVault = enabled) }
+    }
+
+    fun toggleKeepHistory(enabled: Boolean) {
+        prefs.edit().putBoolean("keep_history", enabled).apply()
+        _uiState.update { it.copy(keepHistory = enabled) }
+    }
+
+    fun setTrashAutoCleanDays(days: String) {
+        prefs.edit().putString("trash_auto_clean_days", days).apply()
+        _uiState.update { it.copy(trashAutoCleanDays = days) }
+    }
+
+    fun restoreDefaultSettings() {
+        prefs.edit()
+            .putBoolean("show_hidden_files", false)
+            .putBoolean("show_extensions", true)
+            .putBoolean("show_thumbnails", true)
+            .putBoolean("parallel_directory_reading", true)
+            .putString("compression_level", "Normal")
+            .putBoolean("biometric_lock", false)
+            .putBoolean("auto_lock_vault", true)
+            .putBoolean("confirm_delete", true)
+            .putBoolean("delete_permanently", false)
+            .putBoolean("keep_history", true)
+            .putString("trash_auto_clean_days", "30 dias")
+            .putString("theme_mode", ThemeMode.LIGHT.name)
+            .putString("accent_color_option", AccentColorOption.AZUL_CLARO.name)
+            .apply()
+
+        _uiState.update {
+            it.copy(
+                showHiddenFiles = false,
+                showExtensions = true,
+                showThumbnails = true,
+                parallelDirectoryReading = true,
+                compressionLevel = "Normal",
+                biometricLock = false,
+                autoLockVault = true,
+                confirmDelete = true,
+                deletePermanently = false,
+                keepHistory = true,
+                trashAutoCleanDays = "30 dias",
+                themeMode = ThemeMode.LIGHT,
+                accentOption = AccentColorOption.AZUL_CLARO
+            )
+        }
+        refreshFiles()
+        showToast("Configurações restauradas para o padrão.")
     }
 
     fun openCloudManager() {

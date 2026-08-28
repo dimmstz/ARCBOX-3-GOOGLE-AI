@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 
@@ -34,7 +35,7 @@ fun ArcboxTheme(
     val isPretoTheme = accentOption == AccentColorOption.PRETO
 
     val primaryColor = if (accentOption == AccentColorOption.PERSONALIZADO) {
-        val preset = PredefinedCustomColors.find { it.hexValue == customColorHex }
+        val preset = findCustomColorPreset(customColorHex)
         if (preset != null) {
             if (darkTheme) preset.darkColor else preset.color
         } else {
@@ -48,22 +49,24 @@ fun ArcboxTheme(
 
     val contentOnPrimary = if (isPretoTheme && darkTheme) {
         Color(0xFF09090B)
+    } else if (primaryColor.luminance() > 0.58f) {
+        Color(0xFF0F172A)
     } else Color.White
 
     val colorScheme = if (darkTheme) {
         darkColorScheme(
             primary = primaryColor,
             onPrimary = contentOnPrimary,
-            primaryContainer = primaryColor.copy(alpha = 0.25f).compositeOver(SlateSurfaceDark),
-            onPrimaryContainer = contentOnPrimary,
+            primaryContainer = primaryColor.copy(alpha = 0.22f).compositeOver(SlateSurfaceDark),
+            onPrimaryContainer = if (primaryColor.luminance() > 0.58f) primaryColor else Color.White,
             secondary = primaryColor,
             onSecondary = contentOnPrimary,
-            secondaryContainer = primaryColor.copy(alpha = 0.25f).compositeOver(SlateSurfaceDark),
-            onSecondaryContainer = contentOnPrimary,
+            secondaryContainer = primaryColor.copy(alpha = 0.22f).compositeOver(SlateSurfaceDark),
+            onSecondaryContainer = if (primaryColor.luminance() > 0.58f) primaryColor else Color.White,
             tertiary = primaryColor,
             onTertiary = contentOnPrimary,
             tertiaryContainer = primaryColor.copy(alpha = 0.15f).compositeOver(SlateSurfaceDark),
-            onTertiaryContainer = contentOnPrimary,
+            onTertiaryContainer = if (primaryColor.luminance() > 0.58f) primaryColor else Color.White,
             background = SlateBackgroundDark,
             onBackground = SlateOnBackgroundDark,
             surface = SlateSurfaceDark,
@@ -77,16 +80,16 @@ fun ArcboxTheme(
         lightColorScheme(
             primary = primaryColor,
             onPrimary = contentOnPrimary,
-            primaryContainer = primaryColor.copy(alpha = 0.06f).compositeOver(Color.White),
-            onPrimaryContainer = primaryColor,
+            primaryContainer = primaryColor.copy(alpha = 0.14f).compositeOver(Color.White),
+            onPrimaryContainer = if (primaryColor.luminance() > 0.45f) Color(0xFF0F172A) else primaryColor,
             secondary = primaryColor,
             onSecondary = contentOnPrimary,
-            secondaryContainer = primaryColor.copy(alpha = 0.06f).compositeOver(Color.White),
-            onSecondaryContainer = primaryColor,
+            secondaryContainer = primaryColor.copy(alpha = 0.14f).compositeOver(Color.White),
+            onSecondaryContainer = if (primaryColor.luminance() > 0.45f) Color(0xFF0F172A) else primaryColor,
             tertiary = primaryColor,
             onTertiary = contentOnPrimary,
-            tertiaryContainer = primaryColor.copy(alpha = 0.05f).compositeOver(Color.White),
-            onTertiaryContainer = primaryColor,
+            tertiaryContainer = primaryColor.copy(alpha = 0.08f).compositeOver(Color.White),
+            onTertiaryContainer = if (primaryColor.luminance() > 0.45f) Color(0xFF0F172A) else primaryColor,
             background = Color.White,
             onBackground = LightOnBackground,
             surface = Color.White,

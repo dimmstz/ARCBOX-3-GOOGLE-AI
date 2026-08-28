@@ -233,95 +233,139 @@ fun PermissionWelcomeScreen(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = if (hasStoragePermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                            modifier = Modifier.size(46.dp)
+                        // Header com Badge de Status / Requisito
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Storage,
-                                    contentDescription = null,
-                                    tint = if (hasStoragePermission) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.fillMaxWidth()
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                             ) {
-                                Text(
-                                    text = "Acesso aos Arquivos",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f, fill = false),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = "Necessário",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 10.sp,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        fontSize = 11.sp
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Permite navegar, copiar e organizar documentos e pastas no armazenamento.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp
-                            )
+
+                            if (hasStoragePermission) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Concedido",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
 
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                        if (hasStoragePermission) {
+                        // Conteúdo Principal da Permissão
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Surface(
                                 shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(32.dp)
+                                color = if (hasStoragePermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                modifier = Modifier.size(46.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = "Concedido",
-                                        tint = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.size(18.dp)
+                                        Icons.Default.Storage,
+                                        contentDescription = null,
+                                        tint = if (hasStoragePermission) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }
-                        } else {
-                            Button(
-                                onClick = { requestStorage() },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary
-                                ),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text("Permitir", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Acesso aos Arquivos",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Permite navegar, copiar e organizar documentos e pastas no armazenamento.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            if (hasStoragePermission) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = "Concedido",
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                Button(
+                                    onClick = { requestStorage() },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text("Permitir", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
                             }
                         }
                     }

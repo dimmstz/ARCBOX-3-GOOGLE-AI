@@ -16,10 +16,14 @@ import com.example.data.db.FavoriteEntity
 import com.example.data.db.TrashEntity
 import com.example.data.models.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.io.*
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -33,6 +37,19 @@ class FileRepository(private val context: Context) {
     private val cloudStorageService = com.example.data.cloud.CloudStorageService(context)
     val safCloudManager = com.example.data.cloud.SafCloudManager(context)
     private var mockFilesCreated = false
+    private val dirCountCache = ConcurrentHashMap<String, Pair<Long, Int>>()
+
+    private fun getDirectoryChildCount(file: File): Int {
+        val path = file.absolutePath
+        val lastMod = file.lastModified()
+        val cached = dirCountCache[path]
+        if (cached != null && cached.first == lastMod) {
+            return cached.second
+        }
+        val count = file.list()?.size ?: 0
+        dirCountCache[path] = Pair(lastMod, count)
+        return count
+    }
 
     val allTrashItems: Flow<List<TrashEntity>> = trashDao.getAllTrashItems()
     val allFavorites: Flow<List<FavoriteEntity>> = favoriteDao.getAllFavorites()
@@ -323,7 +340,9 @@ class FileRepository(private val context: Context) {
         filterCategory: FileType? = null,
         appSubFilter: String = "ALL",
         isGlobalSearch: Boolean = false,
-        isAppManagerMode: Boolean = false
+        isAppManagerMode: Boolean = false,
+        showHiddenFiles: Boolean = false,
+        parallelDirectoryReading: Boolean = true
     ): List<FileItem> = withContext(Dispatchers.IO) {
         if (isAppManagerMode) {
             val installedAndStorageApps = getInstalledApps(appSubFilter)
@@ -493,6 +512,7 @@ class FileRepository(private val context: Context) {
                         for (doc in files) {
                             val isDir = doc.isDirectory
                             val name = doc.name ?: "Sem nome"
+                            if (!showHiddenFiles && name.startsWith(".")) continue
                             val ext = name.substringAfterLast('.', "").lowercase()
                             val mime = doc.type ?: getMimeTypeFromExtension(ext)
                             val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
@@ -568,35 +588,73 @@ class FileRepository(private val context: Context) {
                     } else null
 
                     if (files != null) {
-                        for (file in files) {
-                            val isDir = file.isDirectory
-                            val name = file.name
-                            val ext = file.extension.lowercase()
-                            val mime = getMimeType(file)
-                            val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
-                            val size = if (isDir) 0L else file.length()
-                            val count = if (isDir) (file.list()?.size ?: 0) else 0
+                        val filteredFiles = if (!showHiddenFiles) files.filter { !it.name.startsWith(".") } else files.toList()
+                        if (parallelDirectoryReading) {
+                            val mapped = coroutineScope {
+                                filteredFiles.map { file ->
+                                    async(Dispatchers.IO) {
+                                        val isDir = file.isDirectory
+                                        val name = file.name
+                                        val ext = file.extension.lowercase()
+                                        val mime = getMimeType(file)
+                                        val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                                        val size = if (isDir) 0L else file.length()
+                                        val count = if (isDir) getDirectoryChildCount(file) else 0
 
-                            val itemPath = if (directoryPath.startsWith("/cloud/")) {
-                                directoryPath.removeSuffix("/") + "/" + name
-                            } else {
-                                file.absolutePath
+                                        val itemPath = if (directoryPath.startsWith("/cloud/")) {
+                                            directoryPath.removeSuffix("/") + "/" + name
+                                        } else {
+                                            file.absolutePath
+                                        }
+
+                                        FileItem(
+                                            id = itemPath,
+                                            name = name,
+                                            path = itemPath,
+                                            size = size,
+                                            lastModified = file.lastModified(),
+                                            isDirectory = isDir,
+                                            fileType = type,
+                                            extension = ext,
+                                            isFavorite = favoritePaths.contains(itemPath),
+                                            childCount = count,
+                                            mimeType = mime
+                                        )
+                                    }
+                                }.awaitAll()
                             }
+                            items.addAll(mapped)
+                        } else {
+                            for (file in filteredFiles) {
+                                val isDir = file.isDirectory
+                                val name = file.name
+                                val ext = file.extension.lowercase()
+                                val mime = getMimeType(file)
+                                val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                                val size = if (isDir) 0L else file.length()
+                                val count = if (isDir) getDirectoryChildCount(file) else 0
 
-                            val item = FileItem(
-                                id = itemPath,
-                                name = name,
-                                path = itemPath,
-                                size = size,
-                                lastModified = file.lastModified(),
-                                isDirectory = isDir,
-                                fileType = type,
-                                extension = ext,
-                                isFavorite = favoritePaths.contains(itemPath),
-                                childCount = count,
-                                mimeType = mime
-                            )
-                            items.add(item)
+                                val itemPath = if (directoryPath.startsWith("/cloud/")) {
+                                    directoryPath.removeSuffix("/") + "/" + name
+                                } else {
+                                    file.absolutePath
+                                }
+
+                                val item = FileItem(
+                                    id = itemPath,
+                                    name = name,
+                                    path = itemPath,
+                                    size = size,
+                                    lastModified = file.lastModified(),
+                                    isDirectory = isDir,
+                                    fileType = type,
+                                    extension = ext,
+                                    isFavorite = favoritePaths.contains(itemPath),
+                                    childCount = count,
+                                    mimeType = mime
+                                )
+                                items.add(item)
+                            }
                         }
                     } else if (com.example.util.RootHelper.isRootAvailable() && !directoryPath.startsWith("/cloud/")) {
                         // Fallback to superuser root listing for protected system directories
@@ -1896,15 +1954,24 @@ class FileRepository(private val context: Context) {
 
     private fun ensureMockFilesExist() {
         if (mockFilesCreated) return
+        mockFilesCreated = true
         try {
-            mockFilesCreated = true
-            val internalDir = Environment.getExternalStorageDirectory()
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
             val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+
+            // On real devices with user files, avoid generating mock files to prevent lag and MediaScanner churn
+            val hasUserFiles = (downloadsDir.list()?.isNotEmpty() == true) ||
+                               (dcimDir.list()?.isNotEmpty() == true) ||
+                               (picturesDir.list()?.isNotEmpty() == true)
+            if (hasUserFiles) {
+                return
+            }
+
+            val internalDir = Environment.getExternalStorageDirectory()
+            val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
             val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
             val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
 
             listOf(internalDir, downloadsDir, documentsDir, dcimDir, musicDir, moviesDir, picturesDir).forEach { it.mkdirs() }
 

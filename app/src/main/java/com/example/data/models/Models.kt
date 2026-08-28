@@ -2,6 +2,7 @@ package com.example.data.models
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import com.example.ui.theme.*
 
@@ -23,6 +24,7 @@ enum class FileType {
     }
 }
 
+@Immutable
 data class FileItem(
     val id: String,
     val name: String,
@@ -42,6 +44,7 @@ data class FileItem(
     val versionName: String? = null
 )
 
+@Immutable
 data class StorageVolume(
     val id: String,
     val name: String,

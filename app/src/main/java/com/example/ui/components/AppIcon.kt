@@ -38,6 +38,7 @@ private val appIconMemoryCache = object : LruCache<String, Bitmap>(cacheSizeKb) 
     }
 }
 private val nullIconCache = LruCache<String, Boolean>(1000)
+private val appIconDispatcher = Dispatchers.IO.limitedParallelism(2)
 
 @Composable
 fun ArcboxLogoIcon(
@@ -71,10 +72,10 @@ fun AppIconImage(
     // Check fast memory cache synchronously
     var bitmap by remember(cacheKey) { mutableStateOf(appIconMemoryCache.get(cacheKey)) }
 
-    // If cache miss, decode asynchronously on Dispatchers.IO
+    // If cache miss, decode asynchronously on appIconDispatcher
     if (bitmap == null && nullIconCache.get(cacheKey) != true) {
         LaunchedEffect(cacheKey) {
-            val decoded = withContext(Dispatchers.IO) {
+            val decoded = withContext(appIconDispatcher) {
                 try {
                     val pm = context.packageManager
                     val drawable: Drawable? = if (apkPath.endsWith("Arcbox_v1.0.apk", ignoreCase = true)) {

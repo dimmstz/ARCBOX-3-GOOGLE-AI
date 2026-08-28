@@ -2,6 +2,7 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 // Neutros de Fundo (Slate / Dark Mode)
 val ArcboxDarkBg = Color(0xFF0F172A)
@@ -33,10 +34,11 @@ val ColorTrash = Color(0xFF718096)
 
 // Funções utilitárias para gerar gradiente suave puxando para um tom mais claro
 fun Color.lighterTone(fraction: Float = 0.28f): Color {
+    val actualFraction = if (luminance() > 0.45f) fraction * 0.35f else fraction
     return Color(
-        red = (red + (1f - red) * fraction).coerceIn(0f, 1f),
-        green = (green + (1f - green) * fraction).coerceIn(0f, 1f),
-        blue = (blue + (1f - blue) * fraction).coerceIn(0f, 1f),
+        red = (red + (1f - red) * actualFraction).coerceIn(0f, 1f),
+        green = (green + (1f - green) * actualFraction).coerceIn(0f, 1f),
+        blue = (blue + (1f - blue) * actualFraction).coerceIn(0f, 1f),
         alpha = alpha
     )
 }
@@ -99,14 +101,14 @@ enum class AccentColorOption(
     PRETO(
         label = "Preto/Branco",
         color = Color(0xFF18181B),
-        darkColor = Color(0xFF94A3B8),
+        darkColor = Color(0xFFE2E8F0),
         lightBg = Color(0xFFFFFFFF),
         lightBorder = Color(0xFFE2E8F0),
         lightSurfaceVariant = Color(0xFFF8FAFC)
     ),
     PERSONALIZADO(
         label = "Personalizado",
-        color = Color(0xFFFF6D00),
+        color = Color(0xFFFF5500),
         darkColor = Color(0xFFFB923C),
         lightBg = Color(0xFFFFFFFF),
         lightBorder = Color(0xFFE2E8F0),
@@ -114,7 +116,7 @@ enum class AccentColorOption(
     )
 }
 
-// 16 Cores Básicas e Populares Conhecidas
+// 16 Cores Modernas, Vivas e Equilibradas
 data class CustomColorPreset(
     val name: String,
     val hexValue: Long,
@@ -123,30 +125,48 @@ data class CustomColorPreset(
 )
 
 val PredefinedCustomColors = listOf(
-    // Linha 1: Tons de Rosa & Vermelho
-    CustomColorPreset("Rosa Claro", 0xFFFF69B4L, Color(0xFFFF69B4), Color(0xFFFBCFE8)),
-    CustomColorPreset("Rosa Choque", 0xFFFF1493L, Color(0xFFFF1493), Color(0xFFF472B6)),
-    CustomColorPreset("Vermelho", 0xFFFF3B30L, Color(0xFFFF3B30), Color(0xFFF87171)),
-    CustomColorPreset("Vinho", 0xFF990033L, Color(0xFF990033), Color(0xFFFDA4AF)),
-
-    // Linha 2: Tons de Azul & Verde
-    CustomColorPreset("Azul Escuro", 0xFF0055FFL, Color(0xFF0055FF), Color(0xFF60A5FA)),
+    // Linha 1: Tons de Azul & Violeta (Ciano, Azul Claro, Azul Escuro, Roxo)
+    CustomColorPreset("Ciano", 0xFF0284C7L, Color(0xFF0284C7), Color(0xFF38BDF8)),
     CustomColorPreset("Azul Claro", 0xFF0080FFL, Color(0xFF0080FF), Color(0xFF38BDF8)),
-    CustomColorPreset("Verde", 0xFF00C853L, Color(0xFF00C853), Color(0xFF4ADE80)),
-    CustomColorPreset("Verde Lima", 0xFF76FF03L, Color(0xFF76FF03), Color(0xFFA3E635)),
-
-    // Linha 3: Tons de Verde Água, Laranja & Amarelo
-    CustomColorPreset("Verde Água", 0xFF00E5FFL, Color(0xFF00E5FF), Color(0xFF2DD4BF)),
-    CustomColorPreset("Laranja", 0xFFFF6D00L, Color(0xFFFF6D00), Color(0xFFFB923C)),
-    CustomColorPreset("Amarelo", 0xFFFFD600L, Color(0xFFFFD600), Color(0xFFFACC15)),
-    CustomColorPreset("Dourado", 0xFFFFAB00L, Color(0xFFFFAB00), Color(0xFFFCD34D)),
-
-    // Linha 4: Tons de Roxo, Lilás, Marrom & Ciano
+    CustomColorPreset("Azul Escuro", 0xFF0055FFL, Color(0xFF0055FF), Color(0xFF60A5FA)),
     CustomColorPreset("Roxo", 0xFF7C3AEDL, Color(0xFF7C3AED), Color(0xFFA78BFA)),
-    CustomColorPreset("Lilás", 0xFFA855F7L, Color(0xFFA855F7), Color(0xFFC084FC)),
-    CustomColorPreset("Marrom", 0xFF8D4004L, Color(0xFF8D4004), Color(0xFFD97706)),
-    CustomColorPreset("Ciano", 0xFF00F0FFL, Color(0xFF00F0FF), Color(0xFF67E8F9))
+
+    // Linha 2: Tons de Lilás, Rosa & Vermelho (Lilás, Rosa Claro, Rosa Choque, Vermelho)
+    CustomColorPreset("Lilás", 0xFF9333EAL, Color(0xFF9333EA), Color(0xFFC084FC)),
+    CustomColorPreset("Rosa Claro", 0xFFFF5E8AL, Color(0xFFFF5E8A), Color(0xFFF472B6)),
+    CustomColorPreset("Rosa Choque", 0xFFFF007FL, Color(0xFFFF007F), Color(0xFFFF4081)),
+    CustomColorPreset("Vermelho", 0xFFE60000L, Color(0xFFE60000), Color(0xFFFF3344)), // Vermelho Ferrari Puro (Rosso Corsa)
+
+    // Linha 3: Tons de Vinho, Terra & Laranja (Vinho, Marrom, Laranja, Dourado)
+    CustomColorPreset("Vinho", 0xFF9F1239L, Color(0xFF9F1239), Color(0xFFF43F5E)),   // Vinho Ruby Nobre & Vibrante
+    CustomColorPreset("Marrom", 0xFF92400EL, Color(0xFF92400E), Color(0xFFF59E0B)),    // Bronze terracota quente e moderno
+    CustomColorPreset("Laranja", 0xFFFF5500L, Color(0xFFFF5500), Color(0xFFFB923C)),   // Laranja elétrico vívido
+    CustomColorPreset("Dourado", 0xFFD97706L, Color(0xFFD97706), Color(0xFFFCD34D)),   // Ouro imperial rico e radiante
+
+    // Linha 4: Tons de Amarelo & Verde (Amarelo, Verde Lima, Verde, Verde Água)
+    CustomColorPreset("Amarelo", 0xFFEAB308L, Color(0xFFEAB308), Color(0xFFFACC15)),   // Amarelo dourado vivo, encorpado e legível
+    CustomColorPreset("Verde Lima", 0xFF70B800L, Color(0xFF70B800), Color(0xFFA3E635)), // Lima vibrante com contraste nítido
+    CustomColorPreset("Verde", 0xFF00C853L, Color(0xFF00C853), Color(0xFF4ADE80)),
+    CustomColorPreset("Verde Água", 0xFF0D9488L, Color(0xFF0D9488), Color(0xFF2DD4BF))  // Verde água tropical moderno
 )
+
+fun findCustomColorPreset(hexValue: Long): CustomColorPreset? {
+    return PredefinedCustomColors.find { it.hexValue == hexValue }
+        ?: when (hexValue) {
+            0xFFFF3B30L -> PredefinedCustomColors.find { it.name == "Vermelho" }
+            0xFF990033L -> PredefinedCustomColors.find { it.name == "Vinho" }
+            0xFFFF69B4L -> PredefinedCustomColors.find { it.name == "Rosa Claro" }
+            0xFFFF1493L -> PredefinedCustomColors.find { it.name == "Rosa Choque" }
+            0xFF76FF03L -> PredefinedCustomColors.find { it.name == "Verde Lima" }
+            0xFF00E5FFL -> PredefinedCustomColors.find { it.name == "Verde Água" }
+            0xFFFF6D00L -> PredefinedCustomColors.find { it.name == "Laranja" }
+            0xFFFFD600L -> PredefinedCustomColors.find { it.name == "Amarelo" }
+            0xFFFFAB00L -> PredefinedCustomColors.find { it.name == "Dourado" }
+            0xFF8D4004L -> PredefinedCustomColors.find { it.name == "Marrom" }
+            0xFF00F0FFL -> PredefinedCustomColors.find { it.name == "Ciano" }
+            else -> null
+        }
+}
 
 // Clean Minimalism Dark Theme Colors (Zinc/Slate #09090B canvas)
 val SlateBackgroundDark = Color(0xFF09090B)

@@ -21,6 +21,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.app.Activity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.models.FileType
 import com.example.data.models.FileItem
@@ -100,6 +104,25 @@ fun ArcboxApp(
 
     val hasActiveModalOrOverlay = drawerState.isOpen || hasOtherModalOrOverlay
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, uiState.biometricLock) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                if (uiState.biometricLock) {
+                    viewModel.lockApp()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    BackHandler(enabled = uiState.isAppLocked) {
+        (context as? Activity)?.moveTaskToBack(true)
+    }
+
     BackHandler(enabled = hasActiveModalOrOverlay || canGoBackInFiles) {
         when {
             drawerState.isOpen -> scope.launch { drawerState.close() }
@@ -129,6 +152,12 @@ fun ArcboxApp(
         accentOption = uiState.accentOption,
         customColorHex = uiState.customAccentColorHex
     ) {
+        if (uiState.isAppLocked) {
+            BiometricLockScreen(
+                onUnlock = { viewModel.unlockApp() }
+            )
+        }
+
         if (uiState.isWelcomeOnboardingOpen) {
             PermissionWelcomeScreen(
                 onDismiss = {
@@ -483,6 +512,7 @@ fun ArcboxApp(
                         files = uiState.currentFiles,
                         viewMode = uiState.viewMode,
                         showThumbnails = uiState.showThumbnails,
+                        showExtensions = uiState.showExtensions,
                         selectedItems = uiState.selectedItems,
                         currentPath = uiState.currentPath,
                         onItemClick = { item ->
@@ -757,6 +787,23 @@ fun ArcboxApp(
                 onToggleConfirmDelete = { viewModel.setConfirmDelete(it) },
                 showThumbnails = uiState.showThumbnails,
                 onToggleShowThumbnails = { viewModel.toggleShowThumbnails(it) },
+                showHiddenFiles = uiState.showHiddenFiles,
+                onToggleShowHiddenFiles = { viewModel.toggleShowHiddenFiles(it) },
+                showExtensions = uiState.showExtensions,
+                onToggleShowExtensions = { viewModel.toggleShowExtensions(it) },
+                parallelDirectoryReading = uiState.parallelDirectoryReading,
+                onToggleParallelDirectoryReading = { viewModel.toggleParallelDirectoryReading(it) },
+                compressionLevel = uiState.compressionLevel,
+                onSelectCompressionLevel = { viewModel.setCompressionLevel(it) },
+                biometricLock = uiState.biometricLock,
+                onToggleBiometricLock = { viewModel.toggleBiometricLock(it) },
+                autoLockVault = uiState.autoLockVault,
+                onToggleAutoLockVault = { viewModel.toggleAutoLockVault(it) },
+                keepHistory = uiState.keepHistory,
+                onToggleKeepHistory = { viewModel.toggleKeepHistory(it) },
+                trashAutoCleanDays = uiState.trashAutoCleanDays,
+                onSelectTrashAutoCleanDays = { viewModel.setTrashAutoCleanDays(it) },
+                onRestoreDefaults = { viewModel.restoreDefaultSettings() },
                 onSelectThemeMode = { viewModel.setThemeMode(it) },
                 onSelectAccent = { viewModel.setAccentOption(it) },
                 onSelectCustomColor = { viewModel.setCustomAccentColor(it) },
