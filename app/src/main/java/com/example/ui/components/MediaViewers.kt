@@ -49,6 +49,7 @@ import com.example.data.models.FileItem
 import com.example.data.models.FileType
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.launch
 import kotlin.math.sin
 
 fun resolveMediaFile(context: android.content.Context, path: String): File {
@@ -338,9 +339,13 @@ fun ArcboxImageViewerScreen(
         mutableStateOf(Pair(0, 0))
     }
     var showInfoModal by remember { mutableStateOf(false) }
+    var showCropSheet by remember { mutableStateOf(false) }
     var activeFilterIndex by remember { mutableIntStateOf(0) }
+    var backgroundModeIndex by remember { mutableIntStateOf(0) } // 0 = Gradiente, 1 = Preto, 2 = Branco
     var contentScaleIndex by remember { mutableIntStateOf(0) }
     var toastFeedback by remember { mutableStateOf<String?>(null) }
+    var imageVersion by remember(item.path, item.safUriString) { mutableLongStateOf(file.lastModified()) }
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(item.path, item.safUriString) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -426,18 +431,49 @@ fun ArcboxImageViewerScreen(
         }
     }
 
-    // Dynamic vertical gradient container
+    val handleClose = {
+        val normalizedDegrees = ((currentRotation % 360f) + 360f) % 360f
+        if (normalizedDegrees.toInt() % 360 != 0) {
+            saveRotatedImage(currentFile, normalizedDegrees)
+            rotation = 0f
+        }
+        onClose()
+    }
+
+    val backgroundModifier = when (backgroundModeIndex) {
+        1 -> Modifier.background(Color(0xFF0D0D0D))
+        2 -> Modifier.background(Color.White)
+        else -> Modifier.background(
+            androidx.compose.ui.graphics.Brush.verticalGradient(
+                colors = listOf(
+                    dominantColors.first,
+                    dominantColors.second
+                )
+            )
+        )
+    }
+
+    val topBarTextColor = when (backgroundModeIndex) {
+        1 -> Color.White
+        else -> Color(0xFF0F172A)
+    }
+
+    val topBarSubtitleColor = when (backgroundModeIndex) {
+        1 -> Color.White.copy(alpha = 0.7f)
+        2 -> Color(0xFF475569)
+        else -> Color(0xFF334155)
+    }
+
+    val iconTint = when (backgroundModeIndex) {
+        1 -> Color.White
+        else -> Color(0xFF0F172A)
+    }
+
+    // Dynamic background container
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                androidx.compose.ui.graphics.Brush.verticalGradient(
-                    colors = listOf(
-                        dominantColors.first,
-                        dominantColors.second
-                    )
-                )
-            )
+            .then(backgroundModifier)
     ) {
         // Main Gestures & AsyncImage Container
         Box(
@@ -463,8 +499,8 @@ fun ArcboxImageViewerScreen(
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(imageSource)
-                    .memoryCacheKey("${item.path}_${item.lastModified}")
-                    .diskCacheKey("${item.path}_${item.lastModified}")
+                    .memoryCacheKey("${item.path}_$imageVersion")
+                    .diskCacheKey("${item.path}_$imageVersion")
                     .crossfade(false)
                     .build(),
                 contentDescription = item.name,
@@ -491,13 +527,13 @@ fun ArcboxImageViewerScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
-                onClick = onClose,
+                onClick = handleClose,
                 modifier = Modifier.size(44.dp)
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Voltar",
-                    tint = Color(0xFF0F172A),
+                    tint = iconTint,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -514,7 +550,7 @@ fun ArcboxImageViewerScreen(
                     text = item.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0F172A),
+                    color = topBarTextColor,
                     maxLines = 1,
                     fontSize = 18.sp
                 )
@@ -526,7 +562,7 @@ fun ArcboxImageViewerScreen(
                 Text(
                     text = "${formatFileSize(item.size)}$dimText",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF334155),
+                    color = topBarSubtitleColor,
                     fontWeight = FontWeight.Normal,
                     fontSize = 12.5.sp,
                     maxLines = 1
@@ -537,12 +573,12 @@ fun ArcboxImageViewerScreen(
                 onClick = { showInfoModal = true },
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color(0x1F0F172A), CircleShape)
+                    .background(if (backgroundModeIndex == 1) Color(0x33FFFFFF) else Color(0x1F0F172A), CircleShape)
             ) {
                 Icon(
                     Icons.Default.Info,
                     contentDescription = "Informações da imagem",
-                    tint = Color(0xFF0F172A),
+                    tint = iconTint,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -584,61 +620,65 @@ fun ArcboxImageViewerScreen(
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 1. Waterdrop / Filter Icon
+                // 1. Change Background Mode (Gradiente, Preto, Branco)
                 Surface(
                     onClick = {
-                        activeFilterIndex = (activeFilterIndex + 1) % filterNames.size
-                        toastFeedback = "Filtro: ${filterNames[activeFilterIndex]}"
+                        backgroundModeIndex = (backgroundModeIndex + 1) % 3
+                        toastFeedback = when (backgroundModeIndex) {
+                            0 -> "Fundo: Gradiente"
+                            1 -> "Fundo: Preto"
+                            else -> "Fundo: Branco"
+                        }
                     },
                     shape = CircleShape,
-                    color = Color(0x33000000),
+                    color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
                     modifier = Modifier.size(54.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.WaterDrop,
-                            contentDescription = "Filtro de cor",
-                            tint = Color(0xFF0F172A),
+                            contentDescription = "Mudar fundo",
+                            tint = iconTint,
                             modifier = Modifier.size(24.dp)
                         )
                     }
                 }
 
-                // 2. Crop / Fit Screen Icon
+                // 2. Crop Image (Popular Aspect Ratios 16:9, 9:16, 4:3, etc.)
                 Surface(
                     onClick = {
-                        contentScaleIndex = (contentScaleIndex + 1) % contentScales.size
-                        toastFeedback = contentScales[contentScaleIndex].second
+                        showCropSheet = true
                     },
                     shape = CircleShape,
-                    color = Color(0x33000000),
+                    color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
                     modifier = Modifier.size(54.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.CropFree,
-                            contentDescription = "Enquadramento",
-                            tint = Color(0xFF0F172A),
+                            contentDescription = "Cortar aspecto",
+                            tint = iconTint,
                             modifier = Modifier.size(24.dp)
                         )
                     }
                 }
 
-                // 3. Rotate Icon
+                // 3. Rotate Icon (Saves state real on exit)
                 Surface(
                     onClick = {
                         rotation += 90f
-                        toastFeedback = "Girar 90°"
+                        val currentDegrees = ((rotation % 360f) + 360f) % 360f
+                        toastFeedback = "Rotacionado (${currentDegrees.toInt()}°)"
                     },
                     shape = CircleShape,
-                    color = Color(0x33000000),
+                    color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
                     modifier = Modifier.size(54.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.RotateRight,
                             contentDescription = "Girar imagem",
-                            tint = Color(0xFF0F172A),
+                            tint = iconTint,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -654,14 +694,14 @@ fun ArcboxImageViewerScreen(
                         }
                     },
                     shape = CircleShape,
-                    color = Color(0x33000000),
+                    color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
                     modifier = Modifier.size(54.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.Edit,
                             contentDescription = "Editar imagem",
-                            tint = Color(0xFF0F172A),
+                            tint = iconTint,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -757,6 +797,122 @@ fun ArcboxImageViewerScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Fechar")
+                    }
+                }
+            }
+        }
+    }
+
+    // Crop Aspect Ratio Modal Bottom Sheet
+    if (showCropSheet) {
+        val aspectRatios = listOf(
+            Triple("16:9", Pair(16f, 9f), "Widescreen / TV (16:9)"),
+            Triple("9:16", Pair(9f, 16f), "Stories / Reels / TikTok (9:16)"),
+            Triple("4:3", Pair(4f, 3f), "Fotografia Padrão (4:3)"),
+            Triple("3:4", Pair(3f, 4f), "Retrato (3:4)"),
+            Triple("1:1", Pair(1f, 1f), "Quadrado / Perfil (1:1)"),
+            Triple("2:3", Pair(2f, 3f), "Retrato Padrão (2:3)"),
+            Triple("3:2", Pair(3f, 2f), "Paisagem (3:2)")
+        )
+
+        ModalBottomSheet(
+            onDismissRequest = { showCropSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 32.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Default.Crop,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Cortar Aspecto da Imagem",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    aspectRatios.forEach { (label, ratio, desc) ->
+                        Surface(
+                            onClick = {
+                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val croppedResult = cropImageFile(file, ratio.first, ratio.second)
+                                    if (croppedResult != null) {
+                                        dimensions = croppedResult
+                                        imageVersion = System.currentTimeMillis()
+                                        scale = 1f
+                                        offset = Offset.Zero
+                                        toastFeedback = "Imagem cortada ($label)"
+                                    } else {
+                                        toastFeedback = "Não foi possível cortar a imagem"
+                                    }
+                                    showCropSheet = false
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                            RoundedCornerShape(8.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(14.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = desc,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1108,7 +1264,7 @@ fun ImageViewerContent(
 private fun saveRotatedImage(file: File, degrees: Float) {
     val normalizedDegrees = ((degrees % 360f) + 360f) % 360f
     val intDegrees = normalizedDegrees.toInt()
-    if (intDegrees % 360 == 0 || !file.exists()) return
+    if (intDegrees % 360 == 0 || !file.exists() || !file.canWrite()) return
 
     try {
         val options = BitmapFactory.Options().apply {
@@ -1138,12 +1294,84 @@ private fun saveRotatedImage(file: File, degrees: Float) {
         FileOutputStream(file).use { out ->
             rotatedBitmap.compress(format, 95, out)
         }
+
+        try {
+            val exif = android.media.ExifInterface(file.absolutePath)
+            exif.setAttribute(
+                android.media.ExifInterface.TAG_ORIENTATION,
+                android.media.ExifInterface.ORIENTATION_NORMAL.toString()
+            )
+            exif.saveAttributes()
+        } catch (_: Exception) {}
+
+        file.setLastModified(System.currentTimeMillis())
+
         if (rotatedBitmap != originalBitmap) {
             rotatedBitmap.recycle()
         }
         originalBitmap.recycle()
     } catch (e: Exception) {
         e.printStackTrace()
+    }
+}
+
+private fun cropImageFile(file: File, aspectWidth: Float, aspectHeight: Float): Pair<Int, Int>? {
+    if (!file.exists() || !file.canWrite()) return null
+    try {
+        val options = BitmapFactory.Options().apply {
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val originalBitmap = BitmapFactory.decodeFile(file.absolutePath, options) ?: return null
+
+        val origWidth = originalBitmap.width
+        val origHeight = originalBitmap.height
+        val targetAspect = aspectWidth / aspectHeight
+        val currentAspect = origWidth.toFloat() / origHeight.toFloat()
+
+        var cropWidth = origWidth
+        var cropHeight = origHeight
+
+        if (currentAspect > targetAspect) {
+            cropWidth = (origHeight * targetAspect).toInt().coerceIn(1, origWidth)
+        } else {
+            cropHeight = (origWidth / targetAspect).toInt().coerceIn(1, origHeight)
+        }
+
+        val startX = (origWidth - cropWidth) / 2
+        val startY = (origHeight - cropHeight) / 2
+
+        val croppedBitmap = Bitmap.createBitmap(originalBitmap, startX, startY, cropWidth, cropHeight)
+
+        val format = when (file.extension.lowercase()) {
+            "png" -> Bitmap.CompressFormat.PNG
+            "webp" -> Bitmap.CompressFormat.WEBP
+            else -> Bitmap.CompressFormat.JPEG
+        }
+
+        FileOutputStream(file).use { out ->
+            croppedBitmap.compress(format, 95, out)
+        }
+
+        try {
+            val exif = android.media.ExifInterface(file.absolutePath)
+            exif.setAttribute(
+                android.media.ExifInterface.TAG_ORIENTATION,
+                android.media.ExifInterface.ORIENTATION_NORMAL.toString()
+            )
+            exif.saveAttributes()
+        } catch (_: Exception) {}
+
+        file.setLastModified(System.currentTimeMillis())
+
+        if (croppedBitmap != originalBitmap) {
+            croppedBitmap.recycle()
+        }
+        originalBitmap.recycle()
+
+        return Pair(cropWidth, cropHeight)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        return null
     }
 }
 

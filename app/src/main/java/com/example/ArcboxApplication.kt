@@ -37,7 +37,7 @@ class ArcboxApplication : Application(), ImageLoaderFactory {
             .fetcherDispatcher(Dispatchers.IO.limitedParallelism(6))
             .decoderDispatcher(Dispatchers.IO.limitedParallelism(3))
             .transformationDispatcher(Dispatchers.Default.limitedParallelism(2))
-            .allowHardware(true)
+            .allowHardware(false)
             .allowRgb565(true)
             .respectCacheHeaders(false)
             .crossfade(false)
