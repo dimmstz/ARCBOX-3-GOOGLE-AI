@@ -7,18 +7,39 @@ import coil.decode.VideoFrameDecoder
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.util.DebugLogger
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import java.util.concurrent.Executors
 
 /**
  * Custom Application class for Arcbox File Manager.
- * Configures an optimized, hardware-accelerated Coil ImageLoader with LRU Memory & Disk Caching
- * and built-in VideoFrameDecoder to ensure silky-smooth 60/120Hz scrolling performance.
+ * Configures an optimized, hardware-accelerated Coil ImageLoader with LRU Memory & Disk Caching,
+ * a dedicated low-priority background thread pool for thumbnail decoding, and built-in VideoFrameDecoder
+ * to guarantee fluid 60/120Hz scrolling without stutter or thread starvation.
  */
 class ArcboxApplication : Application(), ImageLoaderFactory {
 
+    private val thumbnailExecutor by lazy {
+        Executors.newFixedThreadPool(2) { runnable ->
+            Thread {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+                runnable.run()
+            }.apply {
+                isDaemon = true
+                priority = Thread.MIN_PRIORITY
+                name = "arcbox-thumb-worker"
+            }
+        }
+    }
+
+    private val thumbnailDispatcher by lazy {
+        thumbnailExecutor.asCoroutineDispatcher()
+    }
+
     override fun newImageLoader(): ImageLoader {
         return try {
-            val cacheFolder = java.io.File(cacheDir, "arcbox_thumbnails").apply { mkdirs() }
+            val cacheFolder = java.io.File(cacheDir, "arcbox_thumbnails").apply {
+                try { mkdirs() } catch (_: Exception) {}
+            }
             ImageLoader.Builder(this)
                 .memoryCache {
                     MemoryCache.Builder(this)
@@ -35,7 +56,7 @@ class ArcboxApplication : Application(), ImageLoaderFactory {
                 .components {
                     add(VideoFrameDecoder.Factory())
                 }
-                .dispatcher(Dispatchers.IO)
+                .dispatcher(thumbnailDispatcher)
                 .allowHardware(true)
                 .allowRgb565(true)
                 .respectCacheHeaders(false)

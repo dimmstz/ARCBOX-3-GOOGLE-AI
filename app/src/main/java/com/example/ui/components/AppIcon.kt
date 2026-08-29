@@ -1,10 +1,10 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.LruCache
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -18,16 +18,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.models.FileType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 
 // High-capacity LRU Cache for decoded APK & App icons to maintain 120Hz scrolling
 private val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024).toInt()
@@ -38,7 +46,17 @@ private val appIconMemoryCache = object : LruCache<String, Bitmap>(cacheSizeKb) 
     }
 }
 private val nullIconCache = LruCache<String, Boolean>(1000)
-private val appIconDispatcher = Dispatchers.IO.limitedParallelism(2)
+private val appIconExecutor = Executors.newFixedThreadPool(2) { runnable ->
+    Thread {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+        runnable.run()
+    }.apply {
+        isDaemon = true
+        priority = Thread.MIN_PRIORITY
+        name = "arcbox-apk-worker"
+    }
+}
+private val appIconDispatcher = appIconExecutor.asCoroutineDispatcher()
 
 @Composable
 fun ArcboxLogoIcon(
@@ -52,11 +70,90 @@ fun ArcboxLogoIcon(
             .background(backgroundColor),
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.ic_launcher_foreground),
-            contentDescription = "Arcbox Logo",
-            modifier = Modifier.fillMaxSize()
-        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val strokeW = (w * 0.13f).coerceAtLeast(2f)
+
+            // Dynamic Arch gradient (Cyan -> Blue -> Indigo -> Violet)
+            val archBrush = Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFF0099FF),
+                    Color(0xFF0284C7),
+                    Color(0xFF6366F1),
+                    Color(0xFF8B5CF6)
+                ),
+                start = Offset(w * 0.2f, h * 0.8f),
+                end = Offset(w * 0.8f, h * 0.8f)
+            )
+
+            // Left Leg of Arch 'A'
+            drawLine(
+                brush = archBrush,
+                start = Offset(w * 0.24f, h * 0.78f),
+                end = Offset(w * 0.50f, h * 0.22f),
+                strokeWidth = strokeW,
+                cap = StrokeCap.Round
+            )
+
+            // Right Leg of Arch 'A'
+            drawLine(
+                brush = archBrush,
+                start = Offset(w * 0.50f, h * 0.22f),
+                end = Offset(w * 0.76f, h * 0.78f),
+                strokeWidth = strokeW,
+                cap = StrokeCap.Round
+            )
+
+            // Storage Folder Tab (Cyan/Blue)
+            val folderPath = Path().apply {
+                moveTo(w * 0.36f, h * 0.50f)
+                lineTo(w * 0.50f, h * 0.50f)
+                lineTo(w * 0.54f, h * 0.54f)
+                lineTo(w * 0.66f, h * 0.54f)
+                lineTo(w * 0.66f, h * 0.62f)
+                lineTo(w * 0.34f, h * 0.62f)
+                lineTo(w * 0.34f, h * 0.52f)
+                close()
+            }
+            drawPath(
+                path = folderPath,
+                color = Color(0xFF0284C7)
+            )
+
+            // Clean Drawer Box
+            val boxLeft = w * 0.31f
+            val boxTop = h * 0.58f
+            val boxWidth = w * 0.38f
+            val boxHeight = h * 0.22f
+            val cornerR = CornerRadius(w * 0.04f, w * 0.04f)
+
+            drawRoundRect(
+                color = Color.White,
+                topLeft = Offset(boxLeft, boxTop),
+                size = Size(boxWidth, boxHeight),
+                cornerRadius = cornerR
+            )
+
+            // Drawer Box subtle outline
+            drawRoundRect(
+                color = Color(0xFFCBD5E1),
+                topLeft = Offset(boxLeft, boxTop),
+                size = Size(boxWidth, boxHeight),
+                cornerRadius = cornerR,
+                style = Stroke(width = (w * 0.02f).coerceAtLeast(1f))
+            )
+
+            // Drawer Handle
+            val handleWidth = w * 0.12f
+            val handleHeight = h * 0.035f
+            drawRoundRect(
+                color = Color(0xFF94A3B8),
+                topLeft = Offset(w * 0.5f - handleWidth / 2f, boxTop + boxHeight * 0.45f),
+                size = Size(handleWidth, handleHeight),
+                cornerRadius = CornerRadius(handleHeight / 2f, handleHeight / 2f)
+            )
+        }
     }
 }
 
@@ -64,17 +161,18 @@ fun ArcboxLogoIcon(
 fun AppIconImage(
     packageName: String?,
     apkPath: String,
-    modifier: Modifier = Modifier.size(24.dp)
+    modifier: Modifier = Modifier.size(24.dp),
+    isScrolling: Boolean = LocalScrollActive.current
 ) {
     val context = LocalContext.current
     val cacheKey = remember(packageName, apkPath) { packageName ?: apkPath }
 
-    // Check fast memory cache synchronously
+    // Check fast memory cache synchronously (0ms instant lookup)
     var bitmap by remember(cacheKey) { mutableStateOf(appIconMemoryCache.get(cacheKey)) }
 
-    // If cache miss, decode asynchronously on appIconDispatcher
-    if (bitmap == null && nullIconCache.get(cacheKey) != true) {
-        LaunchedEffect(cacheKey) {
+    // If cache miss, decode asynchronously on low-priority worker ONLY when NOT scrolling
+    if (bitmap == null && !isScrolling && nullIconCache.get(cacheKey) != true) {
+        LaunchedEffect(cacheKey, isScrolling) {
             val decoded = withContext(appIconDispatcher) {
                 try {
                     val pm = context.packageManager
@@ -152,7 +250,7 @@ private fun drawableToBitmap(drawable: Drawable): Bitmap {
     val targetW = w.coerceIn(48, 96)
     val targetH = h.coerceIn(48, 96)
     val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
+    val canvas = android.graphics.Canvas(bitmap)
     drawable.setBounds(0, 0, canvas.width, canvas.height)
     drawable.draw(canvas)
     return bitmap

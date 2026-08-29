@@ -59,11 +59,6 @@ fun PermissionWelcomeScreen(
     var hasInstallPermission by remember { mutableStateOf(PermissionHelper.hasInstallPackagesPermission(context)) }
     var hasNotificationPermission by remember { mutableStateOf(PermissionHelper.hasNotificationPermission(context)) }
 
-    val runtimePermissions = remember { PermissionHelper.getRuntimeStoragePermissions().toList() }
-    val accompanistPermissionState = rememberMultiplePermissionsState(
-        permissions = runtimePermissions
-    )
-
     // Re-check permissions when returning from system settings
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -96,7 +91,6 @@ fun PermissionWelcomeScreen(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             PermissionHelper.requestAllFilesAccess(context)
         } else {
-            accompanistPermissionState.launchMultiplePermissionRequest()
             legacyStorageLauncher.launch(
                 arrayOf(
                     Manifest.permission.READ_EXTERNAL_STORAGE,
@@ -107,11 +101,7 @@ fun PermissionWelcomeScreen(
     }
 
     BackHandler(enabled = true) {
-        if (hasStoragePermission) {
-            onDismiss()
-        } else {
-            (context as? android.app.Activity)?.moveTaskToBack(true)
-        }
+        onDismiss()
     }
 
     Surface(
@@ -463,6 +453,20 @@ fun PermissionWelcomeScreen(
                             modifier = Modifier.size(18.dp)
                         )
                     }
+                }
+            }
+
+            if (!hasStoragePermission) {
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Explorar Arquivos (Modo Básico)",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

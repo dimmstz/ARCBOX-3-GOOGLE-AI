@@ -9,7 +9,11 @@ import com.example.ui.ArcboxApp
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        try {
+            enableEdgeToEdge()
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "Failed to enable edge to edge", e)
+        }
         setContent {
             ArcboxApp()
         }

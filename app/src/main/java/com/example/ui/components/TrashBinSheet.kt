@@ -6,9 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,7 +36,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
+import kotlinx.coroutines.delay
 import com.example.data.db.TrashEntity
 import com.example.util.formatFileSize
 import java.io.File
@@ -57,6 +61,20 @@ fun ArcboxTrashBinModal(
     var selectedItems by remember { mutableStateOf(setOf<TrashEntity>()) }
     val isMultiSelecting = selectedItems.isNotEmpty()
     var isGridView by remember { mutableStateOf(false) }
+
+    val trashGridState = rememberLazyGridState()
+    val trashListState = rememberLazyListState()
+    val isTrashScrolling = if (isGridView) trashGridState.isScrollInProgress else trashListState.isScrollInProgress
+    var isTrashScrollingActive by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isTrashScrolling) {
+        if (isTrashScrolling) {
+            isTrashScrollingActive = true
+        } else {
+            delay(75)
+            isTrashScrollingActive = false
+        }
+    }
 
     var itemToDelete by remember { mutableStateOf<TrashEntity?>(null) }
     var showConfirmDeleteSelected by remember { mutableStateOf(false) }
@@ -210,10 +228,13 @@ fun ArcboxTrashBinModal(
                             )
                         }
                     }
-                } else if (isGridView) {
-                    // Miniaturas / Grid View
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 110.dp),
+                } else {
+                    CompositionLocalProvider(LocalScrollActive provides isTrashScrollingActive) {
+                        if (isGridView) {
+                            // Miniaturas / Grid View
+                            LazyVerticalGrid(
+                                state = trashGridState,
+                                columns = GridCells.Adaptive(minSize = 110.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
@@ -263,20 +284,49 @@ fun ArcboxTrashBinModal(
                             ) {
                                 Box(modifier = Modifier.fillMaxSize()) {
                                     if (isMedia && trashFile.exists()) {
-                                        val imageRequest = remember(trashFile.path, item.deletedTimestamp) {
-                                            ImageRequest.Builder(context)
-                                                .data(trashFile)
-                                                .size(200, 200)
-                                                .precision(coil.size.Precision.INEXACT)
-                                                .crossfade(false)
-                                                .build()
+                                        val cacheKey = remember(trashFile.path, item.deletedTimestamp) {
+                                            "trash_${trashFile.path}_${item.deletedTimestamp}"
                                         }
-                                        AsyncImage(
-                                            model = imageRequest,
-                                            contentDescription = item.displayName,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
+                                        val isMemoryCached = remember(cacheKey) {
+                                            try {
+                                                context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
+                                            } catch (_: Exception) {
+                                                false
+                                            }
+                                        }
+                                        var hasLoaded by remember(cacheKey) { mutableStateOf(isMemoryCached) }
+                                        val canLoad = hasLoaded || !LocalScrollActive.current
+
+                                        if (canLoad) {
+                                            val imageRequest = remember(trashFile.path, item.deletedTimestamp) {
+                                                ImageRequest.Builder(context)
+                                                    .data(trashFile)
+                                                    .size(200, 200)
+                                                    .precision(coil.size.Precision.INEXACT)
+                                                    .allowRgb565(true)
+                                                    .allowHardware(true)
+                                                    .memoryCacheKey(cacheKey)
+                                                    .diskCacheKey(cacheKey)
+                                                    .crossfade(false)
+                                                    .build()
+                                            }
+                                            AsyncImage(
+                                                model = imageRequest,
+                                                contentDescription = item.displayName,
+                                                contentScale = ContentScale.Crop,
+                                                onSuccess = { hasLoaded = true },
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    if (isVideo) Icons.Default.Movie else Icons.Default.Image,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(36.dp)
+                                                )
+                                            }
+                                        }
                                         // Bottom gradient scrim
                                         Box(
                                             modifier = Modifier
@@ -397,10 +447,11 @@ fun ArcboxTrashBinModal(
                             }
                         }
                     }
-                } else {
-                    // Lista / List View
-                    LazyColumn(
-                        modifier = Modifier
+                        } else {
+                            // Lista / List View
+                            LazyColumn(
+                                state = trashListState,
+                                modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
                         contentPadding = PaddingValues(16.dp),
@@ -409,6 +460,7 @@ fun ArcboxTrashBinModal(
                         items(trashItems, key = { it.id }) { item ->
                             val isSelected = selectedItems.contains(item)
                             val isMedia = isMediaTrashItem(item)
+                            val isVideo = isVideoTrashItem(item)
                             val trashFile = remember(item.trashTempPath) { File(item.trashTempPath) }
 
                             Surface(
@@ -461,22 +513,57 @@ fun ArcboxTrashBinModal(
                                         )
                                     } else {
                                         if (isMedia && trashFile.exists()) {
-                                            val imageRequest = remember(trashFile.path, item.deletedTimestamp) {
-                                                ImageRequest.Builder(context)
-                                                    .data(trashFile)
-                                                    .size(120, 120)
-                                                    .precision(coil.size.Precision.INEXACT)
-                                                    .crossfade(false)
-                                                    .build()
+                                            val cacheKey = remember(trashFile.path, item.deletedTimestamp) {
+                                                "trash_list_${trashFile.path}_${item.deletedTimestamp}"
                                             }
-                                            AsyncImage(
-                                                model = imageRequest,
-                                                contentDescription = item.displayName,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier
-                                                    .size(42.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
-                                            )
+                                            val isMemoryCached = remember(cacheKey) {
+                                                try {
+                                                    context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
+                                                } catch (_: Exception) {
+                                                    false
+                                                }
+                                            }
+                                            var hasLoaded by remember(cacheKey) { mutableStateOf(isMemoryCached) }
+                                            val canLoad = hasLoaded || !LocalScrollActive.current
+
+                                            if (canLoad) {
+                                                val imageRequest = remember(trashFile.path, item.deletedTimestamp) {
+                                                    ImageRequest.Builder(context)
+                                                        .data(trashFile)
+                                                        .size(120, 120)
+                                                        .precision(coil.size.Precision.INEXACT)
+                                                        .allowRgb565(true)
+                                                        .allowHardware(true)
+                                                        .memoryCacheKey(cacheKey)
+                                                        .diskCacheKey(cacheKey)
+                                                        .crossfade(false)
+                                                        .build()
+                                                }
+                                                AsyncImage(
+                                                    model = imageRequest,
+                                                    contentDescription = item.displayName,
+                                                    contentScale = ContentScale.Crop,
+                                                    onSuccess = { hasLoaded = true },
+                                                    modifier = Modifier
+                                                        .size(42.dp)
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                )
+                                            } else {
+                                                Surface(
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                                    modifier = Modifier.size(42.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Icon(
+                                                            if (isVideo) Icons.Default.Movie else Icons.Default.Image,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
                                             Spacer(modifier = Modifier.width(12.dp))
                                         } else {
                                             Box(
@@ -544,6 +631,8 @@ fun ArcboxTrashBinModal(
                                 }
                             }
                         }
+                    }
+                }
                     }
                 }
             }

@@ -88,6 +88,7 @@ fun ArcboxApp(
 
     val hasOtherModalOrOverlay = uiState.activeApkInfo != null ||
             uiState.activeZipFile != null ||
+            uiState.activePdfFile != null ||
             uiState.activeEditorFile != null ||
             uiState.activeMediaItem != null ||
             uiState.isCloudManagerOpen ||
@@ -111,6 +112,8 @@ fun ArcboxApp(
                 if (uiState.biometricLock) {
                     viewModel.lockApp()
                 }
+            } else if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshFiles()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -134,6 +137,7 @@ fun ArcboxApp(
             uiState.oauthConnectProvider != null -> viewModel.closeOAuthFlow()
             uiState.activeApkInfo != null -> viewModel.closeApkInspector()
             uiState.activeZipFile != null -> viewModel.closeZipArchive()
+            uiState.activePdfFile != null -> viewModel.closePdfViewer()
             uiState.activeEditorFile != null -> viewModel.closeCodeEditor()
             uiState.activeMediaItem != null -> viewModel.closeMediaViewer()
             uiState.isCloudManagerOpen -> viewModel.closeCloudManager()
@@ -559,6 +563,7 @@ fun ArcboxApp(
                         },
                         onInspectApk = { viewModel.inspectApk(it) },
                         onOpenZip = { viewModel.openZipArchive(it) },
+                        onOpenPdf = { viewModel.openPdfViewer(it) },
                         onOpenCodeEditor = { viewModel.openCodeEditor(it) },
                         onOpenMedia = { viewModel.openMediaViewer(it) },
                         onShareItem = { viewModel.shareFile(context, it) },
@@ -707,6 +712,16 @@ fun ArcboxApp(
                 onExtractAll = { viewModel.extractZipArchive(zipFile) },
                 onOpen = { viewModel.openAndExtractZipArchive(zipFile) },
                 onClose = { viewModel.closeZipArchive() }
+            )
+        }
+
+        uiState.activePdfFile?.let { pdfFile ->
+            ArcboxPdfViewerModal(
+                fileItem = pdfFile,
+                onClose = { viewModel.closePdfViewer() },
+                onOpenWithThirdParty = { item ->
+                    viewModel.openFileWithThirdParty(context, item)
+                }
             )
         }
 

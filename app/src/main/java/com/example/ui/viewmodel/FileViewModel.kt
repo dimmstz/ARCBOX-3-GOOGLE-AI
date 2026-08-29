@@ -70,6 +70,7 @@ data class FileUiState(
     val operationProgress: Float? = null,
     val operationStatusText: String? = null,
     val activeMediaItem: FileItem? = null,
+    val activePdfFile: FileItem? = null,
     val activeEditorFile: FileItem? = null,
     val editorContent: String = "",
     val activeApkInfo: ApkInfo? = null,
@@ -136,7 +137,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         private fun buildInitialUiState(app: Application, prefs: android.content.SharedPreferences): FileUiState {
             val hasStoragePermission = com.example.util.PermissionHelper.hasAllFilesAccess(app)
             val onboardingShown = prefs.getBoolean("welcome_onboarding_shown", false)
-            val shouldShowOnboarding = !hasStoragePermission || !onboardingShown
+            val shouldShowOnboarding = !onboardingShown
 
             val deletePermanently = prefs.getBoolean("delete_permanently", false)
             val confirmDelete = prefs.getBoolean("confirm_delete", true)
@@ -306,8 +307,67 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var directoryFileObserver: android.os.FileObserver? = null
+    private var fileObserverDebounceJob: Job? = null
+    private var observedDirectoryPath: String? = null
+
+    private fun updateFileObserver(path: String) {
+        if (observedDirectoryPath == path && directoryFileObserver != null) return
+
+        try {
+            directoryFileObserver?.stopWatching()
+            directoryFileObserver = null
+        } catch (e: Throwable) {
+            android.util.Log.e("FileViewModel", "Error stopping observer", e)
+        }
+
+        val dir = File(path)
+        if (!dir.exists() || !dir.isDirectory) {
+            observedDirectoryPath = null
+            return
+        }
+
+        try {
+            observedDirectoryPath = path
+            val mask = android.os.FileObserver.CREATE or
+                       android.os.FileObserver.DELETE or
+                       android.os.FileObserver.MOVED_FROM or
+                       android.os.FileObserver.MOVED_TO or
+                       android.os.FileObserver.CLOSE_WRITE or
+                       android.os.FileObserver.MODIFY
+
+            val observer = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                object : android.os.FileObserver(dir, mask) {
+                    override fun onEvent(event: Int, eventPath: String?) {
+                        triggerDebouncedRefresh()
+                    }
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                object : android.os.FileObserver(dir.absolutePath, mask) {
+                    override fun onEvent(event: Int, eventPath: String?) {
+                        triggerDebouncedRefresh()
+                    }
+                }
+            }
+            observer.startWatching()
+            directoryFileObserver = observer
+        } catch (e: Throwable) {
+            android.util.Log.e("FileViewModel", "Error starting FileObserver for $path", e)
+        }
+    }
+
+    private fun triggerDebouncedRefresh() {
+        fileObserverDebounceJob?.cancel()
+        fileObserverDebounceJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(400)
+            fetchFilesInternal()
+        }
+    }
+
     private suspend fun fetchFilesInternal() {
         val state = uiState.value
+        updateFileObserver(state.currentPath)
         val volumes = state.storageVolumes.ifEmpty { repository.getStorageVolumes() }
         val files = if (state.isFavoritesOnly) {
             repository.getFavoriteFiles(
@@ -646,6 +706,40 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             } catch (ex: Exception) {
                 Toast.makeText(context, "Nenhum aplicativo encontrado para editar este arquivo", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    fun openFileWithThirdParty(context: Context, item: FileItem) {
+        try {
+            val file = repository.resolveFile(item.path)
+            if (!file.exists()) {
+                Toast.makeText(context, "Arquivo não encontrado", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val uri: Uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            val ext = item.extension.lowercase()
+            val mimeType = when (ext) {
+                "pdf" -> "application/pdf"
+                "doc", "docx" -> "application/msword"
+                "xls", "xlsx" -> "application/vnd.ms-excel"
+                "ppt", "pptx" -> "application/vnd.ms-powerpoint"
+                else -> item.mimeType.ifEmpty { "*/*" }
+            }
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooserIntent = Intent.createChooser(viewIntent, "Abrir ${item.name} com").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooserIntent)
+        } catch (ex: Exception) {
+            Toast.makeText(context, "Nenhum aplicativo encontrado para abrir este arquivo", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1421,20 +1515,24 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         currentOperationJob?.cancel()
         currentOperationJob = viewModelScope.launch {
             checkAndSimulateLargeFileLoading(item)
-            when (item.fileType) {
-                FileType.APK -> {
+            val ext = item.extension.lowercase()
+            when {
+                item.fileType == FileType.APK -> {
                     val info = repository.inspectApk(item.path)
                     _uiState.update { it.copy(activeApkInfo = info) }
                 }
-                FileType.ARCHIVE -> {
+                item.fileType == FileType.ARCHIVE -> {
                     val entries = repository.listZipContents(item.path)
                     _uiState.update { it.copy(activeZipFile = item, activeZipEntries = entries) }
                 }
-                FileType.CODE, FileType.DOCUMENT -> {
+                ext == "pdf" -> {
+                    openPdfViewer(item)
+                }
+                item.fileType == FileType.CODE || (item.fileType == FileType.DOCUMENT && isTextExt(ext)) -> {
                     val content = repository.readTextFile(item.path)
                     _uiState.update { it.copy(activeEditorFile = item, editorContent = content) }
                 }
-                FileType.IMAGE, FileType.VIDEO, FileType.AUDIO -> {
+                item.fileType == FileType.IMAGE || item.fileType == FileType.VIDEO || item.fileType == FileType.AUDIO -> {
                     _uiState.update { it.copy(activeMediaItem = item) }
                 }
                 else -> {
@@ -1442,6 +1540,14 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private fun isTextExt(ext: String): Boolean {
+        return ext in setOf(
+            "txt", "csv", "json", "xml", "html", "htm", "md", "log", "conf", "sh", "py",
+            "js", "ts", "kt", "java", "c", "cpp", "h", "css", "sql", "yaml", "yml",
+            "properties", "env", "ini", "gradle", "bat", "rc", "cfg", "rtf"
+        )
     }
 
     fun inspectApk(item: FileItem) {
@@ -1754,6 +1860,17 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(activeEditorFile = null, editorContent = "") }
     }
 
+    fun openPdfViewer(item: FileItem) {
+        viewModelScope.launch {
+            checkAndSimulateLargeFileLoading(item)
+            _uiState.update { it.copy(activePdfFile = item) }
+        }
+    }
+
+    fun closePdfViewer() {
+        _uiState.update { it.copy(activePdfFile = null) }
+    }
+
     fun openMediaViewer(item: FileItem) {
         viewModelScope.launch {
             checkAndSimulateLargeFileLoading(item)
@@ -2025,5 +2142,13 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissToast() {
         _uiState.update { it.copy(snackbarMessage = null) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            directoryFileObserver?.stopWatching()
+            directoryFileObserver = null
+        } catch (_: Throwable) {}
     }
 }

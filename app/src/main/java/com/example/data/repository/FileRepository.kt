@@ -83,7 +83,8 @@ class FileRepository(private val context: Context) {
 
         // Primary Internal Storage
         val primaryInternal = Environment.getExternalStorageDirectory()
-        val primaryStat = try { StatFs(primaryInternal.path) } catch (e: Exception) { null }
+        val primaryPath = primaryInternal?.absolutePath ?: "/storage/emulated/0"
+        val primaryStat = try { StatFs(primaryPath) } catch (e: Exception) { null }
         val totalInternal = primaryStat?.totalBytes ?: 0L
         val freeInternal = primaryStat?.availableBytes ?: 0L
 
@@ -91,7 +92,7 @@ class FileRepository(private val context: Context) {
             StorageVolume(
                 id = "internal",
                 name = "Armazenamento Interno",
-                path = primaryInternal.absolutePath,
+                path = primaryPath,
                 totalBytes = totalInternal,
                 freeBytes = freeInternal,
                 typeKey = "INTERNAL"
@@ -104,7 +105,11 @@ class FileRepository(private val context: Context) {
             for (i in 1 until externalDirs.size) {
                 val dir = externalDirs[i]
                 if (dir != null) {
-                    val rootPath = dir.absolutePath.substringBefore("/Android/")
+                    val rootPath = if (dir.absolutePath.contains("/Android/")) {
+                        dir.absolutePath.substringBefore("/Android/")
+                    } else {
+                        dir.absolutePath
+                    }
                     val stat = try { StatFs(rootPath) } catch (e: Exception) { null }
                     val total = stat?.totalBytes ?: 0L
                     val free = stat?.availableBytes ?: 0L

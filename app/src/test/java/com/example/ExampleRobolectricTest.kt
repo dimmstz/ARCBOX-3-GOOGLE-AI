@@ -2,6 +2,8 @@ package com.example
 
 import android.content.Context
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToLog
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -29,5 +31,6 @@ class ExampleRobolectricTest {
   fun `verify MainActivity loads completely without crashing`() {
     assertNotNull(composeTestRule.activity)
     composeTestRule.waitForIdle()
+    composeTestRule.onRoot().printToLog("ROBO_TEST")
   }
 }
