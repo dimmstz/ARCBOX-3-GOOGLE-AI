@@ -32,6 +32,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
@@ -114,20 +116,6 @@ fun ArcboxFileGridList(
         listState.scrollToItem(0)
     }
 
-    // Scroll physics vs thumbnail loading decoupling:
-    // Tracks whether active drag or inertial fling is occurring, with a 75ms settle debounce
-    val isCurrentScrollInProgress = if (viewMode == ViewMode.GRID) gridState.isScrollInProgress else listState.isScrollInProgress
-    var isScrollingActive by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isCurrentScrollInProgress) {
-        if (isCurrentScrollInProgress) {
-            isScrollingActive = true
-        } else {
-            delay(75)
-            isScrollingActive = false
-        }
-    }
-
     var showFabMenu by remember { mutableStateOf(false) }
     val isMultiSelecting = selectedItems.isNotEmpty()
 
@@ -156,15 +144,14 @@ fun ArcboxFileGridList(
                 EmptyFolderState(onCreateFolder = onCreateFolder)
             }
         } else {
-            CompositionLocalProvider(LocalScrollActive provides isScrollingActive) {
-                AnimatedContent(
-                    targetState = viewMode,
-                    transitionSpec = {
-                        fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)) togetherWith
-                                fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
-                    },
-                    label = "ViewModeAnimation"
-                ) { mode ->
+            AnimatedContent(
+                targetState = viewMode,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)) togetherWith
+                            fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
+                },
+                label = "ViewModeAnimation"
+            ) { mode ->
                     if (mode == ViewMode.GRID) {
                         LazyVerticalGrid(
                             state = gridState,
@@ -239,7 +226,6 @@ fun ArcboxFileGridList(
                     }
                 }
             }
-        }
 
         // Unified Circular FAB & Morphing Selection Options Bar
         Column(
@@ -1347,8 +1333,7 @@ fun FileThumbnailImage(
     showThumbnails: Boolean = true,
     modifier: Modifier = Modifier,
     iconSize: Dp = 26.dp,
-    overrideIconTint: Color? = null,
-    isScrolling: Boolean = LocalScrollActive.current
+    overrideIconTint: Color? = null
 ) {
     val categoryColor = item.fileType.getCategoryColor()
     val finalIconTint = overrideIconTint ?: categoryColor
@@ -1369,165 +1354,81 @@ fun FileThumbnailImage(
             AppIconImage(
                 packageName = item.packageName,
                 apkPath = item.path,
-                modifier = modifier,
-                isScrolling = isScrolling
+                modifier = modifier
             )
         }
         FileType.IMAGE -> {
-            var loadFailed by remember(item.path) { mutableStateOf(false) }
+            val cacheKey = remember(item.path, item.lastModified) {
+                "${item.path}_${item.lastModified}"
+            }
+            val imageRequest = remember(cacheKey) {
+                ImageRequest.Builder(context)
+                    .data(java.io.File(item.path))
+                    .size(160, 160)
+                    .precision(coil.size.Precision.INEXACT)
+                    .allowRgb565(true)
+                    .allowHardware(true)
+                    .memoryCacheKey(cacheKey)
+                    .diskCacheKey(cacheKey)
+                    .crossfade(false)
+                    .build()
+            }
 
-            if (!loadFailed) {
-                val cacheKey = remember(item.path, item.lastModified) {
-                    "${item.path}_${item.lastModified}"
-                }
-
-                // Check if thumbnail is already cached in RAM (0ms instant lookup)
-                val isMemoryCached = remember(cacheKey) {
-                    try {
-                        context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
-                    } catch (_: Exception) {
-                        false
-                    }
-                }
-                var hasLoaded by remember(cacheKey) { mutableStateOf(isMemoryCached) }
-
-                // Decouple scroll physics from thumbnail loading:
-                // Only initiate new disk I/O & decoding when NOT scrolling, or if already in RAM cache
-                val canLoad = hasLoaded || !isScrolling
-
-                if (canLoad) {
-                    val imageRequest = remember(item.path, item.lastModified) {
-                        ImageRequest.Builder(context)
-                            .data(java.io.File(item.path))
-                            .size(160, 160)
-                            .precision(coil.size.Precision.INEXACT)
-                            .allowRgb565(true)
-                            .allowHardware(true)
-                            .memoryCacheKey(cacheKey)
-                            .diskCacheKey(cacheKey)
-                            .crossfade(false)
-                            .build()
-                    }
-
-                    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-                        AsyncImage(
-                            model = imageRequest,
-                            contentDescription = item.name,
-                            contentScale = ContentScale.Crop,
-                            onSuccess = { hasLoaded = true },
-                            onError = { loadFailed = true },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(10.dp))
-                        )
-                    }
-                } else {
-                    // Render fast, crisp vector placeholder while fast flinging
-                    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-                        Icon(
-                            getFileIcon(item),
-                            contentDescription = null,
-                            tint = finalIconTint,
-                            modifier = Modifier.size(iconSize)
-                        )
-                    }
-                }
-            } else {
-                Icon(
-                    getFileIcon(item),
-                    contentDescription = null,
-                    tint = finalIconTint,
-                    modifier = Modifier.size(iconSize)
+            Box(modifier = modifier, contentAlignment = Alignment.Center) {
+                AsyncImage(
+                    model = imageRequest,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    placeholder = rememberVectorPainter(Icons.Default.Image),
+                    error = rememberVectorPainter(Icons.Default.Image),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(10.dp))
                 )
             }
         }
         FileType.VIDEO -> {
-            var loadFailed by remember(item.path) { mutableStateOf(false) }
+            val cacheKey = remember(item.path, item.lastModified) {
+                "video_${item.path}_${item.lastModified}"
+            }
+            val imageRequest = remember(cacheKey) {
+                ImageRequest.Builder(context)
+                    .data(java.io.File(item.path))
+                    .size(160, 160)
+                    .precision(coil.size.Precision.INEXACT)
+                    .allowRgb565(true)
+                    .allowHardware(true)
+                    .videoFrameMillis(1000)
+                    .memoryCacheKey(cacheKey)
+                    .diskCacheKey(cacheKey)
+                    .crossfade(false)
+                    .build()
+            }
 
-            if (!loadFailed) {
-                val cacheKey = remember(item.path, item.lastModified) {
-                    "video_${item.path}_${item.lastModified}"
-                }
-
-                // Check if thumbnail is already cached in RAM (0ms instant lookup)
-                val isMemoryCached = remember(cacheKey) {
-                    try {
-                        context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
-                    } catch (_: Exception) {
-                        false
-                    }
-                }
-                var hasLoaded by remember(cacheKey) { mutableStateOf(isMemoryCached) }
-
-                // Decouple scroll physics from video frame extraction
-                val canLoad = hasLoaded || !isScrolling
-
-                if (canLoad) {
-                    val imageRequest = remember(item.path, item.lastModified) {
-                        ImageRequest.Builder(context)
-                            .data(java.io.File(item.path))
-                            .size(160, 160)
-                            .precision(coil.size.Precision.INEXACT)
-                            .allowRgb565(true)
-                            .allowHardware(true)
-                            .videoFrameMillis(1000)
-                            .memoryCacheKey(cacheKey)
-                            .diskCacheKey(cacheKey)
-                            .crossfade(false)
-                            .build()
-                    }
-
-                    Box(
-                        modifier = modifier.clip(RoundedCornerShape(10.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AsyncImage(
-                            model = imageRequest,
-                            contentDescription = item.name,
-                            contentScale = ContentScale.Crop,
-                            onSuccess = { hasLoaded = true },
-                            onError = { loadFailed = true },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(18.dp)
-                                .background(Color.Black.copy(alpha = 0.55f), CircleShape)
-                                .align(Alignment.Center),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                    }
-                } else {
-                    // Render fast vector icon placeholder during active fling
-                    Box(
-                        modifier = modifier,
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            getFileIcon(item),
-                            contentDescription = null,
-                            tint = finalIconTint,
-                            modifier = Modifier.size(iconSize)
-                        )
-                    }
-                }
-            } else {
+            Box(
+                modifier = modifier.clip(RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = imageRequest,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    placeholder = rememberVectorPainter(Icons.Default.Movie),
+                    error = rememberVectorPainter(Icons.Default.Movie),
+                    modifier = Modifier.fillMaxSize()
+                )
                 Box(
-                    modifier = modifier,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                        .align(Alignment.Center),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        getFileIcon(item),
+                        Icons.Default.PlayArrow,
                         contentDescription = null,
-                        tint = finalIconTint,
-                        modifier = Modifier.size(iconSize)
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
                     )
                 }
             }

@@ -513,7 +513,7 @@ fun ArcboxApp(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                if (uiState.isLoading) {
+                if (uiState.isLoading && uiState.currentFiles.isEmpty()) {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -583,6 +583,14 @@ fun ArcboxApp(
                         onUninstallApp = { packageName -> viewModel.uninstallUserApp(context, packageName) },
                         onOpenAppSettings = { packageName -> viewModel.openAppSettings(context, packageName) }
                     )
+
+                    if (uiState.isLoading) {
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.TopCenter)
+                        )
+                    }
                 }
 
                 // Operation Progress Indicator overlay

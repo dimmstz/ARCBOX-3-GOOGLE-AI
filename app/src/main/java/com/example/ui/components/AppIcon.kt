@@ -46,17 +46,7 @@ private val appIconMemoryCache = object : LruCache<String, Bitmap>(cacheSizeKb) 
     }
 }
 private val nullIconCache = LruCache<String, Boolean>(1000)
-private val appIconExecutor = Executors.newFixedThreadPool(2) { runnable ->
-    Thread {
-        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
-        runnable.run()
-    }.apply {
-        isDaemon = true
-        priority = Thread.MIN_PRIORITY
-        name = "arcbox-apk-worker"
-    }
-}
-private val appIconDispatcher = appIconExecutor.asCoroutineDispatcher()
+private val appIconDispatcher = Dispatchers.IO
 
 @Composable
 fun ArcboxLogoIcon(
@@ -161,8 +151,7 @@ fun ArcboxLogoIcon(
 fun AppIconImage(
     packageName: String?,
     apkPath: String,
-    modifier: Modifier = Modifier.size(24.dp),
-    isScrolling: Boolean = LocalScrollActive.current
+    modifier: Modifier = Modifier.size(24.dp)
 ) {
     val context = LocalContext.current
     val cacheKey = remember(packageName, apkPath) { packageName ?: apkPath }
@@ -170,9 +159,9 @@ fun AppIconImage(
     // Check fast memory cache synchronously (0ms instant lookup)
     var bitmap by remember(cacheKey) { mutableStateOf(appIconMemoryCache.get(cacheKey)) }
 
-    // If cache miss, decode asynchronously on low-priority worker ONLY when NOT scrolling
-    if (bitmap == null && !isScrolling && nullIconCache.get(cacheKey) != true) {
-        LaunchedEffect(cacheKey, isScrolling) {
+    // If cache miss, decode asynchronously on background worker
+    if (bitmap == null && nullIconCache.get(cacheKey) != true) {
+        LaunchedEffect(cacheKey) {
             val decoded = withContext(appIconDispatcher) {
                 try {
                     val pm = context.packageManager

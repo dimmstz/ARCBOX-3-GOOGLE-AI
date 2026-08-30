@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -64,17 +65,6 @@ fun ArcboxTrashBinModal(
 
     val trashGridState = rememberLazyGridState()
     val trashListState = rememberLazyListState()
-    val isTrashScrolling = if (isGridView) trashGridState.isScrollInProgress else trashListState.isScrollInProgress
-    var isTrashScrollingActive by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isTrashScrolling) {
-        if (isTrashScrolling) {
-            isTrashScrollingActive = true
-        } else {
-            delay(75)
-            isTrashScrollingActive = false
-        }
-    }
 
     var itemToDelete by remember { mutableStateOf<TrashEntity?>(null) }
     var showConfirmDeleteSelected by remember { mutableStateOf(false) }
@@ -229,105 +219,84 @@ fun ArcboxTrashBinModal(
                         }
                     }
                 } else {
-                    CompositionLocalProvider(LocalScrollActive provides isTrashScrollingActive) {
-                        if (isGridView) {
-                            // Miniaturas / Grid View
-                            LazyVerticalGrid(
-                                state = trashGridState,
-                                columns = GridCells.Adaptive(minSize = 110.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentPadding = PaddingValues(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(trashItems, key = { it.id }) { item ->
-                            val isSelected = selectedItems.contains(item)
-                            val isMedia = isMediaTrashItem(item)
-                            val isVideo = isVideoTrashItem(item)
-                            val trashFile = remember(item.trashTempPath) { File(item.trashTempPath) }
+                    if (isGridView) {
+                        // Miniaturas / Grid View
+                        LazyVerticalGrid(
+                            state = trashGridState,
+                            columns = GridCells.Adaptive(minSize = 110.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(trashItems, key = { it.id }) { item ->
+                        val isSelected = selectedItems.contains(item)
+                        val isMedia = isMediaTrashItem(item)
+                        val isVideo = isVideoTrashItem(item)
+                        val trashFile = remember(item.trashTempPath) { File(item.trashTempPath) }
 
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                                },
-                                border = if (isSelected) {
-                                    androidx.compose.foundation.BorderStroke(
-                                        2.dp,
-                                        MaterialTheme.colorScheme.primary
-                                    )
-                                } else {
-                                    androidx.compose.foundation.BorderStroke(
-                                        0.5.dp,
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                                    )
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(138.dp)
-                                    .combinedClickable(
-                                        onClick = {
-                                            if (isMultiSelecting) {
-                                                selectedItems = if (isSelected) selectedItems - item else selectedItems + item
-                                            } else {
-                                                selectedItems = setOf(item)
-                                            }
-                                        },
-                                        onLongClick = {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            },
+                            border = if (isSelected) {
+                                androidx.compose.foundation.BorderStroke(
+                                    2.dp,
+                                    MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                androidx.compose.foundation.BorderStroke(
+                                    0.5.dp,
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(138.dp)
+                                .combinedClickable(
+                                    onClick = {
+                                        if (isMultiSelecting) {
                                             selectedItems = if (isSelected) selectedItems - item else selectedItems + item
-                                        }
-                                    )
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    if (isMedia && trashFile.exists()) {
-                                        val cacheKey = remember(trashFile.path, item.deletedTimestamp) {
-                                            "trash_${trashFile.path}_${item.deletedTimestamp}"
-                                        }
-                                        val isMemoryCached = remember(cacheKey) {
-                                            try {
-                                                context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
-                                            } catch (_: Exception) {
-                                                false
-                                            }
-                                        }
-                                        var hasLoaded by remember(cacheKey) { mutableStateOf(isMemoryCached) }
-                                        val canLoad = hasLoaded || !LocalScrollActive.current
-
-                                        if (canLoad) {
-                                            val imageRequest = remember(trashFile.path, item.deletedTimestamp) {
-                                                ImageRequest.Builder(context)
-                                                    .data(trashFile)
-                                                    .size(200, 200)
-                                                    .precision(coil.size.Precision.INEXACT)
-                                                    .allowRgb565(true)
-                                                    .allowHardware(true)
-                                                    .memoryCacheKey(cacheKey)
-                                                    .diskCacheKey(cacheKey)
-                                                    .crossfade(false)
-                                                    .build()
-                                            }
-                                            AsyncImage(
-                                                model = imageRequest,
-                                                contentDescription = item.displayName,
-                                                contentScale = ContentScale.Crop,
-                                                onSuccess = { hasLoaded = true },
-                                                modifier = Modifier.fillMaxSize()
-                                            )
                                         } else {
-                                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    if (isVideo) Icons.Default.Movie else Icons.Default.Image,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(36.dp)
-                                                )
-                                            }
+                                            selectedItems = setOf(item)
                                         }
-                                        // Bottom gradient scrim
+                                    },
+                                    onLongClick = {
+                                        selectedItems = if (isSelected) selectedItems - item else selectedItems + item
+                                    }
+                                )
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                if (isMedia) {
+                                    val cacheKey = remember(trashFile.path, item.deletedTimestamp) {
+                                        "trash_${trashFile.path}_${item.deletedTimestamp}"
+                                    }
+                                    val imageRequest = remember(cacheKey) {
+                                        ImageRequest.Builder(context)
+                                            .data(trashFile)
+                                            .size(200, 200)
+                                            .precision(coil.size.Precision.INEXACT)
+                                            .allowRgb565(true)
+                                            .allowHardware(true)
+                                            .memoryCacheKey(cacheKey)
+                                            .diskCacheKey(cacheKey)
+                                            .crossfade(false)
+                                            .build()
+                                    }
+                                    AsyncImage(
+                                        model = imageRequest,
+                                        contentDescription = item.displayName,
+                                        contentScale = ContentScale.Crop,
+                                        placeholder = rememberVectorPainter(if (isVideo) Icons.Default.Movie else Icons.Default.Image),
+                                        error = rememberVectorPainter(if (isVideo) Icons.Default.Movie else Icons.Default.Image),
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    // Bottom gradient scrim
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -512,58 +481,32 @@ fun ArcboxTrashBinModal(
                                                 .size(22.dp)
                                         )
                                     } else {
-                                        if (isMedia && trashFile.exists()) {
+                                        if (isMedia) {
                                             val cacheKey = remember(trashFile.path, item.deletedTimestamp) {
                                                 "trash_list_${trashFile.path}_${item.deletedTimestamp}"
                                             }
-                                            val isMemoryCached = remember(cacheKey) {
-                                                try {
-                                                    context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
-                                                } catch (_: Exception) {
-                                                    false
-                                                }
+                                            val imageRequest = remember(cacheKey) {
+                                                ImageRequest.Builder(context)
+                                                    .data(trashFile)
+                                                    .size(120, 120)
+                                                    .precision(coil.size.Precision.INEXACT)
+                                                    .allowRgb565(true)
+                                                    .allowHardware(true)
+                                                    .memoryCacheKey(cacheKey)
+                                                    .diskCacheKey(cacheKey)
+                                                    .crossfade(false)
+                                                    .build()
                                             }
-                                            var hasLoaded by remember(cacheKey) { mutableStateOf(isMemoryCached) }
-                                            val canLoad = hasLoaded || !LocalScrollActive.current
-
-                                            if (canLoad) {
-                                                val imageRequest = remember(trashFile.path, item.deletedTimestamp) {
-                                                    ImageRequest.Builder(context)
-                                                        .data(trashFile)
-                                                        .size(120, 120)
-                                                        .precision(coil.size.Precision.INEXACT)
-                                                        .allowRgb565(true)
-                                                        .allowHardware(true)
-                                                        .memoryCacheKey(cacheKey)
-                                                        .diskCacheKey(cacheKey)
-                                                        .crossfade(false)
-                                                        .build()
-                                                }
-                                                AsyncImage(
-                                                    model = imageRequest,
-                                                    contentDescription = item.displayName,
-                                                    contentScale = ContentScale.Crop,
-                                                    onSuccess = { hasLoaded = true },
-                                                    modifier = Modifier
-                                                        .size(42.dp)
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                )
-                                            } else {
-                                                Surface(
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                                    modifier = Modifier.size(42.dp)
-                                                ) {
-                                                    Box(contentAlignment = Alignment.Center) {
-                                                        Icon(
-                                                            if (isVideo) Icons.Default.Movie else Icons.Default.Image,
-                                                            contentDescription = null,
-                                                            tint = MaterialTheme.colorScheme.primary,
-                                                            modifier = Modifier.size(20.dp)
-                                                        )
-                                                    }
-                                                }
-                                            }
+                                            AsyncImage(
+                                                model = imageRequest,
+                                                contentDescription = item.displayName,
+                                                contentScale = ContentScale.Crop,
+                                                placeholder = rememberVectorPainter(if (isVideo) Icons.Default.Movie else Icons.Default.Image),
+                                                error = rememberVectorPainter(if (isVideo) Icons.Default.Movie else Icons.Default.Image),
+                                                modifier = Modifier
+                                                    .size(42.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                            )
                                             Spacer(modifier = Modifier.width(12.dp))
                                         } else {
                                             Box(
@@ -633,11 +576,10 @@ fun ArcboxTrashBinModal(
                         }
                     }
                 }
-                    }
-                }
             }
         }
     }
+}
 
     // Confirmation dialogs for deletion
     itemToDelete?.let { item ->
