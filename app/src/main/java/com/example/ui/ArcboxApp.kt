@@ -113,7 +113,13 @@ fun ArcboxApp(
                     viewModel.lockApp()
                 }
             } else if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshFiles()
+                if (!uiState.isAppLocked) {
+                    try {
+                        viewModel.refreshFiles()
+                    } catch (e: Throwable) {
+                        android.util.Log.e("ArcboxApp", "Error refreshing files on resume", e)
+                    }
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

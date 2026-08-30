@@ -17,6 +17,7 @@ import com.example.ui.theme.AccentColorOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -307,67 +308,41 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private var directoryFileObserver: android.os.FileObserver? = null
-    private var fileObserverDebounceJob: Job? = null
-    private var observedDirectoryPath: String? = null
+    private var directoryWatchJob: Job? = null
+    private var lastObservedDirectoryPath: String? = null
+    private var lastObservedDirModifiedTime: Long = 0L
 
-    private fun updateFileObserver(path: String) {
-        if (observedDirectoryPath == path && directoryFileObserver != null) return
+    private fun startDirectoryWatcher(path: String) {
+        if (lastObservedDirectoryPath == path && directoryWatchJob?.isActive == true) return
 
-        try {
-            directoryFileObserver?.stopWatching()
-            directoryFileObserver = null
-        } catch (e: Throwable) {
-            android.util.Log.e("FileViewModel", "Error stopping observer", e)
-        }
-
+        directoryWatchJob?.cancel()
+        lastObservedDirectoryPath = path
         val dir = File(path)
-        if (!dir.exists() || !dir.isDirectory) {
-            observedDirectoryPath = null
-            return
-        }
+        lastObservedDirModifiedTime = if (dir.exists()) dir.lastModified() else 0L
 
-        try {
-            observedDirectoryPath = path
-            val mask = android.os.FileObserver.CREATE or
-                       android.os.FileObserver.DELETE or
-                       android.os.FileObserver.MOVED_FROM or
-                       android.os.FileObserver.MOVED_TO or
-                       android.os.FileObserver.CLOSE_WRITE or
-                       android.os.FileObserver.MODIFY
-
-            val observer = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                object : android.os.FileObserver(dir, mask) {
-                    override fun onEvent(event: Int, eventPath: String?) {
-                        triggerDebouncedRefresh()
+        directoryWatchJob = viewModelScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(2000)
+                try {
+                    val currentPath = uiState.value.currentPath
+                    val currentDir = File(currentPath)
+                    if (currentDir.exists() && currentDir.isDirectory) {
+                        val newModified = currentDir.lastModified()
+                        if (newModified > 0L && newModified != lastObservedDirModifiedTime) {
+                            lastObservedDirModifiedTime = newModified
+                            fetchFilesInternal()
+                        }
                     }
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                object : android.os.FileObserver(dir.absolutePath, mask) {
-                    override fun onEvent(event: Int, eventPath: String?) {
-                        triggerDebouncedRefresh()
-                    }
+                } catch (e: Throwable) {
+                    android.util.Log.e("FileViewModel", "Error checking directory timestamp", e)
                 }
             }
-            observer.startWatching()
-            directoryFileObserver = observer
-        } catch (e: Throwable) {
-            android.util.Log.e("FileViewModel", "Error starting FileObserver for $path", e)
-        }
-    }
-
-    private fun triggerDebouncedRefresh() {
-        fileObserverDebounceJob?.cancel()
-        fileObserverDebounceJob = viewModelScope.launch(Dispatchers.IO) {
-            delay(400)
-            fetchFilesInternal()
         }
     }
 
     private suspend fun fetchFilesInternal() {
         val state = uiState.value
-        updateFileObserver(state.currentPath)
+        startDirectoryWatcher(state.currentPath)
         val volumes = state.storageVolumes.ifEmpty { repository.getStorageVolumes() }
         val files = if (state.isFavoritesOnly) {
             repository.getFavoriteFiles(
@@ -2147,8 +2122,8 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         try {
-            directoryFileObserver?.stopWatching()
-            directoryFileObserver = null
+            directoryWatchJob?.cancel()
+            directoryWatchJob = null
         } catch (_: Throwable) {}
     }
 }
