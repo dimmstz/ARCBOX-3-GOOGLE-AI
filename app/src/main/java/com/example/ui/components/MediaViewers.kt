@@ -25,7 +25,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalDensity
 import android.graphics.RectF
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -349,10 +353,10 @@ fun ArcboxImageViewerScreen(
     var showInfoModal by remember { mutableStateOf(false) }
     var showCropSheet by remember { mutableStateOf(false) }
     var isCropMode by remember { mutableStateOf(false) }
-    var cropLeftNorm by remember { mutableFloatStateOf(0.05f) }
-    var cropTopNorm by remember { mutableFloatStateOf(0.05f) }
-    var cropRightNorm by remember { mutableFloatStateOf(0.95f) }
-    var cropBottomNorm by remember { mutableFloatStateOf(0.95f) }
+    var cropLeftNorm by remember { mutableFloatStateOf(0f) }
+    var cropTopNorm by remember { mutableFloatStateOf(0f) }
+    var cropRightNorm by remember { mutableFloatStateOf(1f) }
+    var cropBottomNorm by remember { mutableFloatStateOf(1f) }
     var fineRotation by remember { mutableFloatStateOf(0f) }
     var selectedAspectIndex by remember { mutableIntStateOf(0) }
     var showCropSaveConfirmationDialog by remember { mutableStateOf(false) }
@@ -460,6 +464,7 @@ fun ArcboxImageViewerScreen(
     BackHandler(enabled = true) {
         if (isCropMode) {
             isCropMode = false
+            fineRotation = 0f
         } else {
             handleClose()
         }
@@ -494,18 +499,301 @@ fun ArcboxImageViewerScreen(
         else -> Color(0xFF0F172A)
     }
 
+    val normBaseRot = ((rotation % 360f) + 360f) % 360f
+    val isRot90or270 = normBaseRot == 90f || normBaseRot == 270f
+    val effImgWidth = if (isRot90or270) (if (dimensions.second > 0) dimensions.second.toFloat() else 1000f) else (if (dimensions.first > 0) dimensions.first.toFloat() else 1000f)
+    val effImgHeight = if (isRot90or270) (if (dimensions.first > 0) dimensions.first.toFloat() else 1000f) else (if (dimensions.second > 0) dimensions.second.toFloat() else 1000f)
+    val currentImageAspect = (effImgWidth / effImgHeight).coerceAtLeast(0.01f)
+
+    val aspectOptionsList = remember(currentImageAspect) {
+        listOf(
+            Pair("Livre", null as Float?),
+            Pair("Original", currentImageAspect),
+            Pair("1:1", 1f),
+            Pair("4:3", 4f / 3f),
+            Pair("3:4", 3f / 4f),
+            Pair("16:9", 16f / 9f),
+            Pair("9:16", 9f / 16f),
+            Pair("3:2", 3f / 2f),
+            Pair("2:3", 2f / 3f)
+        )
+    }
+
     // Dynamic background container
     Box(
         modifier = Modifier
             .fillMaxSize()
             .then(backgroundModifier)
     ) {
-        // Main Gestures & AsyncImage Container
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(file.path, isCropMode) {
-                    if (!isCropMode) {
+        if (isCropMode) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Top App Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            isCropMode = false
+                            fineRotation = 0f
+                        },
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Voltar",
+                            tint = iconTint,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 4.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = topBarTextColor,
+                            maxLines = 1,
+                            fontSize = 18.sp
+                        )
+
+                        val dimText = if (dimensions.first > 0 && dimensions.second > 0) {
+                            " • ${dimensions.first} × ${dimensions.second}"
+                        } else ""
+
+                        Text(
+                            text = "${formatFileSize(item.size)}$dimText",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = topBarSubtitleColor,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 12.5.sp,
+                            maxLines = 1
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { showInfoModal = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(if (backgroundModeIndex == 1) Color(0x33FFFFFF) else Color(0x1F0F172A), CircleShape)
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "Informações da imagem",
+                            tint = iconTint,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+
+                // Editor Workspace: positioned strictly above the functions panel
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CropEditorWorkspace(
+                        imageSource = imageSource,
+                        item = item,
+                        imageVersion = imageVersion,
+                        dimensions = dimensions,
+                        baseRotation = rotation,
+                        fineRotation = fineRotation,
+                        cropLeftNorm = cropLeftNorm,
+                        cropTopNorm = cropTopNorm,
+                        cropRightNorm = cropRightNorm,
+                        cropBottomNorm = cropBottomNorm,
+                        selectedAspectIndex = selectedAspectIndex,
+                        aspectOptions = aspectOptionsList,
+                        onCropBoundsChanged = { l, t, r, b ->
+                            cropLeftNorm = l
+                            cropTopNorm = t
+                            cropRightNorm = r
+                            cropBottomNorm = b
+                        },
+                        colorFilter = colorFilter
+                    )
+                }
+
+                // Bottom Functions Panel
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.92f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .navigationBarsPadding()
+                        .padding(top = 14.dp, bottom = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Angle Adjustment Bar
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Angulação: ${if (fineRotation >= 0f) "+" else ""}${String.format(java.util.Locale.US, "%.1f", fineRotation)}°",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            if (fineRotation != 0f) {
+                                TextButton(
+                                    onClick = { fineRotation = 0f },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Resetar (0°)", color = Color(0xFF38BDF8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("-45°", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Slider(
+                                value = fineRotation,
+                                onValueChange = { fineRotation = it },
+                                valueRange = -45f..45f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFF38BDF8),
+                                    activeTrackColor = Color(0xFF38BDF8),
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 8.dp)
+                            )
+                            Text("+45°", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Aspect options row
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        itemsIndexed(aspectOptionsList) { index, (label, ratio) ->
+                            val isSelected = selectedAspectIndex == index
+                            Surface(
+                                onClick = {
+                                    selectedAspectIndex = index
+                                    val norms = calculateAspectCropNorms(ratio, currentImageAspect)
+                                    cropLeftNorm = norms[0]
+                                    cropTopNorm = norms[1]
+                                    cropRightNorm = norms[2]
+                                    cropBottomNorm = norms[3]
+                                },
+                                shape = RoundedCornerShape(20.dp),
+                                color = if (isSelected) Color(0xFF0284C7) else Color.White.copy(alpha = 0.18f),
+                                contentColor = Color.White,
+                                shadowElevation = if (isSelected) 4.dp else 0.dp
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Action buttons
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                isCropMode = false
+                                fineRotation = 0f
+                                cropLeftNorm = 0f
+                                cropTopNorm = 0f
+                                cropRightNorm = 1f
+                                cropBottomNorm = 1f
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White.copy(alpha = 0.2f),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.height(46.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancelar", modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Cancelar")
+                        }
+
+                        IconButton(
+                            onClick = {
+                                fineRotation = 0f
+                                cropLeftNorm = 0f
+                                cropTopNorm = 0f
+                                cropRightNorm = 1f
+                                cropBottomNorm = 1f
+                                selectedAspectIndex = 0
+                            },
+                            modifier = Modifier
+                                .size(46.dp)
+                                .background(Color.White.copy(alpha = 0.18f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Redefinir", tint = Color.White)
+                        }
+
+                        Button(
+                            onClick = {
+                                showCropSaveConfirmationDialog = true
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF10B981),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.height(46.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = "Salvar", modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Salvar", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        } else {
+            // Main Gestures & AsyncImage Container
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(file.path) {
                         detectTapGestures(
                             onDoubleTap = {
                                 scale = if (scale > 1.2f) 1f else 2.2f
@@ -513,439 +801,224 @@ fun ArcboxImageViewerScreen(
                             }
                         )
                     }
-                }
-                .pointerInput(file.path, isCropMode) {
-                    if (!isCropMode) {
+                    .pointerInput(file.path) {
                         detectTransformGestures { _, pan, zoom, _ ->
                             scale = (scale * zoom).coerceIn(0.8f, 5f)
                             offset = if (scale > 1f) offset + pan else Offset.Zero
                         }
-                    }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            val context = LocalContext.current
-            val aspectOptionsList = listOf(
-                Pair("Livre", null as Float?),
-                Pair("Original", if (dimensions.first > 0 && dimensions.second > 0) dimensions.first.toFloat() / dimensions.second.toFloat() else 1f),
-                Pair("1:1", 1f),
-                Pair("4:3", 4f / 3f),
-                Pair("3:4", 3f / 4f),
-                Pair("16:9", 16f / 9f),
-                Pair("9:16", 9f / 16f),
-                Pair("3:2", 3f / 2f),
-                Pair("2:3", 2f / 3f)
-            )
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(imageSource)
-                    .memoryCacheKey("${item.path}_$imageVersion")
-                    .diskCacheKey("${item.path}_$imageVersion")
-                    .crossfade(false)
-                    .build(),
-                contentDescription = item.name,
-                contentScale = contentScales[contentScaleIndex].first,
-                colorFilter = colorFilter,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer(
-                        scaleX = animateScale,
-                        scaleY = animateScale,
-                        translationX = offset.x,
-                        translationY = offset.y,
-                        rotationZ = animateRotation + fineRotation
-                    )
-            )
-
-            if (isCropMode) {
-                CropOverlayView(
-                    cropLeftNorm = cropLeftNorm,
-                    cropTopNorm = cropTopNorm,
-                    cropRightNorm = cropRightNorm,
-                    cropBottomNorm = cropBottomNorm,
-                    aspectRatio = aspectOptionsList.getOrNull(selectedAspectIndex)?.second,
-                    onCropBoundsChanged = { l, t, r, b ->
-                        cropLeftNorm = l
-                        cropTopNorm = t
-                        cropRightNorm = r
-                        cropBottomNorm = b
-                    }
-                )
-            }
-        }
-
-        // Top App Bar matching Screenshot (Back arrow, title, size & resolution, info button)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = handleClose,
-                modifier = Modifier.size(44.dp)
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Voltar",
-                    tint = iconTint,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(4.dp))
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 4.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = topBarTextColor,
-                    maxLines = 1,
-                    fontSize = 18.sp
-                )
-
-                val dimText = if (dimensions.first > 0 && dimensions.second > 0) {
-                    " • ${dimensions.first} × ${dimensions.second}"
-                } else ""
-
-                Text(
-                    text = "${formatFileSize(item.size)}$dimText",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = topBarSubtitleColor,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 12.5.sp,
-                    maxLines = 1
-                )
-            }
-
-            IconButton(
-                onClick = { showInfoModal = true },
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(if (backgroundModeIndex == 1) Color(0x33FFFFFF) else Color(0x1F0F172A), CircleShape)
-            ) {
-                Icon(
-                    Icons.Default.Info,
-                    contentDescription = "Informações da imagem",
-                    tint = iconTint,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-
-        // Feedback Toast
-        AnimatedVisibility(
-            visible = toastFeedback != null,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 64.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xCC0F172A),
-                modifier = Modifier.padding(horizontal = 24.dp)
-            ) {
-                Text(
-                    text = toastFeedback ?: "",
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-        }
-
-        // Bottom Action Bar with Crop Mode transition
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = if (isCropMode) 0.dp else 28.dp)
-        ) {
-            AnimatedContent(
-                targetState = isCropMode,
-                label = "cropModeTransition"
-            ) { cropActive ->
-                if (cropActive) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color.Black.copy(alpha = 0.88f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                            .padding(top = 14.dp, bottom = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // 1. Angle Adjustment Bar (Barra Horizontal de Angulação)
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Angulação: ${if (fineRotation >= 0f) "+" else ""}${String.format(java.util.Locale.US, "%.1f", fineRotation)}°",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                if (fineRotation != 0f) {
-                                    TextButton(
-                                        onClick = { fineRotation = 0f },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) {
-                                        Text("Resetar (0°)", color = Color(0xFF38BDF8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("-45°", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Slider(
-                                    value = fineRotation,
-                                    onValueChange = { fineRotation = it },
-                                    valueRange = -45f..45f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFF38BDF8),
-                                        activeTrackColor = Color(0xFF38BDF8),
-                                        inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(horizontal = 8.dp)
-                                )
-                                Text("+45°", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // 2. Horizontal Aspect Ratio Row (Aspectos na parte de cima, alinhados na horizontal)
-                        val aspectOptions = listOf(
-                            Pair("Livre", null as Float?),
-                            Pair("Original", if (dimensions.first > 0 && dimensions.second > 0) dimensions.first.toFloat() / dimensions.second.toFloat() else 1f),
-                            Pair("1:1", 1f),
-                            Pair("4:3", 4f / 3f),
-                            Pair("3:4", 3f / 4f),
-                            Pair("16:9", 16f / 9f),
-                            Pair("9:16", 9f / 16f),
-                            Pair("3:2", 3f / 2f),
-                            Pair("2:3", 2f / 3f)
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(imageSource)
+                        .memoryCacheKey("${item.path}_$imageVersion")
+                        .diskCacheKey("${item.path}_$imageVersion")
+                        .crossfade(false)
+                        .build(),
+                    contentDescription = item.name,
+                    contentScale = contentScales[contentScaleIndex].first,
+                    colorFilter = colorFilter,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = animateScale,
+                            scaleY = animateScale,
+                            translationX = offset.x,
+                            translationY = offset.y,
+                            rotationZ = animateRotation
                         )
+                )
+            }
 
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            itemsIndexed(aspectOptions) { index, (label, ratio) ->
-                                val isSelected = selectedAspectIndex == index
-                                Surface(
-                                    onClick = {
-                                        selectedAspectIndex = index
-                                        if (ratio != null) {
-                                            val targetRatio = ratio
-                                            val cropW = 0.85f
-                                            val cropH = (cropW / targetRatio).coerceAtMost(0.85f)
-                                            val finalW = if (cropH == 0.85f) (cropH * targetRatio).coerceAtMost(0.85f) else cropW
+            // Top App Bar matching Screenshot (Back arrow, title, size & resolution, info button)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = handleClose,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Voltar",
+                        tint = iconTint,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
 
-                                            cropLeftNorm = (1f - finalW) / 2f
-                                            cropTopNorm = (1f - cropH) / 2f
-                                            cropRightNorm = cropLeftNorm + finalW
-                                            cropBottomNorm = cropTopNorm + cropH
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = if (isSelected) Color(0xFF0284C7) else Color.White.copy(alpha = 0.18f),
-                                    contentColor = Color.White,
-                                    shadowElevation = if (isSelected) 4.dp else 0.dp
-                                ) {
-                                    Text(
-                                        text = label,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                                    )
-                                }
+                Spacer(modifier = Modifier.width(4.dp))
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = topBarTextColor,
+                        maxLines = 1,
+                        fontSize = 18.sp
+                    )
+
+                    val dimText = if (dimensions.first > 0 && dimensions.second > 0) {
+                        " • ${dimensions.first} × ${dimensions.second}"
+                    } else ""
+
+                    Text(
+                        text = "${formatFileSize(item.size)}$dimText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = topBarSubtitleColor,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 12.5.sp,
+                        maxLines = 1
+                    )
+                }
+
+                IconButton(
+                    onClick = { showInfoModal = true },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(if (backgroundModeIndex == 1) Color(0x33FFFFFF) else Color(0x1F0F172A), CircleShape)
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "Informações da imagem",
+                        tint = iconTint,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            // Feedback Toast
+            AnimatedVisibility(
+                visible = toastFeedback != null,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 64.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xCC0F172A),
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                ) {
+                    Text(
+                        text = toastFeedback ?: "",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
+            // Bottom Action Bar with buttons
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 28.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        onClick = {
+                            backgroundModeIndex = (backgroundModeIndex + 1) % 3
+                            toastFeedback = when (backgroundModeIndex) {
+                                0 -> "Fundo: Gradiente"
+                                1 -> "Fundo: Preto"
+                                else -> "Fundo: Branco"
                             }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // 3. Save / Cancel Actions Bar
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Cancel button
-                            Button(
-                                onClick = {
-                                    isCropMode = false
-                                    fineRotation = 0f
-                                    cropLeftNorm = 0.05f
-                                    cropTopNorm = 0.05f
-                                    cropRightNorm = 0.95f
-                                    cropBottomNorm = 0.95f
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.White.copy(alpha = 0.2f),
-                                    contentColor = Color.White
-                                ),
-                                shape = RoundedCornerShape(24.dp),
-                                modifier = Modifier.height(46.dp)
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Cancelar", modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Cancelar")
-                            }
-
-                            // Reset handles
-                            IconButton(
-                                onClick = {
-                                    fineRotation = 0f
-                                    cropLeftNorm = 0.05f
-                                    cropTopNorm = 0.05f
-                                    cropRightNorm = 0.95f
-                                    cropBottomNorm = 0.95f
-                                    selectedAspectIndex = 0
-                                },
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .background(Color.White.copy(alpha = 0.18f), CircleShape)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Redefinir", tint = Color.White)
-                            }
-
-                            // Save button (triggers confirmation dialog)
-                            Button(
-                                onClick = {
-                                    showCropSaveConfirmationDialog = true
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF10B981),
-                                    contentColor = Color.White
-                                ),
-                                shape = RoundedCornerShape(24.dp),
-                                modifier = Modifier.height(46.dp)
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = "Salvar", modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Salvar", fontWeight = FontWeight.Bold)
-                            }
+                        },
+                        shape = CircleShape,
+                        color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
+                        modifier = Modifier.size(54.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.WaterDrop,
+                                contentDescription = "Mudar fundo",
+                                tint = iconTint,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(18.dp),
-                        verticalAlignment = Alignment.CenterVertically
+
+                    Surface(
+                        onClick = {
+                            isCropMode = true
+                            fineRotation = 0f
+                            cropLeftNorm = 0f
+                            cropTopNorm = 0f
+                            cropRightNorm = 1f
+                            cropBottomNorm = 1f
+                            selectedAspectIndex = 0
+                        },
+                        shape = CircleShape,
+                        color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
+                        modifier = Modifier.size(54.dp)
                     ) {
-                        Surface(
-                            onClick = {
-                                backgroundModeIndex = (backgroundModeIndex + 1) % 3
-                                toastFeedback = when (backgroundModeIndex) {
-                                    0 -> "Fundo: Gradiente"
-                                    1 -> "Fundo: Preto"
-                                    else -> "Fundo: Branco"
-                                }
-                            },
-                            shape = CircleShape,
-                            color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
-                            modifier = Modifier.size(54.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.WaterDrop,
-                                    contentDescription = "Mudar fundo",
-                                    tint = iconTint,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.CropFree,
+                                contentDescription = "Cortar e ajustar",
+                                tint = iconTint,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
+                    }
 
-                        Surface(
-                            onClick = {
-                                isCropMode = true
-                                fineRotation = 0f
-                                cropLeftNorm = 0.05f
-                                cropTopNorm = 0.05f
-                                cropRightNorm = 0.95f
-                                cropBottomNorm = 0.95f
-                                selectedAspectIndex = 0
-                            },
-                            shape = CircleShape,
-                            color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
-                            modifier = Modifier.size(54.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.CropFree,
-                                    contentDescription = "Cortar e ajustar",
-                                    tint = iconTint,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
+                    Surface(
+                        onClick = {
+                            rotation += 90f
+                            val currentDegrees = ((rotation % 360f) + 360f) % 360f
+                            toastFeedback = "Rotacionado (${currentDegrees.toInt()}°)"
+                        },
+                        shape = CircleShape,
+                        color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
+                        modifier = Modifier.size(54.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.RotateRight,
+                                contentDescription = "Girar imagem",
+                                tint = iconTint,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
+                    }
 
-                        Surface(
-                            onClick = {
-                                rotation += 90f
-                                val currentDegrees = ((rotation % 360f) + 360f) % 360f
-                                toastFeedback = "Rotacionado (${currentDegrees.toInt()}°)"
-                            },
-                            shape = CircleShape,
-                            color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
-                            modifier = Modifier.size(54.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.RotateRight,
-                                    contentDescription = "Girar imagem",
-                                    tint = iconTint,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                    Surface(
+                        onClick = {
+                            if (onEditWithThirdParty != null) {
+                                onEditWithThirdParty(item)
+                            } else {
+                                toastFeedback = "Abrindo editor..."
                             }
-                        }
-
-                        Surface(
-                            onClick = {
-                                if (onEditWithThirdParty != null) {
-                                    onEditWithThirdParty(item)
-                                } else {
-                                    toastFeedback = "Abrindo editor..."
-                                }
-                            },
-                            shape = CircleShape,
-                            color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
-                            modifier = Modifier.size(54.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Editar imagem",
-                                    tint = iconTint,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
+                        },
+                        shape = CircleShape,
+                        color = if (backgroundModeIndex == 1) Color(0x44FFFFFF) else Color(0x33000000),
+                        modifier = Modifier.size(54.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Editar imagem",
+                                tint = iconTint,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                 }
@@ -970,7 +1043,19 @@ fun ArcboxImageViewerScreen(
                         onClick = {
                             showCropSaveConfirmationDialog = false
                             coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                val totalRot = ((rotation + fineRotation) % 360f + 360f) % 360f
+                                val normBaseRot = ((rotation % 360f) + 360f) % 360f
+                                val isRot90or270 = normBaseRot == 90f || normBaseRot == 270f
+                                val rawW = if (isRot90or270) (if (dimensions.second > 0) dimensions.second.toFloat() else 1000f) else (if (dimensions.first > 0) dimensions.first.toFloat() else 1000f)
+                                val rawH = if (isRot90or270) (if (dimensions.first > 0) dimensions.first.toFloat() else 1000f) else (if (dimensions.second > 0) dimensions.second.toFloat() else 1000f)
+                                val currentScale = calculateRequiredCropScale(
+                                    cropLeftNorm = cropLeftNorm,
+                                    cropTopNorm = cropTopNorm,
+                                    cropRightNorm = cropRightNorm,
+                                    cropBottomNorm = cropBottomNorm,
+                                    imageWidth = rawW,
+                                    imageHeight = rawH,
+                                    fineRotationDeg = fineRotation
+                                )
                                 val resultFile = cropAndRotateImageFile(
                                     context = context,
                                     file = file,
@@ -979,7 +1064,9 @@ fun ArcboxImageViewerScreen(
                                     cropTopNorm = cropTopNorm,
                                     cropRightNorm = cropRightNorm,
                                     cropBottomNorm = cropBottomNorm,
-                                    totalRotationDegrees = totalRot,
+                                    baseRotationDegrees = rotation,
+                                    fineRotationDegrees = fineRotation,
+                                    scaleFactor = currentScale,
                                     saveAsCopy = false
                                 )
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -1006,7 +1093,19 @@ fun ArcboxImageViewerScreen(
                         onClick = {
                             showCropSaveConfirmationDialog = false
                             coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                val totalRot = ((rotation + fineRotation) % 360f + 360f) % 360f
+                                val normBaseRot = ((rotation % 360f) + 360f) % 360f
+                                val isRot90or270 = normBaseRot == 90f || normBaseRot == 270f
+                                val rawW = if (isRot90or270) (if (dimensions.second > 0) dimensions.second.toFloat() else 1000f) else (if (dimensions.first > 0) dimensions.first.toFloat() else 1000f)
+                                val rawH = if (isRot90or270) (if (dimensions.first > 0) dimensions.first.toFloat() else 1000f) else (if (dimensions.second > 0) dimensions.second.toFloat() else 1000f)
+                                val currentScale = calculateRequiredCropScale(
+                                    cropLeftNorm = cropLeftNorm,
+                                    cropTopNorm = cropTopNorm,
+                                    cropRightNorm = cropRightNorm,
+                                    cropBottomNorm = cropBottomNorm,
+                                    imageWidth = rawW,
+                                    imageHeight = rawH,
+                                    fineRotationDeg = fineRotation
+                                )
                                 val resultFile = cropAndRotateImageFile(
                                     context = context,
                                     file = file,
@@ -1015,7 +1114,9 @@ fun ArcboxImageViewerScreen(
                                     cropTopNorm = cropTopNorm,
                                     cropRightNorm = cropRightNorm,
                                     cropBottomNorm = cropBottomNorm,
-                                    totalRotationDegrees = totalRot,
+                                    baseRotationDegrees = rotation,
+                                    fineRotationDegrees = fineRotation,
+                                    scaleFactor = currentScale,
                                     saveAsCopy = true
                                 )
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -2361,56 +2462,230 @@ private fun formatTime(seconds: Int): String {
 }
 
 @Composable
+fun CropEditorWorkspace(
+    imageSource: Any,
+    item: FileItem,
+    imageVersion: Long,
+    dimensions: Pair<Int, Int>,
+    baseRotation: Float,
+    fineRotation: Float,
+    cropLeftNorm: Float,
+    cropTopNorm: Float,
+    cropRightNorm: Float,
+    cropBottomNorm: Float,
+    selectedAspectIndex: Int,
+    aspectOptions: List<Pair<String, Float?>>,
+    onCropBoundsChanged: (left: Float, top: Float, right: Float, bottom: Float) -> Unit,
+    colorFilter: androidx.compose.ui.graphics.ColorFilter?
+) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds(),
+        contentAlignment = Alignment.TopStart
+    ) {
+        val density = LocalDensity.current
+        val widthPx = with(density) { maxWidth.toPx() }
+        val heightPx = with(density) { maxHeight.toPx() }
+
+        val normBaseRot = ((baseRotation % 360f) + 360f) % 360f
+        val isRot90or270 = normBaseRot == 90f || normBaseRot == 270f
+        val rawW = if (isRot90or270) (if (dimensions.second > 0) dimensions.second.toFloat() else 1000f) else (if (dimensions.first > 0) dimensions.first.toFloat() else 1000f)
+        val rawH = if (isRot90or270) (if (dimensions.first > 0) dimensions.first.toFloat() else 1000f) else (if (dimensions.second > 0) dimensions.second.toFloat() else 1000f)
+
+        val imageAspect = (rawW / rawH).coerceAtLeast(0.01f)
+        val workspaceAspect = (widthPx / heightPx).coerceAtLeast(0.01f)
+
+        val (baseImgWidth, baseImgHeight) = if (imageAspect > workspaceAspect) {
+            widthPx to (widthPx / imageAspect)
+        } else {
+            (heightPx * imageAspect) to heightPx
+        }
+
+        val imgLeft = (widthPx - baseImgWidth) / 2f
+        val imgTop = (heightPx - baseImgHeight) / 2f
+
+        val scale = calculateRequiredCropScale(
+            cropLeftNorm = cropLeftNorm,
+            cropTopNorm = cropTopNorm,
+            cropRightNorm = cropRightNorm,
+            cropBottomNorm = cropBottomNorm,
+            imageWidth = baseImgWidth,
+            imageHeight = baseImgHeight,
+            fineRotationDeg = fineRotation
+        )
+
+        val innerW = if (isRot90or270) baseImgHeight else baseImgWidth
+        val innerH = if (isRot90or270) baseImgWidth else baseImgHeight
+
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(imgLeft.toInt(), imgTop.toInt()) }
+                .size(with(density) { baseImgWidth.toDp() }, with(density) { baseImgHeight.toDp() }),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(imageSource)
+                    .memoryCacheKey("${item.path}_$imageVersion")
+                    .diskCacheKey("${item.path}_$imageVersion")
+                    .crossfade(false)
+                    .build(),
+                contentDescription = item.name,
+                contentScale = ContentScale.FillBounds,
+                colorFilter = colorFilter,
+                modifier = Modifier
+                    .size(with(density) { innerW.toDp() }, with(density) { innerH.toDp() })
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        rotationZ = baseRotation + fineRotation
+                    )
+            )
+        }
+
+        CropOverlayView(
+            imgBounds = Rect(imgLeft, imgTop, imgLeft + baseImgWidth, imgTop + baseImgHeight),
+            cropLeftNorm = cropLeftNorm,
+            cropTopNorm = cropTopNorm,
+            cropRightNorm = cropRightNorm,
+            cropBottomNorm = cropBottomNorm,
+            aspectRatio = aspectOptions.getOrNull(selectedAspectIndex)?.second,
+            imageAspect = imageAspect,
+            onCropBoundsChanged = onCropBoundsChanged,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+fun calculateRequiredCropScale(
+    cropLeftNorm: Float,
+    cropTopNorm: Float,
+    cropRightNorm: Float,
+    cropBottomNorm: Float,
+    imageWidth: Float,
+    imageHeight: Float,
+    fineRotationDeg: Float
+): Float {
+    if (kotlin.math.abs(fineRotationDeg) < 0.05f) return 1f
+    if (imageWidth <= 0f || imageHeight <= 0f) return 1f
+
+    val rad = Math.toRadians(fineRotationDeg.toDouble())
+    val cosA = kotlin.math.cos(rad).toFloat()
+    val sinA = kotlin.math.sin(rad).toFloat()
+
+    val x1 = (cropLeftNorm - 0.5f) * imageWidth
+    val x2 = (cropRightNorm - 0.5f) * imageWidth
+    val y1 = (cropTopNorm - 0.5f) * imageHeight
+    val y2 = (cropBottomNorm - 0.5f) * imageHeight
+
+    val corners = arrayOf(
+        x1 to y1,
+        x2 to y1,
+        x1 to y2,
+        x2 to y2
+    )
+
+    var requiredScale = 1f
+    for ((x, y) in corners) {
+        val u = kotlin.math.abs(x * cosA + y * sinA)
+        val v = kotlin.math.abs(-x * sinA + y * cosA)
+        val scaleW = (2f * u) / imageWidth
+        val scaleH = (2f * v) / imageHeight
+        requiredScale = maxOf(requiredScale, scaleW, scaleH)
+    }
+
+    return requiredScale
+}
+
+fun calculateAspectCropNorms(
+    targetRatio: Float?,
+    imageAspect: Float
+): FloatArray {
+    if (targetRatio == null || targetRatio <= 0f || imageAspect <= 0f) {
+        return floatArrayOf(0f, 0f, 1f, 1f)
+    }
+    val K = targetRatio / imageAspect
+    val (deltaL, deltaT) = if (K <= 1f) {
+        K to 1f
+    } else {
+        1f to (1f / K)
+    }
+    val l = ((1f - deltaL) / 2f).coerceIn(0f, 1f)
+    val t = ((1f - deltaT) / 2f).coerceIn(0f, 1f)
+    val r = (l + deltaL).coerceIn(0f, 1f)
+    val b = (t + deltaT).coerceIn(0f, 1f)
+    return floatArrayOf(l, t, r, b)
+}
+
+@Composable
 fun CropOverlayView(
+    imgBounds: Rect,
     cropLeftNorm: Float,
     cropTopNorm: Float,
     cropRightNorm: Float,
     cropBottomNorm: Float,
     aspectRatio: Float?,
+    imageAspect: Float,
     onCropBoundsChanged: (left: Float, top: Float, right: Float, bottom: Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val density = LocalDensity.current
-        val widthPx = with(density) { constraints.maxWidth.toFloat() }
-        val heightPx = with(density) { constraints.maxHeight.toFloat() }
+    val density = LocalDensity.current
+    val imgW = imgBounds.width
+    val imgH = imgBounds.height
 
-        val leftPx = cropLeftNorm * widthPx
-        val topPx = cropTopNorm * heightPx
-        val rightPx = cropRightNorm * widthPx
-        val bottomPx = cropBottomNorm * heightPx
+    val currentCropLeft by rememberUpdatedState(cropLeftNorm)
+    val currentCropTop by rememberUpdatedState(cropTopNorm)
+    val currentCropRight by rememberUpdatedState(cropRightNorm)
+    val currentCropBottom by rememberUpdatedState(cropBottomNorm)
+    val currentOnBoundsChanged by rememberUpdatedState(onCropBoundsChanged)
 
+    val cropLeftPx = imgBounds.left + cropLeftNorm * imgW
+    val cropTopPx = imgBounds.top + cropTopNorm * imgH
+    val cropRightPx = imgBounds.left + cropRightNorm * imgW
+    val cropBottomPx = imgBounds.top + cropBottomNorm * imgH
+
+    val cropW = cropRightPx - cropLeftPx
+    val cropH = cropBottomPx - cropTopPx
+
+    Box(modifier = modifier) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val scrimColor = Color.Black.copy(alpha = 0.65f)
 
             // Top scrim
-            drawRect(color = scrimColor, topLeft = Offset(0f, 0f), size = Size(widthPx, topPx))
+            if (cropTopPx > 0f) {
+                drawRect(color = scrimColor, topLeft = Offset(0f, 0f), size = Size(size.width, cropTopPx))
+            }
             // Bottom scrim
-            drawRect(color = scrimColor, topLeft = Offset(0f, bottomPx), size = Size(widthPx, heightPx - bottomPx))
+            if (cropBottomPx < size.height) {
+                drawRect(color = scrimColor, topLeft = Offset(0f, cropBottomPx), size = Size(size.width, size.height - cropBottomPx))
+            }
             // Left scrim
-            drawRect(color = scrimColor, topLeft = Offset(0f, topPx), size = Size(leftPx, bottomPx - topPx))
+            if (cropLeftPx > 0f) {
+                drawRect(color = scrimColor, topLeft = Offset(0f, cropTopPx), size = Size(cropLeftPx, cropH))
+            }
             // Right scrim
-            drawRect(color = scrimColor, topLeft = Offset(rightPx, topPx), size = Size(widthPx - rightPx, bottomPx - topPx))
+            if (cropRightPx < size.width) {
+                drawRect(color = scrimColor, topLeft = Offset(cropRightPx, cropTopPx), size = Size(size.width - cropRightPx, cropH))
+            }
 
             // Crop border rectangle
             drawRect(
                 color = Color.White,
-                topLeft = Offset(leftPx, topPx),
-                size = Size(rightPx - leftPx, bottomPx - topPx),
+                topLeft = Offset(cropLeftPx, cropTopPx),
+                size = Size(cropW, cropH),
                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
             )
 
             // 3x3 Grid lines
-            val cropW = rightPx - leftPx
-            val cropH = bottomPx - topPx
-            val gridColor = Color.White.copy(alpha = 0.4f)
+            val gridColor = Color.White.copy(alpha = 0.40f)
             val gridStroke = 1.dp.toPx()
 
-            drawLine(color = gridColor, start = Offset(leftPx + cropW / 3f, topPx), end = Offset(leftPx + cropW / 3f, bottomPx), strokeWidth = gridStroke)
-            drawLine(color = gridColor, start = Offset(leftPx + 2f * cropW / 3f, topPx), end = Offset(leftPx + 2f * cropW / 3f, bottomPx), strokeWidth = gridStroke)
+            drawLine(color = gridColor, start = Offset(cropLeftPx + cropW / 3f, cropTopPx), end = Offset(cropLeftPx + cropW / 3f, cropBottomPx), strokeWidth = gridStroke)
+            drawLine(color = gridColor, start = Offset(cropLeftPx + 2f * cropW / 3f, cropTopPx), end = Offset(cropLeftPx + 2f * cropW / 3f, cropBottomPx), strokeWidth = gridStroke)
 
-            drawLine(color = gridColor, start = Offset(leftPx, topPx + cropH / 3f), end = Offset(rightPx, topPx + cropH / 3f), strokeWidth = gridStroke)
-            drawLine(color = gridColor, start = Offset(leftPx, topPx + 2f * cropH / 3f), end = Offset(rightPx, topPx + 2f * cropH / 3f), strokeWidth = gridStroke)
+            drawLine(color = gridColor, start = Offset(cropLeftPx, cropTopPx + cropH / 3f), end = Offset(cropRightPx, cropTopPx + cropH / 3f), strokeWidth = gridStroke)
+            drawLine(color = gridColor, start = Offset(cropLeftPx, cropTopPx + 2f * cropH / 3f), end = Offset(cropRightPx, cropTopPx + 2f * cropH / 3f), strokeWidth = gridStroke)
 
             // Corner handles (L-shaped thick lines)
             val handleLen = 22.dp.toPx()
@@ -2418,20 +2693,20 @@ fun CropOverlayView(
             val handleColor = Color.White
 
             // Top-Left
-            drawLine(handleColor, Offset(leftPx, topPx), Offset(leftPx + handleLen, topPx), handleStroke)
-            drawLine(handleColor, Offset(leftPx, topPx), Offset(leftPx, topPx + handleLen), handleStroke)
+            drawLine(handleColor, Offset(cropLeftPx - handleStroke / 2f, cropTopPx), Offset(cropLeftPx + handleLen, cropTopPx), handleStroke)
+            drawLine(handleColor, Offset(cropLeftPx, cropTopPx - handleStroke / 2f), Offset(cropLeftPx, cropTopPx + handleLen), handleStroke)
 
             // Top-Right
-            drawLine(handleColor, Offset(rightPx, topPx), Offset(rightPx - handleLen, topPx), handleStroke)
-            drawLine(handleColor, Offset(rightPx, topPx), Offset(rightPx, topPx + handleLen), handleStroke)
+            drawLine(handleColor, Offset(cropRightPx - handleLen, cropTopPx), Offset(cropRightPx + handleStroke / 2f, cropTopPx), handleStroke)
+            drawLine(handleColor, Offset(cropRightPx, cropTopPx - handleStroke / 2f), Offset(cropRightPx, cropTopPx + handleLen), handleStroke)
 
             // Bottom-Left
-            drawLine(handleColor, Offset(leftPx, bottomPx), Offset(leftPx + handleLen, bottomPx), handleStroke)
-            drawLine(handleColor, Offset(leftPx, bottomPx), Offset(leftPx, bottomPx - handleLen), handleStroke)
+            drawLine(handleColor, Offset(cropLeftPx - handleStroke / 2f, cropBottomPx), Offset(cropLeftPx + handleLen, cropBottomPx), handleStroke)
+            drawLine(handleColor, Offset(cropLeftPx, cropBottomPx - handleLen), Offset(cropLeftPx, cropBottomPx + handleStroke / 2f), handleStroke)
 
             // Bottom-Right
-            drawLine(handleColor, Offset(rightPx, bottomPx), Offset(rightPx - handleLen, bottomPx), handleStroke)
-            drawLine(handleColor, Offset(rightPx, bottomPx), Offset(rightPx, bottomPx - handleLen), handleStroke)
+            drawLine(handleColor, Offset(cropRightPx - handleLen, cropBottomPx), Offset(cropRightPx + handleStroke / 2f, cropBottomPx), handleStroke)
+            drawLine(handleColor, Offset(cropRightPx, cropBottomPx - handleLen), Offset(cropRightPx, cropBottomPx + handleStroke / 2f), handleStroke)
         }
 
         var activeHandle by remember { mutableStateOf<String?>(null) }
@@ -2439,19 +2714,29 @@ fun CropOverlayView(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(widthPx, heightPx, aspectRatio) {
+                .pointerInput(imgBounds, aspectRatio, imageAspect) {
                     detectDragGestures(
                         onDragStart = { offset ->
                             val touchX = offset.x
                             val touchY = offset.y
-                            val threshold = 48.dp.toPx()
+                            val cornerThreshold = 42.dp.toPx()
+                            val edgeThreshold = 24.dp.toPx()
+
+                            val curL = imgBounds.left + currentCropLeft * imgW
+                            val curT = imgBounds.top + currentCropTop * imgH
+                            val curR = imgBounds.left + currentCropRight * imgW
+                            val curB = imgBounds.top + currentCropBottom * imgH
 
                             activeHandle = when {
-                                kotlin.math.abs(touchX - leftPx) < threshold && kotlin.math.abs(touchY - topPx) < threshold -> "TL"
-                                kotlin.math.abs(touchX - rightPx) < threshold && kotlin.math.abs(touchY - topPx) < threshold -> "TR"
-                                kotlin.math.abs(touchX - leftPx) < threshold && kotlin.math.abs(touchY - bottomPx) < threshold -> "BL"
-                                kotlin.math.abs(touchX - rightPx) < threshold && kotlin.math.abs(touchY - bottomPx) < threshold -> "BR"
-                                touchX in leftPx..rightPx && touchY in topPx..bottomPx -> "CENTER"
+                                kotlin.math.hypot((touchX - curL).toDouble(), (touchY - curT).toDouble()) < cornerThreshold -> "TL"
+                                kotlin.math.hypot((touchX - curR).toDouble(), (touchY - curT).toDouble()) < cornerThreshold -> "TR"
+                                kotlin.math.hypot((touchX - curL).toDouble(), (touchY - curB).toDouble()) < cornerThreshold -> "BL"
+                                kotlin.math.hypot((touchX - curR).toDouble(), (touchY - curB).toDouble()) < cornerThreshold -> "BR"
+                                aspectRatio == null && kotlin.math.abs(touchY - curT) < edgeThreshold && touchX in curL..curR -> "T"
+                                aspectRatio == null && kotlin.math.abs(touchY - curB) < edgeThreshold && touchX in curL..curR -> "B"
+                                aspectRatio == null && kotlin.math.abs(touchX - curL) < edgeThreshold && touchY in curT..curB -> "L"
+                                aspectRatio == null && kotlin.math.abs(touchX - curR) < edgeThreshold && touchY in curT..curB -> "R"
+                                touchX in curL..curR && touchY in curT..curB -> "CENTER"
                                 else -> null
                             }
                         },
@@ -2460,65 +2745,107 @@ fun CropOverlayView(
                         onDrag = { change, dragAmount ->
                             change.consume()
                             val handle = activeHandle ?: return@detectDragGestures
+                            if (imgW <= 0f || imgH <= 0f) return@detectDragGestures
 
-                            val dNormX = dragAmount.x / widthPx
-                            val dNormY = dragAmount.y / heightPx
+                            val dNormX = dragAmount.x / imgW
+                            val dNormY = dragAmount.y / imgH
 
-                            var newL = cropLeftNorm
-                            var newT = cropTopNorm
-                            var newR = cropRightNorm
-                            var newB = cropBottomNorm
+                            val minNormW = (44.dp.toPx() / imgW).coerceIn(0.04f, 0.4f)
+                            val minNormH = (44.dp.toPx() / imgH).coerceIn(0.04f, 0.4f)
 
-                            val minSize = 0.12f
+                            val cL = currentCropLeft
+                            val cT = currentCropTop
+                            val cR = currentCropRight
+                            val cB = currentCropBottom
 
                             when (handle) {
                                 "CENTER" -> {
-                                    val w = newR - newL
-                                    val h = newB - newT
-                                    newL = (newL + dNormX).coerceIn(0f, 1f - w)
-                                    newT = (newT + dNormY).coerceIn(0f, 1f - h)
-                                    newR = newL + w
-                                    newB = newT + h
+                                    val curW = cR - cL
+                                    val curH = cB - cT
+                                    val newL = (cL + dNormX).coerceIn(0f, 1f - curW)
+                                    val newT = (cT + dNormY).coerceIn(0f, 1f - curH)
+                                    currentOnBoundsChanged(newL, newT, newL + curW, newT + curH)
                                 }
-                                "TL" -> {
-                                    newL = (newL + dNormX).coerceIn(0f, newR - minSize)
-                                    newT = (newT + dNormY).coerceIn(0f, newB - minSize)
-                                    if (aspectRatio != null && aspectRatio > 0f) {
-                                        val curW = newR - newL
-                                        val curH = (curW * heightPx / (widthPx * aspectRatio))
-                                        newT = (newB - curH).coerceIn(0f, newB - minSize)
-                                    }
+                                "T" -> {
+                                    val newT = (cT + dNormY).coerceIn(0f, cB - minNormH)
+                                    currentOnBoundsChanged(cL, newT, cR, cB)
                                 }
-                                "TR" -> {
-                                    newR = (newR + dNormX).coerceIn(newL + minSize, 1f)
-                                    newT = (newT + dNormY).coerceIn(0f, newB - minSize)
-                                    if (aspectRatio != null && aspectRatio > 0f) {
-                                        val curW = newR - newL
-                                        val curH = (curW * heightPx / (widthPx * aspectRatio))
-                                        newT = (newB - curH).coerceIn(0f, newB - minSize)
-                                    }
+                                "B" -> {
+                                    val newB = (cB + dNormY).coerceIn(cT + minNormH, 1f)
+                                    currentOnBoundsChanged(cL, cT, cR, newB)
                                 }
-                                "BL" -> {
-                                    newL = (newL + dNormX).coerceIn(0f, newR - minSize)
-                                    newB = (newB + dNormY).coerceIn(newT + minSize, 1f)
-                                    if (aspectRatio != null && aspectRatio > 0f) {
-                                        val curW = newR - newL
-                                        val curH = (curW * heightPx / (widthPx * aspectRatio))
-                                        newB = (newT + curH).coerceIn(newT + minSize, 1f)
-                                    }
+                                "L" -> {
+                                    val newL = (cL + dNormX).coerceIn(0f, cR - minNormW)
+                                    currentOnBoundsChanged(newL, cT, cR, cB)
                                 }
-                                "BR" -> {
-                                    newR = (newR + dNormX).coerceIn(newL + minSize, 1f)
-                                    newB = (newB + dNormY).coerceIn(newT + minSize, 1f)
-                                    if (aspectRatio != null && aspectRatio > 0f) {
-                                        val curW = newR - newL
-                                        val curH = (curW * heightPx / (widthPx * aspectRatio))
-                                        newB = (newT + curH).coerceIn(newT + minSize, 1f)
+                                "R" -> {
+                                    val newR = (cR + dNormX).coerceIn(cL + minNormW, 1f)
+                                    currentOnBoundsChanged(cL, cT, newR, cB)
+                                }
+                                else -> {
+                                    if (aspectRatio == null || aspectRatio <= 0f) {
+                                        when (handle) {
+                                            "TL" -> {
+                                                val newL = (cL + dNormX).coerceIn(0f, cR - minNormW)
+                                                val newT = (cT + dNormY).coerceIn(0f, cB - minNormH)
+                                                currentOnBoundsChanged(newL, newT, cR, cB)
+                                            }
+                                            "TR" -> {
+                                                val newR = (cR + dNormX).coerceIn(cL + minNormW, 1f)
+                                                val newT = (cT + dNormY).coerceIn(0f, cB - minNormH)
+                                                currentOnBoundsChanged(cL, newT, newR, cB)
+                                            }
+                                            "BL" -> {
+                                                val newL = (cL + dNormX).coerceIn(0f, cR - minNormW)
+                                                val newB = (cB + dNormY).coerceIn(cT + minNormH, 1f)
+                                                currentOnBoundsChanged(newL, cT, cR, newB)
+                                            }
+                                            "BR" -> {
+                                                val newR = (cR + dNormX).coerceIn(cL + minNormW, 1f)
+                                                val newB = (cB + dNormY).coerceIn(cT + minNormH, 1f)
+                                                currentOnBoundsChanged(cL, cT, newR, newB)
+                                            }
+                                        }
+                                    } else {
+                                        val K = (aspectRatio / imageAspect).coerceAtLeast(0.01f)
+                                        val curW = cR - cL
+                                        when (handle) {
+                                            "BR" -> {
+                                                val maxDeltaL = minOf(1f - cL, (1f - cT) * K)
+                                                val minDeltaL = maxOf(minNormW, minNormH * K)
+                                                val delta = if (kotlin.math.abs(dNormX) > kotlin.math.abs(dNormY * K)) dNormX else (dNormY * K)
+                                                val newDeltaL = (curW + delta).coerceIn(minDeltaL, maxDeltaL)
+                                                val newDeltaT = newDeltaL / K
+                                                currentOnBoundsChanged(cL, cT, cL + newDeltaL, cT + newDeltaT)
+                                            }
+                                            "TL" -> {
+                                                val maxDeltaL = minOf(cR, cB * K)
+                                                val minDeltaL = maxOf(minNormW, minNormH * K)
+                                                val delta = if (kotlin.math.abs(dNormX) > kotlin.math.abs(dNormY * K)) -dNormX else (-dNormY * K)
+                                                val newDeltaL = (curW + delta).coerceIn(minDeltaL, maxDeltaL)
+                                                val newDeltaT = newDeltaL / K
+                                                currentOnBoundsChanged(cR - newDeltaL, cB - newDeltaT, cR, cB)
+                                            }
+                                            "TR" -> {
+                                                val maxDeltaL = minOf(1f - cL, cB * K)
+                                                val minDeltaL = maxOf(minNormW, minNormH * K)
+                                                val delta = if (kotlin.math.abs(dNormX) > kotlin.math.abs(dNormY * K)) dNormX else (-dNormY * K)
+                                                val newDeltaL = (curW + delta).coerceIn(minDeltaL, maxDeltaL)
+                                                val newDeltaT = newDeltaL / K
+                                                currentOnBoundsChanged(cL, cB - newDeltaT, cL + newDeltaL, cB)
+                                            }
+                                            "BL" -> {
+                                                val maxDeltaL = minOf(cR, (1f - cT) * K)
+                                                val minDeltaL = maxOf(minNormW, minNormH * K)
+                                                val delta = if (kotlin.math.abs(dNormX) > kotlin.math.abs(dNormY * K)) -dNormX else (dNormY * K)
+                                                val newDeltaL = (curW + delta).coerceIn(minDeltaL, maxDeltaL)
+                                                val newDeltaT = newDeltaL / K
+                                                currentOnBoundsChanged(cR - newDeltaL, cT, cR, cT + newDeltaT)
+                                            }
+                                        }
                                     }
                                 }
                             }
-
-                            onCropBoundsChanged(newL, newT, newR, newB)
                         }
                     )
                 }
@@ -2534,7 +2861,9 @@ private fun cropAndRotateImageFile(
     cropTopNorm: Float,
     cropRightNorm: Float,
     cropBottomNorm: Float,
-    totalRotationDegrees: Float,
+    baseRotationDegrees: Float,
+    fineRotationDegrees: Float,
+    scaleFactor: Float,
     saveAsCopy: Boolean
 ): File? {
     return try {
@@ -2552,34 +2881,45 @@ private fun cropAndRotateImageFile(
 
         if (originalBitmap == null) return null
 
-        val rotatedBitmap = if (totalRotationDegrees % 360f != 0f) {
-            val matrix = Matrix().apply { postRotate(totalRotationDegrees) }
-            val bmp = Bitmap.createBitmap(originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true)
-            if (bmp != originalBitmap) {
-                originalBitmap.recycle()
-            }
-            bmp
+        val normBaseRot = ((baseRotationDegrees % 360f) + 360f) % 360f
+        val baseBitmap = if (normBaseRot != 0f) {
+            val matrix = Matrix().apply { postRotate(normBaseRot) }
+            val rot = Bitmap.createBitmap(originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true)
+            if (rot != originalBitmap) originalBitmap.recycle()
+            rot
         } else {
             originalBitmap
         }
 
-        val rotW = rotatedBitmap.width
-        val rotH = rotatedBitmap.height
+        val w0 = baseBitmap.width
+        val h0 = baseBitmap.height
 
-        val normL = cropLeftNorm.coerceIn(0f, 0.95f)
-        val normT = cropTopNorm.coerceIn(0f, 0.95f)
-        val normR = cropRightNorm.coerceIn(normL + 0.05f, 1f)
-        val normB = cropBottomNorm.coerceIn(normT + 0.05f, 1f)
+        val normL = cropLeftNorm.coerceIn(0f, 0.98f)
+        val normT = cropTopNorm.coerceIn(0f, 0.98f)
+        val normR = cropRightNorm.coerceIn(normL + 0.02f, 1f)
+        val normB = cropBottomNorm.coerceIn(normT + 0.02f, 1f)
 
-        val cropX = (rotW * normL).toInt().coerceIn(0, rotW - 1)
-        val cropY = (rotH * normT).toInt().coerceIn(0, rotH - 1)
-        val cropW = (rotW * (normR - normL)).toInt().coerceIn(1, rotW - cropX)
-        val cropH = (rotH * (normB - normT)).toInt().coerceIn(1, rotH - cropY)
+        val cropW = ((normR - normL) * w0).roundToInt().coerceIn(1, w0)
+        val cropH = ((normB - normT) * h0).roundToInt().coerceIn(1, h0)
+        val cropCenterX = ((normL + normR) / 2f) * w0
+        val cropCenterY = ((normT + normB) / 2f) * h0
 
-        val croppedBitmap = Bitmap.createBitmap(rotatedBitmap, cropX, cropY, cropW, cropH)
-        if (croppedBitmap != rotatedBitmap) {
-            rotatedBitmap.recycle()
+        val targetBitmap = Bitmap.createBitmap(cropW, cropH, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(targetBitmap)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.DITHER_FLAG)
+
+        val matrix = Matrix()
+        matrix.postTranslate(-w0 / 2f, -h0 / 2f)
+        matrix.postScale(scaleFactor, scaleFactor)
+        matrix.postRotate(fineRotationDegrees)
+        matrix.postTranslate(cropW / 2f - (cropCenterX - w0 / 2f), cropH / 2f - (cropCenterY - h0 / 2f))
+
+        canvas.drawBitmap(baseBitmap, matrix, paint)
+
+        if (baseBitmap != originalBitmap) {
+            baseBitmap.recycle()
         }
+        originalBitmap.recycle()
 
         val extension = file.extension.lowercase().ifEmpty { "jpg" }
         val format = when (extension) {
@@ -2602,7 +2942,7 @@ private fun cropAndRotateImageFile(
         }
 
         FileOutputStream(targetFile).use { out ->
-            croppedBitmap.compress(format, 95, out)
+            targetBitmap.compress(format, 95, out)
         }
 
         try {
@@ -2615,7 +2955,7 @@ private fun cropAndRotateImageFile(
         } catch (_: Exception) {}
 
         targetFile.setLastModified(System.currentTimeMillis())
-        croppedBitmap.recycle()
+        targetBitmap.recycle()
 
         targetFile
     } catch (e: Exception) {

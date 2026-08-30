@@ -131,6 +131,31 @@ fun ArcboxFileGridList(
 
     val selectedItemIds = remember(selectedItems) { selectedItems.mapTo(HashSet()) { it.id } }
 
+    val isScrolling by remember {
+        derivedStateOf {
+            if (viewMode == ViewMode.GRID) gridState.isScrollInProgress else listState.isScrollInProgress
+        }
+    }
+
+    val onItemClicked: (FileItem) -> Unit = remember(
+        isMultiSelecting,
+        onItemClick,
+        onInspectApk,
+        onOpenZip,
+        onOpenCodeEditor,
+        onOpenMedia,
+        onOpenPdf,
+        onItemLongClick
+    ) {
+        { item: FileItem ->
+            if (isMultiSelecting) {
+                onItemLongClick(item)
+            } else {
+                handleItemClick(item, onItemClick, onInspectApk, onOpenZip, onOpenCodeEditor, onOpenMedia, onOpenPdf)
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         if (files.isEmpty()) {
             if (searchQuery.isNotBlank()) {
@@ -144,14 +169,15 @@ fun ArcboxFileGridList(
                 EmptyFolderState(onCreateFolder = onCreateFolder)
             }
         } else {
-            AnimatedContent(
-                targetState = viewMode,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)) togetherWith
-                            fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
-                },
-                label = "ViewModeAnimation"
-            ) { mode ->
+            CompositionLocalProvider(LocalScrollActive provides isScrolling) {
+                AnimatedContent(
+                    targetState = viewMode,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)) togetherWith
+                                fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
+                    },
+                    label = "ViewModeAnimation"
+                ) { mode ->
                     if (mode == ViewMode.GRID) {
                         LazyVerticalGrid(
                             state = gridState,
@@ -172,15 +198,9 @@ fun ArcboxFileGridList(
                                     showExtensions = showExtensions,
                                     isSelected = selectedItemIds.contains(item.id),
                                     isSelectionMode = isMultiSelecting,
-                                    onClick = {
-                                        if (isMultiSelecting) {
-                                            onItemLongClick(item)
-                                        } else {
-                                            handleItemClick(item, onItemClick, onInspectApk, onOpenZip, onOpenCodeEditor, onOpenMedia, onOpenPdf)
-                                        }
-                                    },
-                                    onLongClick = { onItemLongClick(item) },
-                                    onToggleFavorite = { onToggleFavorite(item) },
+                                    onClick = onItemClicked,
+                                    onLongClick = onItemLongClick,
+                                    onToggleFavorite = onToggleFavorite,
                                     tempZipSourcePath = tempZipSourcePath,
                                     onExtractIndividual = onExtractIndividual,
                                     onUninstallApp = onUninstallApp,
@@ -205,17 +225,11 @@ fun ArcboxFileGridList(
                                     showExtensions = showExtensions,
                                     isSelected = selectedItemIds.contains(item.id),
                                     isSelectionMode = isMultiSelecting,
-                                    onClick = {
-                                        if (isMultiSelecting) {
-                                            onItemLongClick(item)
-                                        } else {
-                                            handleItemClick(item, onItemClick, onInspectApk, onOpenZip, onOpenCodeEditor, onOpenMedia, onOpenPdf)
-                                        }
-                                    },
-                                    onLongClick = { onItemLongClick(item) },
-                                    onToggleFavorite = { onToggleFavorite(item) },
-                                    onRename = { onRenameItem(item) },
-                                    onShareItem = { onShareItem(item) },
+                                    onClick = onItemClicked,
+                                    onLongClick = onItemLongClick,
+                                    onToggleFavorite = onToggleFavorite,
+                                    onRename = onRenameItem,
+                                    onShareItem = onShareItem,
                                     tempZipSourcePath = tempZipSourcePath,
                                     onExtractIndividual = onExtractIndividual,
                                     onUninstallApp = onUninstallApp,
@@ -226,6 +240,7 @@ fun ArcboxFileGridList(
                     }
                 }
             }
+        }
 
         // Unified Circular FAB & Morphing Selection Options Bar
         Column(
@@ -671,9 +686,9 @@ fun FileGridCard(
     showExtensions: Boolean = true,
     isSelected: Boolean,
     isSelectionMode: Boolean = false,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    onToggleFavorite: () -> Unit,
+    onClick: (FileItem) -> Unit,
+    onLongClick: (FileItem) -> Unit,
+    onToggleFavorite: (FileItem) -> Unit,
     tempZipSourcePath: String? = null,
     onExtractIndividual: ((FileItem) -> Unit)? = null,
     onUninstallApp: ((String) -> Unit)? = null,
@@ -700,10 +715,10 @@ fun FileGridCard(
                 shape = RoundedCornerShape(18.dp)
             )
             .combinedClickable(
-                onClick = onClick,
+                onClick = { onClick(item) },
                 onLongClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onLongClick()
+                    onLongClick(item)
                 }
             )
     ) {
@@ -864,7 +879,7 @@ fun FileGridCard(
                 ) {
                     Checkbox(
                         checked = isSelected,
-                        onCheckedChange = { onClick() },
+                        onCheckedChange = { onClick(item) },
                         colors = CheckboxDefaults.colors(
                             checkedColor = MaterialTheme.colorScheme.primary,
                             uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
@@ -906,7 +921,7 @@ fun FileGridCard(
                 }
             } else if (item.appCategory != "USER" && item.appCategory != "SYSTEM") {
                 IconButton(
-                    onClick = onToggleFavorite,
+                    onClick = { onToggleFavorite(item) },
                     modifier = Modifier
                         .padding(4.dp)
                         .size(24.dp)
@@ -932,11 +947,11 @@ fun FileListItem(
     showExtensions: Boolean = true,
     isSelected: Boolean,
     isSelectionMode: Boolean = false,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onRename: () -> Unit,
-    onShareItem: () -> Unit = {},
+    onClick: (FileItem) -> Unit,
+    onLongClick: (FileItem) -> Unit,
+    onToggleFavorite: (FileItem) -> Unit,
+    onRename: (FileItem) -> Unit,
+    onShareItem: (FileItem) -> Unit = {},
     tempZipSourcePath: String? = null,
     onExtractIndividual: ((FileItem) -> Unit)? = null,
     onUninstallApp: ((String) -> Unit)? = null,
@@ -956,10 +971,10 @@ fun FileListItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    onClick = onClick,
+                    onClick = { onClick(item) },
                     onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onLongClick()
+                        onLongClick(item)
                     }
                 )
         ) {
@@ -988,7 +1003,7 @@ fun FileListItem(
                     ) {
                         Checkbox(
                             checked = isSelected,
-                            onCheckedChange = { onClick() },
+                            onCheckedChange = { onClick(item) },
                             colors = CheckboxDefaults.colors(
                                 checkedColor = MaterialTheme.colorScheme.primary,
                                 uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
@@ -1112,7 +1127,7 @@ fun FileListItem(
                             )
                         }
                     } else if (item.appCategory != "SYSTEM") {
-                        IconButton(onClick = onToggleFavorite) {
+                        IconButton(onClick = { onToggleFavorite(item) }) {
                             Icon(
                                 if (item.isFavorite) Icons.Default.Star else Icons.Outlined.StarBorder,
                                 contentDescription = "Favorito",
@@ -1338,6 +1353,7 @@ fun FileThumbnailImage(
     val categoryColor = item.fileType.getCategoryColor()
     val finalIconTint = overrideIconTint ?: categoryColor
     val context = LocalContext.current
+    val isScrolling = LocalScrollActive.current
 
     if (!showThumbnails) {
         Icon(
@@ -1361,75 +1377,113 @@ fun FileThumbnailImage(
             val cacheKey = remember(item.path, item.lastModified) {
                 "${item.path}_${item.lastModified}"
             }
-            val imageRequest = remember(cacheKey) {
-                ImageRequest.Builder(context)
-                    .data(java.io.File(item.path))
-                    .size(160, 160)
-                    .precision(coil.size.Precision.INEXACT)
-                    .allowRgb565(true)
-                    .allowHardware(true)
-                    .memoryCacheKey(cacheKey)
-                    .diskCacheKey(cacheKey)
-                    .crossfade(false)
-                    .build()
+            val isInMemory = remember(cacheKey) {
+                context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
             }
 
-            Box(modifier = modifier, contentAlignment = Alignment.Center) {
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = item.name,
-                    contentScale = ContentScale.Crop,
-                    placeholder = rememberVectorPainter(Icons.Default.Image),
-                    error = rememberVectorPainter(Icons.Default.Image),
-                    modifier = Modifier
+            if (isScrolling && !isInMemory) {
+                Box(
+                    modifier = modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(10.dp))
-                )
+                        .clip(RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Image,
+                        contentDescription = null,
+                        tint = finalIconTint.copy(alpha = 0.55f),
+                        modifier = Modifier.size(iconSize)
+                    )
+                }
+            } else {
+                val imageRequest = remember(cacheKey) {
+                    ImageRequest.Builder(context)
+                        .data(java.io.File(item.path))
+                        .size(160, 160)
+                        .precision(coil.size.Precision.INEXACT)
+                        .allowRgb565(true)
+                        .allowHardware(true)
+                        .memoryCacheKey(cacheKey)
+                        .diskCacheKey(cacheKey)
+                        .crossfade(false)
+                        .build()
+                }
+
+                Box(modifier = modifier, contentAlignment = Alignment.Center) {
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = item.name,
+                        contentScale = ContentScale.Crop,
+                        placeholder = rememberVectorPainter(Icons.Default.Image),
+                        error = rememberVectorPainter(Icons.Default.Image),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                    )
+                }
             }
         }
         FileType.VIDEO -> {
             val cacheKey = remember(item.path, item.lastModified) {
                 "video_${item.path}_${item.lastModified}"
             }
-            val imageRequest = remember(cacheKey) {
-                ImageRequest.Builder(context)
-                    .data(java.io.File(item.path))
-                    .size(160, 160)
-                    .precision(coil.size.Precision.INEXACT)
-                    .allowRgb565(true)
-                    .allowHardware(true)
-                    .videoFrameMillis(1000)
-                    .memoryCacheKey(cacheKey)
-                    .diskCacheKey(cacheKey)
-                    .crossfade(false)
-                    .build()
+            val isInMemory = remember(cacheKey) {
+                context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
             }
 
-            Box(
-                modifier = modifier.clip(RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = item.name,
-                    contentScale = ContentScale.Crop,
-                    placeholder = rememberVectorPainter(Icons.Default.Movie),
-                    error = rememberVectorPainter(Icons.Default.Movie),
-                    modifier = Modifier.fillMaxSize()
-                )
+            if (isScrolling && !isInMemory) {
                 Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .background(Color.Black.copy(alpha = 0.55f), CircleShape)
-                        .align(Alignment.Center),
+                    modifier = modifier.clip(RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.PlayArrow,
+                        Icons.Default.Movie,
                         contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(12.dp)
+                        tint = finalIconTint.copy(alpha = 0.55f),
+                        modifier = Modifier.size(iconSize)
                     )
+                }
+            } else {
+                val imageRequest = remember(cacheKey) {
+                    ImageRequest.Builder(context)
+                        .data(java.io.File(item.path))
+                        .size(160, 160)
+                        .precision(coil.size.Precision.INEXACT)
+                        .allowRgb565(true)
+                        .allowHardware(true)
+                        .videoFrameMillis(1000)
+                        .memoryCacheKey(cacheKey)
+                        .diskCacheKey(cacheKey)
+                        .crossfade(false)
+                        .build()
+                }
+
+                Box(
+                    modifier = modifier.clip(RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = item.name,
+                        contentScale = ContentScale.Crop,
+                        placeholder = rememberVectorPainter(Icons.Default.Movie),
+                        error = rememberVectorPainter(Icons.Default.Movie),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                            .align(Alignment.Center),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
             }
         }

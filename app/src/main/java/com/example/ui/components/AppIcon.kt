@@ -154,13 +154,14 @@ fun AppIconImage(
     modifier: Modifier = Modifier.size(24.dp)
 ) {
     val context = LocalContext.current
+    val isScrolling = LocalScrollActive.current
     val cacheKey = remember(packageName, apkPath) { packageName ?: apkPath }
 
     // Check fast memory cache synchronously (0ms instant lookup)
     var bitmap by remember(cacheKey) { mutableStateOf(appIconMemoryCache.get(cacheKey)) }
 
-    // If cache miss, decode asynchronously on background worker
-    if (bitmap == null && nullIconCache.get(cacheKey) != true) {
+    // If cache miss, decode asynchronously on background worker ONLY when not actively scrolling
+    if (bitmap == null && !isScrolling && nullIconCache.get(cacheKey) != true) {
         LaunchedEffect(cacheKey) {
             val decoded = withContext(appIconDispatcher) {
                 try {
