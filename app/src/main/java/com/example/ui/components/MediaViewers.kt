@@ -483,21 +483,14 @@ fun ArcboxImageViewerScreen(
         )
     }
 
-    val topBarTextColor = when (backgroundModeIndex) {
-        1 -> Color.White
-        else -> Color(0xFF0F172A)
-    }
+    val bgLuminance = dominantColors.first.red * 0.2126f + dominantColors.first.green * 0.7152f + dominantColors.first.blue * 0.0722f
+    val isLightBg = backgroundModeIndex == 2 || (backgroundModeIndex == 0 && bgLuminance > 0.65f)
 
-    val topBarSubtitleColor = when (backgroundModeIndex) {
-        1 -> Color.White.copy(alpha = 0.7f)
-        2 -> Color(0xFF475569)
-        else -> Color(0xFF334155)
-    }
+    val topBarTextColor = if (isLightBg) Color(0xFF0F172A) else Color.White
 
-    val iconTint = when (backgroundModeIndex) {
-        1 -> Color.White
-        else -> Color(0xFF0F172A)
-    }
+    val topBarSubtitleColor = if (isLightBg) Color(0xFF475569) else Color.White.copy(alpha = 0.85f)
+
+    val iconTint = if (isLightBg) Color(0xFF0F172A) else Color.White
 
     val normBaseRot = ((rotation % 360f) + 360f) % 360f
     val isRot90or270 = normBaseRot == 90f || normBaseRot == 270f
@@ -587,7 +580,7 @@ fun ArcboxImageViewerScreen(
                         onClick = { showInfoModal = true },
                         modifier = Modifier
                             .size(40.dp)
-                            .background(if (backgroundModeIndex == 1) Color(0x33FFFFFF) else Color(0x1F0F172A), CircleShape)
+                            .background(if (isLightBg) Color(0x1F0F172A) else Color(0x33FFFFFF), CircleShape)
                     ) {
                         Icon(
                             Icons.Default.Info,
@@ -886,7 +879,7 @@ fun ArcboxImageViewerScreen(
                     onClick = { showInfoModal = true },
                     modifier = Modifier
                         .size(40.dp)
-                        .background(if (backgroundModeIndex == 1) Color(0x33FFFFFF) else Color(0x1F0F172A), CircleShape)
+                        .background(if (isLightBg) Color(0x1F0F172A) else Color(0x33FFFFFF), CircleShape)
                 ) {
                     Icon(
                         Icons.Default.Info,
@@ -2652,21 +2645,21 @@ fun CropOverlayView(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val scrimColor = Color.Black.copy(alpha = 0.65f)
 
-            // Top scrim
-            if (cropTopPx > 0f) {
-                drawRect(color = scrimColor, topLeft = Offset(0f, 0f), size = Size(size.width, cropTopPx))
+            // Top scrim (between image top and crop top)
+            if (cropTopPx > imgBounds.top) {
+                drawRect(color = scrimColor, topLeft = Offset(imgBounds.left, imgBounds.top), size = Size(imgW, cropTopPx - imgBounds.top))
             }
-            // Bottom scrim
-            if (cropBottomPx < size.height) {
-                drawRect(color = scrimColor, topLeft = Offset(0f, cropBottomPx), size = Size(size.width, size.height - cropBottomPx))
+            // Bottom scrim (between crop bottom and image bottom)
+            if (cropBottomPx < imgBounds.bottom) {
+                drawRect(color = scrimColor, topLeft = Offset(imgBounds.left, cropBottomPx), size = Size(imgW, imgBounds.bottom - cropBottomPx))
             }
-            // Left scrim
-            if (cropLeftPx > 0f) {
-                drawRect(color = scrimColor, topLeft = Offset(0f, cropTopPx), size = Size(cropLeftPx, cropH))
+            // Left scrim (between image left and crop left)
+            if (cropLeftPx > imgBounds.left) {
+                drawRect(color = scrimColor, topLeft = Offset(imgBounds.left, cropTopPx), size = Size(cropLeftPx - imgBounds.left, cropH))
             }
-            // Right scrim
-            if (cropRightPx < size.width) {
-                drawRect(color = scrimColor, topLeft = Offset(cropRightPx, cropTopPx), size = Size(size.width - cropRightPx, cropH))
+            // Right scrim (between crop right and image right)
+            if (cropRightPx < imgBounds.right) {
+                drawRect(color = scrimColor, topLeft = Offset(cropRightPx, cropTopPx), size = Size(imgBounds.right - cropRightPx, cropH))
             }
 
             // Crop border rectangle
