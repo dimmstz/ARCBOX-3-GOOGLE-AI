@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
@@ -2117,6 +2118,115 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissToast() {
         _uiState.update { it.copy(snackbarMessage = null) }
+    }
+
+    fun handleIncomingIntent(intent: android.content.Intent, context: Context) {
+        val action = intent.action ?: return
+        if (action != android.content.Intent.ACTION_VIEW && action != android.content.Intent.ACTION_SEND && action != android.content.Intent.ACTION_SEND_MULTIPLE) {
+            return
+        }
+        val uri: Uri? = intent.data ?: intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM)
+        if (uri == null) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val fileItem = resolveFileItemFromUri(context, uri) ?: return@launch
+            withContext(Dispatchers.Main) {
+                if (fileItem.path.endsWith(".zip", ignoreCase = true) || fileItem.name.endsWith(".zip", ignoreCase = true) || fileItem.fileType == FileType.ARCHIVE) {
+                    openZipArchive(fileItem)
+                } else {
+                    val isPdf = fileItem.path.endsWith(".pdf", ignoreCase = true) || fileItem.name.endsWith(".pdf", ignoreCase = true)
+                    if (isPdf) {
+                        openPdfViewer(fileItem)
+                    } else {
+                        when (fileItem.fileType) {
+                            FileType.IMAGE, FileType.VIDEO, FileType.AUDIO -> openMediaViewer(fileItem)
+                            FileType.APK -> inspectApk(fileItem)
+                            else -> {
+                                if (fileItem.isDirectory) {
+                                    navigateToDirectory(fileItem.path)
+                                } else {
+                                    openCodeEditor(fileItem)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun resolveFileItemFromUri(context: Context, uri: Uri): FileItem? {
+        try {
+            if (uri.scheme == "file") {
+                val path = uri.path ?: return null
+                val file = File(path)
+                if (!file.exists()) return null
+                val ext = file.extension.lowercase()
+                val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                val type = if (ext == "zip" || ext == "rar" || ext == "7z") FileType.ARCHIVE else getFileTypeFromExt(ext, mime)
+                return FileItem(
+                    id = file.absolutePath,
+                    name = file.name,
+                    path = file.absolutePath,
+                    size = file.length(),
+                    lastModified = file.lastModified(),
+                    isDirectory = file.isDirectory,
+                    fileType = type,
+                    extension = ext,
+                    mimeType = mime
+                )
+            } else if (uri.scheme == "content") {
+                var name = "arquivo_recebido"
+                var size = 0L
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (cursor.moveToFirst()) {
+                        if (nameIndex != -1) name = cursor.getString(nameIndex) ?: name
+                        if (sizeIndex != -1) size = cursor.getLong(sizeIndex)
+                    }
+                }
+                val ext = name.substringAfterLast('.', "").lowercase()
+                val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                val type = if (ext == "zip" || ext == "rar" || ext == "7z") FileType.ARCHIVE else getFileTypeFromExt(ext, mime)
+
+                val tempDir = File(context.cacheDir, "incoming_files").apply { mkdirs() }
+                val targetFile = File(tempDir, name)
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                return FileItem(
+                    id = targetFile.absolutePath,
+                    name = name,
+                    path = targetFile.absolutePath,
+                    safUriString = uri.toString(),
+                    size = if (targetFile.length() > 0) targetFile.length() else size,
+                    lastModified = targetFile.lastModified(),
+                    isDirectory = false,
+                    fileType = type,
+                    extension = ext,
+                    mimeType = mime
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    private fun getFileTypeFromExt(ext: String, mime: String): FileType {
+        return when {
+            ext in listOf("zip", "rar", "7z", "tar", "gz") -> FileType.ARCHIVE
+            ext == "pdf" || mime.contains("pdf") -> FileType.DOCUMENT
+            ext in listOf("png", "jpg", "jpeg", "webp", "gif") || mime.startsWith("image/") -> FileType.IMAGE
+            ext in listOf("mp4", "mkv", "webm", "avi") || mime.startsWith("video/") -> FileType.VIDEO
+            ext in listOf("mp3", "wav", "ogg", "m4a", "flac") || mime.startsWith("audio/") -> FileType.AUDIO
+            ext == "apk" || mime.contains("vnd.android.package-archive") -> FileType.APK
+            else -> FileType.DOCUMENT
+        }
     }
 
     override fun onCleared() {

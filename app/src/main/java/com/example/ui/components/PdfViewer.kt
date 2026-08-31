@@ -347,10 +347,10 @@ private fun openPfdForPdf(context: Context, item: FileItem): ParcelFileDescripto
 private fun renderPageBitmap(renderer: PdfRenderer, pageIndex: Int): Bitmap? {
     return try {
         val page = renderer.openPage(pageIndex)
-        val displayWidth = 1080
-        val scaleRatio = displayWidth.toFloat() / page.width.toFloat()
-        val targetW = (page.width * scaleRatio).toInt().coerceAtLeast(300)
-        val targetH = (page.height * scaleRatio).toInt().coerceAtLeast(300)
+        // High resolution render target (3x page width or 2160px minimum) for crystal clear vector text quality
+        val targetW = (page.width * 3.0f).toInt().coerceAtLeast(2160)
+        val scaleRatio = targetW.toFloat() / page.width.toFloat()
+        val targetH = (page.height * scaleRatio).toInt().coerceAtLeast(600)
 
         val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(bitmap)

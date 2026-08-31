@@ -40,13 +40,21 @@ class FileRepository(private val context: Context) {
     private val dirCountCache = ConcurrentHashMap<String, Pair<Long, Int>>()
 
     private fun getDirectoryChildCount(file: File): Int {
+        val name = file.name
+        if (name == "Android" || name.startsWith(".")) {
+            return 0
+        }
         val path = file.absolutePath
-        val lastMod = file.lastModified()
+        val lastMod = try { file.lastModified() } catch (_: Exception) { 0L }
         val cached = dirCountCache[path]
         if (cached != null && cached.first == lastMod) {
             return cached.second
         }
-        val count = file.list()?.size ?: 0
+        val count = try {
+            file.list()?.size ?: 0
+        } catch (_: Exception) {
+            0
+        }
         dirCountCache[path] = Pair(lastMod, count)
         return count
     }
@@ -593,73 +601,36 @@ class FileRepository(private val context: Context) {
 
                     if (files != null) {
                         val filteredFiles = if (!showHiddenFiles) files.filter { !it.name.startsWith(".") } else files.toList()
-                        if (parallelDirectoryReading) {
-                            val mapped = coroutineScope {
-                                filteredFiles.map { file ->
-                                    async(Dispatchers.IO) {
-                                        val isDir = file.isDirectory
-                                        val name = file.name
-                                        val ext = file.extension.lowercase()
-                                        val mime = getMimeType(file)
-                                        val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
-                                        val size = if (isDir) 0L else file.length()
-                                        val count = if (isDir) getDirectoryChildCount(file) else 0
+                        val mapped = filteredFiles.map { file ->
+                            val isDir = file.isDirectory
+                            val name = file.name
+                            val ext = file.extension.lowercase()
+                            val mime = getMimeTypeFromExtension(ext)
+                            val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                            val size = if (isDir) 0L else file.length()
+                            val count = if (isDir) getDirectoryChildCount(file) else 0
 
-                                        val itemPath = if (directoryPath.startsWith("/cloud/")) {
-                                            directoryPath.removeSuffix("/") + "/" + name
-                                        } else {
-                                            file.absolutePath
-                                        }
-
-                                        FileItem(
-                                            id = itemPath,
-                                            name = name,
-                                            path = itemPath,
-                                            size = size,
-                                            lastModified = file.lastModified(),
-                                            isDirectory = isDir,
-                                            fileType = type,
-                                            extension = ext,
-                                            isFavorite = favoritePaths.contains(itemPath),
-                                            childCount = count,
-                                            mimeType = mime
-                                        )
-                                    }
-                                }.awaitAll()
+                            val itemPath = if (directoryPath.startsWith("/cloud/")) {
+                                directoryPath.removeSuffix("/") + "/" + name
+                            } else {
+                                file.absolutePath
                             }
-                            items.addAll(mapped)
-                        } else {
-                            for (file in filteredFiles) {
-                                val isDir = file.isDirectory
-                                val name = file.name
-                                val ext = file.extension.lowercase()
-                                val mime = getMimeType(file)
-                                val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
-                                val size = if (isDir) 0L else file.length()
-                                val count = if (isDir) getDirectoryChildCount(file) else 0
 
-                                val itemPath = if (directoryPath.startsWith("/cloud/")) {
-                                    directoryPath.removeSuffix("/") + "/" + name
-                                } else {
-                                    file.absolutePath
-                                }
-
-                                val item = FileItem(
-                                    id = itemPath,
-                                    name = name,
-                                    path = itemPath,
-                                    size = size,
-                                    lastModified = file.lastModified(),
-                                    isDirectory = isDir,
-                                    fileType = type,
-                                    extension = ext,
-                                    isFavorite = favoritePaths.contains(itemPath),
-                                    childCount = count,
-                                    mimeType = mime
-                                )
-                                items.add(item)
-                            }
+                            FileItem(
+                                id = itemPath,
+                                name = name,
+                                path = itemPath,
+                                size = size,
+                                lastModified = file.lastModified(),
+                                isDirectory = isDir,
+                                fileType = type,
+                                extension = ext,
+                                isFavorite = favoritePaths.contains(itemPath),
+                                childCount = count,
+                                mimeType = mime
+                            )
                         }
+                        items.addAll(mapped)
                     } else if (com.example.util.RootHelper.isRootAvailable() && !directoryPath.startsWith("/cloud/")) {
                         // Fallback to superuser root listing for protected system directories
                         val rootItems = com.example.util.RootHelper.listDirectory(directoryPath, favoritePaths)

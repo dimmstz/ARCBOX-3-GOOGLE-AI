@@ -1377,113 +1377,75 @@ fun FileThumbnailImage(
             val cacheKey = remember(item.path, item.lastModified) {
                 "${item.path}_${item.lastModified}"
             }
-            val isInMemory = remember(cacheKey) {
-                context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
+            val imageRequest = remember(cacheKey) {
+                ImageRequest.Builder(context)
+                    .data(java.io.File(item.path))
+                    .size(160, 160)
+                    .precision(coil.size.Precision.INEXACT)
+                    .allowRgb565(true)
+                    .allowHardware(true)
+                    .memoryCacheKey(cacheKey)
+                    .diskCacheKey(cacheKey)
+                    .crossfade(false)
+                    .build()
             }
 
-            if (isScrolling && !isInMemory) {
-                Box(
-                    modifier = modifier
+            Box(modifier = modifier, contentAlignment = Alignment.Center) {
+                AsyncImage(
+                    model = imageRequest,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    placeholder = rememberVectorPainter(Icons.Default.Image),
+                    error = rememberVectorPainter(Icons.Default.Image),
+                    modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Image,
-                        contentDescription = null,
-                        tint = finalIconTint.copy(alpha = 0.55f),
-                        modifier = Modifier.size(iconSize)
-                    )
-                }
-            } else {
-                val imageRequest = remember(cacheKey) {
-                    ImageRequest.Builder(context)
-                        .data(java.io.File(item.path))
-                        .size(160, 160)
-                        .precision(coil.size.Precision.INEXACT)
-                        .allowRgb565(true)
-                        .allowHardware(true)
-                        .memoryCacheKey(cacheKey)
-                        .diskCacheKey(cacheKey)
-                        .crossfade(false)
-                        .build()
-                }
-
-                Box(modifier = modifier, contentAlignment = Alignment.Center) {
-                    AsyncImage(
-                        model = imageRequest,
-                        contentDescription = item.name,
-                        contentScale = ContentScale.Crop,
-                        placeholder = rememberVectorPainter(Icons.Default.Image),
-                        error = rememberVectorPainter(Icons.Default.Image),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(10.dp))
-                    )
-                }
+                        .clip(RoundedCornerShape(10.dp))
+                )
             }
         }
         FileType.VIDEO -> {
             val cacheKey = remember(item.path, item.lastModified) {
                 "video_${item.path}_${item.lastModified}"
             }
-            val isInMemory = remember(cacheKey) {
-                context.imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(cacheKey)) != null
+            val imageRequest = remember(cacheKey) {
+                ImageRequest.Builder(context)
+                    .data(java.io.File(item.path))
+                    .size(160, 160)
+                    .precision(coil.size.Precision.INEXACT)
+                    .allowRgb565(true)
+                    .allowHardware(true)
+                    .videoFrameMillis(1000)
+                    .memoryCacheKey(cacheKey)
+                    .diskCacheKey(cacheKey)
+                    .crossfade(false)
+                    .build()
             }
 
-            if (isScrolling && !isInMemory) {
+            Box(
+                modifier = modifier.clip(RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = imageRequest,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    placeholder = rememberVectorPainter(Icons.Default.Movie),
+                    error = rememberVectorPainter(Icons.Default.Movie),
+                    modifier = Modifier.fillMaxSize()
+                )
                 Box(
-                    modifier = modifier.clip(RoundedCornerShape(10.dp)),
+                    modifier = Modifier
+                        .size(18.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                        .align(Alignment.Center),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.Movie,
+                        Icons.Default.PlayArrow,
                         contentDescription = null,
-                        tint = finalIconTint.copy(alpha = 0.55f),
-                        modifier = Modifier.size(iconSize)
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
                     )
-                }
-            } else {
-                val imageRequest = remember(cacheKey) {
-                    ImageRequest.Builder(context)
-                        .data(java.io.File(item.path))
-                        .size(160, 160)
-                        .precision(coil.size.Precision.INEXACT)
-                        .allowRgb565(true)
-                        .allowHardware(true)
-                        .videoFrameMillis(1000)
-                        .memoryCacheKey(cacheKey)
-                        .diskCacheKey(cacheKey)
-                        .crossfade(false)
-                        .build()
-                }
-
-                Box(
-                    modifier = modifier.clip(RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AsyncImage(
-                        model = imageRequest,
-                        contentDescription = item.name,
-                        contentScale = ContentScale.Crop,
-                        placeholder = rememberVectorPainter(Icons.Default.Movie),
-                        error = rememberVectorPainter(Icons.Default.Movie),
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .background(Color.Black.copy(alpha = 0.55f), CircleShape)
-                            .align(Alignment.Center),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp)
-                        )
-                    }
                 }
             }
         }
