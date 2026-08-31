@@ -38,10 +38,12 @@ class FileRepository(private val context: Context) {
     val safCloudManager = com.example.data.cloud.SafCloudManager(context)
     private var mockFilesCreated = false
     private val dirCountCache = ConcurrentHashMap<String, Pair<Long, Int>>()
+    private var cachedVolumes: List<StorageVolume>? = null
+    private var lastVolumesCheckTime: Long = 0L
 
     private fun getDirectoryChildCount(file: File): Int {
         val name = file.name
-        if (name == "Android" || name.startsWith(".")) {
+        if (name == "Android" || name.startsWith(".") || name == "data" || name == "obb") {
             return 0
         }
         val path = file.absolutePath
@@ -86,7 +88,11 @@ class FileRepository(private val context: Context) {
     // -------------------------------------------------------------
     // STORAGE VOLUMES & ROOTS
     // -------------------------------------------------------------
-    suspend fun getStorageVolumes(): List<StorageVolume> = withContext(Dispatchers.IO) {
+    suspend fun getStorageVolumes(forceRefresh: Boolean = false): List<StorageVolume> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        if (!forceRefresh && cachedVolumes != null && (now - lastVolumesCheckTime) < 30_000L) {
+            return@withContext cachedVolumes ?: emptyList()
+        }
         val list = mutableListOf<StorageVolume>()
 
         // Primary Internal Storage
@@ -337,12 +343,10 @@ class FileRepository(private val context: Context) {
             )
         }
 
+        cachedVolumes = list
+        lastVolumesCheckTime = now
         list
     }
-
-    // -------------------------------------------------------------
-    // FILE NAVIGATION & LISTING
-    // -------------------------------------------------------------
     suspend fun listFiles(
         directoryPath: String,
         safUriString: String? = null,
@@ -1928,217 +1932,7 @@ class FileRepository(private val context: Context) {
     }
 
     fun ensureMockFilesExist() {
-        if (mockFilesCreated) return
-        if (!com.example.util.PermissionHelper.hasAllFilesAccess(context)) return
-        mockFilesCreated = true
-        try {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
-            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-
-            // On real devices with user files, avoid generating mock files to prevent lag and MediaScanner churn
-            val hasUserFiles = (downloadsDir.list()?.isNotEmpty() == true) ||
-                               (dcimDir.list()?.isNotEmpty() == true) ||
-                               (picturesDir.list()?.isNotEmpty() == true)
-            if (hasUserFiles) {
-                return
-            }
-
-            val internalDir = Environment.getExternalStorageDirectory()
-            val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-            val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-            val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-
-            listOf(internalDir, downloadsDir, documentsDir, dcimDir, musicDir, moviesDir, picturesDir).forEach { it.mkdirs() }
-
-            // Mock Empty Folders
-            listOf(
-                File(downloadsDir, "Pastas_Vazias_Download_Demo"),
-                File(documentsDir, "Projeto_Antigo_Vazio"),
-                File(picturesDir, "Album_Sem_Fotos")
-            ).forEach { it.mkdirs() }
-
-            // Mock Temp & Residual Files
-            val mockTemp1 = File(downloadsDir, "temp_download_cache.tmp")
-            if (!mockTemp1.exists()) mockTemp1.writeBytes(ByteArray(850000) { 0 })
-
-            val mockTemp2 = File(documentsDir, "app_debug_residual.log")
-            if (!mockTemp2.exists()) mockTemp2.writeBytes(ByteArray(1250000) { 0 })
-
-            val mockTemp3 = File(internalDir, "thumbs_cache_backup.bak")
-            if (!mockTemp3.exists()) mockTemp3.writeBytes(ByteArray(420000) { 0 })
-
-            // Document Mocks
-            val mockTextFile = File(documentsDir, "Notas_de_Reuniao.txt")
-            if (!mockTextFile.exists()) {
-                mockTextFile.writeText("Anotações importantes para o projeto Arcbox File Manager:\n1. Interface limpa e rápida\n2. Suporte a temas\n3. Animações de seleção de arquivos")
-            }
-
-            val mockMdFile = File(documentsDir, "README_Projeto.md")
-            if (!mockMdFile.exists()) {
-                mockMdFile.writeText("# Arcbox Storage\nGerenciador de arquivos completo para Android em Jetpack Compose.")
-            }
-
-            val mockJson = File(documentsDir, "configuracoes.json")
-            if (!mockJson.exists()) {
-                mockJson.writeText("{\n  \"theme\": \"dark\",\n  \"gridColumns\": 3,\n  \"autoBackup\": true\n}")
-            }
-
-            // Archive Mocks
-            val mockZip1 = File(downloadsDir, "backup_documentos.zip")
-            if (!mockZip1.exists()) {
-                mockZip1.writeBytes(ByteArray(254800) { 0 })
-            }
-
-            val mockZip2 = File(documentsDir, "projeto_source.zip")
-            if (!mockZip2.exists()) {
-                mockZip2.writeBytes(ByteArray(1250000) { 0 })
-            }
-
-            // 10 Test Images in Pictures
-            val imageNames = listOf(
-                "Foto_Praia_Sunset.jpg",
-                "Paisagem_Montanha.jpg",
-                "Avatar_Perfil.png",
-                "Captura_Tela_Design.png",
-                "Fotografia_Urbana.jpg",
-                "Natureza_Floresta.jpg",
-                "Wallpaper_Minimalista.png",
-                "Documento_Digitalizado.jpg",
-                "Ilustracao_Vector.png",
-                "Foto_Evento_2026.jpg"
-            )
-            val colors = listOf(
-                android.graphics.Color.BLUE,
-                android.graphics.Color.RED,
-                android.graphics.Color.GREEN,
-                android.graphics.Color.MAGENTA,
-                android.graphics.Color.CYAN,
-                android.graphics.Color.YELLOW,
-                android.graphics.Color.LTGRAY,
-                android.graphics.Color.DKGRAY,
-                android.graphics.Color.rgb(255, 128, 0),
-                android.graphics.Color.rgb(128, 0, 255)
-            )
-
-            imageNames.forEachIndexed { index, name ->
-                val imgFile = File(picturesDir, name)
-                if (!imgFile.exists()) {
-                    try {
-                        val bmp = android.graphics.Bitmap.createBitmap(400, 400, android.graphics.Bitmap.Config.ARGB_8888)
-                        val canvas = android.graphics.Canvas(bmp)
-                        canvas.drawColor(colors[index % colors.size])
-                        val paint = android.graphics.Paint().apply {
-                            color = android.graphics.Color.WHITE
-                            textSize = 36f
-                            isAntiAlias = true
-                            textAlign = android.graphics.Paint.Align.CENTER
-                        }
-                        canvas.drawText("Imagem #${index + 1}", 200f, 210f, paint)
-
-                        val format = if (name.endsWith(".png")) android.graphics.Bitmap.CompressFormat.PNG else android.graphics.Bitmap.CompressFormat.JPEG
-                        FileOutputStream(imgFile).use { out ->
-                            bmp.compress(format, 90, out)
-                        }
-                    } catch (_: Exception) {
-                        imgFile.writeBytes(ByteArray(300000) { 0 })
-                    }
-                }
-            }
-
-            // Additional image in DCIM & Downloads
-            val mockImage1 = File(dcimDir, "Foto_Praia_2026.jpg")
-            if (!mockImage1.exists() || mockImage1.length() < 100) {
-                writeBitmapToFile(mockImage1, "Foto Praia 2026", android.graphics.Color.rgb(0, 150, 200))
-            }
-            val mockImage2 = File(downloadsDir, "wallpaper_abstract.png")
-            if (!mockImage2.exists() || mockImage2.length() < 100) {
-                writeBitmapToFile(mockImage2, "Wallpaper Abstract", android.graphics.Color.rgb(180, 50, 220), isPng = true)
-            }
-
-            // Audio Mock
-            val mockAudio = File(musicDir, "musica_lofi_demo.mp3")
-            if (!mockAudio.exists()) {
-                mockAudio.writeBytes(ByteArray(3400000) { 0 })
-            }
-
-            // 10 Test Videos in Movies
-            val videoNames = listOf(
-                "video_apresentacao.mp4",
-                "Tutorial_Android_Compose.mp4",
-                "Vlog_Viagem_Ferias.mp4",
-                "Gravacao_Tela_Demo.mp4",
-                "Clipe_Musical_HD.mp4",
-                "Animacao_3D_Teaser.mp4",
-                "TimeLapse_Por_do_Sol.mp4",
-                "Drone_Vista_Aerea.mp4",
-                "Gameplay_Highlights.mp4",
-                "Conferencia_Tech_2026.mp4"
-            )
-
-            videoNames.forEachIndexed { index, name ->
-                val vidFile = File(moviesDir, name)
-                if (!vidFile.exists() || vidFile.length() < 100) {
-                    val color = colors[(index + 3) % colors.size]
-                    writeBitmapToFile(vidFile, "Vídeo #${index + 1}", color)
-                }
-            }
-
-            // APK Mock - Copy actual installed APK so PackageParser doesn't report Invalid file
-            val mockApk = File(downloadsDir, "Arcbox_v1.0.apk")
-            val isMockApkValid = try {
-                if (mockApk.exists() && mockApk.length() > 100000) {
-                    context.packageManager.getPackageArchiveInfo(mockApk.absolutePath, 0) != null
-                } else false
-            } catch (_: Exception) {
-                false
-            }
-            if (!mockApk.exists() || !isMockApkValid) {
-                try {
-                    val appSourceDir = context.applicationInfo?.sourceDir
-                    if (!appSourceDir.isNullOrEmpty()) {
-                        val realApkFile = File(appSourceDir)
-                        if (realApkFile.exists()) {
-                            realApkFile.copyTo(mockApk, overwrite = true)
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-
-            // Internal Storage Root Mocks
-            val rootDoc = File(internalDir, "relatorio_mensal.pdf")
-            if (!rootDoc.exists()) {
-                rootDoc.writeBytes(ByteArray(450000) { 0 })
-            }
-            val rootTxt = File(internalDir, "anotacoes.txt")
-            if (!rootTxt.exists()) {
-                rootTxt.writeText("Lista de tarefas:\n- Grid de 3 colunas\n- Botão circular de adição\n- Animação suave para seleção de arquivos")
-            }
-            val rootZip = File(internalDir, "pacote_fotos.zip")
-            if (!rootZip.exists()) {
-                rootZip.writeBytes(ByteArray(890000) { 0 })
-            }
-            val rootImg = File(internalDir, "imagem_exemplo.png")
-            if (!rootImg.exists()) {
-                rootImg.writeBytes(ByteArray(620000) { 0 })
-            }
-
-            // Mock Cache & Temporary files
-            val tempDir = File(internalDir, ".cache")
-            if (!tempDir.exists()) tempDir.mkdirs()
-            val mockTmp1 = File(tempDir, "system_cache_dump.tmp")
-            if (!mockTmp1.exists()) mockTmp1.writeBytes(ByteArray(1250000) { 0 })
-            val mockLog = File(tempDir, "app_execution.log")
-            if (!mockLog.exists()) mockLog.writeText("LOG STREAM 2026...\n" + "x".repeat(450000))
-            val mockBak = File(downloadsDir, "old_backup_temp.bak")
-            if (!mockBak.exists()) mockBak.writeBytes(ByteArray(850000) { 0 })
-
-            // Mock Empty Folders
-            val emptyDir1 = File(internalDir, "Pasta Vazia Temporaria")
-            if (!emptyDir1.exists()) emptyDir1.mkdirs()
-            val emptyDir2 = File(downloadsDir, "Temp Downloads Vazia")
-            if (!emptyDir2.exists()) emptyDir2.mkdirs()
-        } catch (_: Exception) {}
+        // No-op: Do not generate mock files or write test bitmaps to avoid freezing on startup
     }
 
     private fun searchRecursive(

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
@@ -210,6 +211,8 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private val fetchMutex = kotlinx.coroutines.sync.Mutex()
+
     init {
         loadInitialData()
         observeDatabaseFlows()
@@ -230,13 +233,11 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadInitialData() {
         viewModelScope.launch(Dispatchers.IO) {
-            // Clean old trash items (30 days) and ensure mock files asynchronously in background without delaying startup
+            // Lazy clean old trash items in background after app has booted smoothly
             launch(Dispatchers.IO) {
+                delay(5000)
                 try {
                     repository.cleanOldTrashItems(30)
-                } catch (_: Exception) {}
-                try {
-                    repository.ensureMockFilesExist()
                 } catch (_: Exception) {}
             }
             
@@ -323,7 +324,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
         directoryWatchJob = viewModelScope.launch(Dispatchers.IO) {
             while (isActive) {
-                delay(2000)
+                delay(4000)
                 try {
                     val currentPath = uiState.value.currentPath
                     val currentDir = File(currentPath)
@@ -342,50 +343,52 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun fetchFilesInternal() {
-        val state = uiState.value
-        startDirectoryWatcher(state.currentPath)
-        val volumes = state.storageVolumes.ifEmpty { repository.getStorageVolumes() }
-        val files = if (state.isFavoritesOnly) {
-            repository.getFavoriteFiles(
-                sortOption = state.sortOption,
-                sortOrder = state.sortOrder,
-                searchQuery = state.searchQuery
-            )
-        } else if (state.isRecentsOnly) {
-            repository.listFiles(
-                directoryPath = state.currentPath,
-                safUriString = null,
-                sortOption = SortOption.DATE,
-                sortOrder = SortOrder.DESCENDING,
-                searchQuery = state.searchQuery,
-                filterCategory = state.filterCategory,
-                appSubFilter = state.appSubFilter,
-                isGlobalSearch = false,
-                isAppManagerMode = state.isAppManagerOpen,
-                showHiddenFiles = state.showHiddenFiles,
-                parallelDirectoryReading = state.parallelDirectoryReading
-            ).filter { !it.isDirectory }
-        } else {
-            repository.listFiles(
-                directoryPath = state.currentPath,
-                safUriString = null,
-                sortOption = state.sortOption,
-                sortOrder = state.sortOrder,
-                searchQuery = state.searchQuery,
-                filterCategory = state.filterCategory,
-                appSubFilter = state.appSubFilter,
-                isGlobalSearch = state.isGlobalSearch,
-                isAppManagerMode = state.isAppManagerOpen,
-                showHiddenFiles = state.showHiddenFiles,
-                parallelDirectoryReading = state.parallelDirectoryReading
-            )
-        }
-        _uiState.update { 
-            it.copy(
-                currentFiles = files,
-                storageVolumes = volumes,
-                isLoading = false
-            )
+        fetchMutex.withLock {
+            val state = uiState.value
+            startDirectoryWatcher(state.currentPath)
+            val volumes = state.storageVolumes.ifEmpty { repository.getStorageVolumes() }
+            val files = if (state.isFavoritesOnly) {
+                repository.getFavoriteFiles(
+                    sortOption = state.sortOption,
+                    sortOrder = state.sortOrder,
+                    searchQuery = state.searchQuery
+                )
+            } else if (state.isRecentsOnly) {
+                repository.listFiles(
+                    directoryPath = state.currentPath,
+                    safUriString = null,
+                    sortOption = SortOption.DATE,
+                    sortOrder = SortOrder.DESCENDING,
+                    searchQuery = state.searchQuery,
+                    filterCategory = state.filterCategory,
+                    appSubFilter = state.appSubFilter,
+                    isGlobalSearch = false,
+                    isAppManagerMode = state.isAppManagerOpen,
+                    showHiddenFiles = state.showHiddenFiles,
+                    parallelDirectoryReading = state.parallelDirectoryReading
+                ).filter { !it.isDirectory }
+            } else {
+                repository.listFiles(
+                    directoryPath = state.currentPath,
+                    safUriString = null,
+                    sortOption = state.sortOption,
+                    sortOrder = state.sortOrder,
+                    searchQuery = state.searchQuery,
+                    filterCategory = state.filterCategory,
+                    appSubFilter = state.appSubFilter,
+                    isGlobalSearch = state.isGlobalSearch,
+                    isAppManagerMode = state.isAppManagerOpen,
+                    showHiddenFiles = state.showHiddenFiles,
+                    parallelDirectoryReading = state.parallelDirectoryReading
+                )
+            }
+            _uiState.update { 
+                it.copy(
+                    currentFiles = files,
+                    storageVolumes = volumes,
+                    isLoading = false
+                )
+            }
         }
     }
 

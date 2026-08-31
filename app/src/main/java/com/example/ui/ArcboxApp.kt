@@ -105,6 +105,7 @@ fun ArcboxApp(
 
     val hasActiveModalOrOverlay = drawerState.isOpen || hasOtherModalOrOverlay
 
+    var isFirstResume by remember { mutableStateOf(true) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, uiState.biometricLock) {
         val observer = LifecycleEventObserver { _, event ->
@@ -113,7 +114,9 @@ fun ArcboxApp(
                     viewModel.lockApp()
                 }
             } else if (event == Lifecycle.Event.ON_RESUME) {
-                if (!uiState.isAppLocked) {
+                if (isFirstResume) {
+                    isFirstResume = false
+                } else if (!uiState.isAppLocked) {
                     try {
                         viewModel.refreshFiles()
                     } catch (e: Throwable) {
