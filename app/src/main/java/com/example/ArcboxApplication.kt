@@ -36,8 +36,8 @@ class ArcboxApplication : Application(), ImageLoaderFactory {
                 .components {
                     add(VideoFrameDecoder.Factory())
                 }
-                .fetcherDispatcher(Dispatchers.IO)
-                .decoderDispatcher(Dispatchers.Default)
+                .fetcherDispatcher(com.example.ui.components.ArcboxScheduler.metadataAndThumbnailDispatcher)
+                .decoderDispatcher(com.example.ui.components.ArcboxScheduler.metadataAndThumbnailDispatcher)
                 .allowHardware(true)
                 .allowRgb565(true)
                 .respectCacheHeaders(false)

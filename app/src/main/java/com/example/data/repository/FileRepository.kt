@@ -359,7 +359,7 @@ class FileRepository(private val context: Context) {
         isAppManagerMode: Boolean = false,
         showHiddenFiles: Boolean = false,
         parallelDirectoryReading: Boolean = true
-    ): List<FileItem> = withContext(Dispatchers.IO) {
+    ): List<FileItem> = withContext(com.example.ui.components.ArcboxScheduler.metadataAndThumbnailDispatcher) {
         if (isAppManagerMode) {
             val installedAndStorageApps = getInstalledApps(appSubFilter)
             val filtered = if (searchQuery.isNotEmpty()) {
@@ -1139,7 +1139,7 @@ class FileRepository(private val context: Context) {
         sortOption: SortOption = SortOption.NAME,
         sortOrder: SortOrder = SortOrder.ASCENDING,
         searchQuery: String = ""
-    ): List<FileItem> = withContext(Dispatchers.IO) {
+    ): List<FileItem> = withContext(com.example.ui.components.ArcboxScheduler.metadataAndThumbnailDispatcher) {
         val favEntities = try {
             favoriteDao.getAllFavoritesList()
         } catch (_: Exception) {

@@ -46,7 +46,7 @@ private val appIconMemoryCache = object : LruCache<String, Bitmap>(cacheSizeKb) 
     }
 }
 private val nullIconCache = LruCache<String, Boolean>(1000)
-private val appIconDispatcher = Dispatchers.IO
+private val appIconDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
 
 @Composable
 fun ArcboxLogoIcon(

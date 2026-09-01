@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.runtime.compositionLocalOf
+import kotlinx.coroutines.asCoroutineDispatcher
 
 /**
  * CompositionLocal indicating whether user scrolling (drag or inertial fling) is currently active.
@@ -16,3 +17,16 @@ import androidx.compose.runtime.compositionLocalOf
  *   even during high-velocity scrolling.
  */
 val LocalScrollActive = compositionLocalOf { false }
+
+object ArcboxScheduler {
+    private val threadFactory = java.util.concurrent.ThreadFactory { runnable: Runnable ->
+        Thread(runnable, "arcbox-bg-optimized-worker").apply {
+            priority = Thread.NORM_PRIORITY - 1 // slightly lower priority to avoid starving UI thread
+        }
+    }
+
+    // Dedicated Thread Pool for metadata and thumbnail processing, isolated from other Dispatchers
+    @JvmField
+    val metadataAndThumbnailDispatcher = java.util.concurrent.Executors.newFixedThreadPool(4, threadFactory)
+        .asCoroutineDispatcher()
+}
