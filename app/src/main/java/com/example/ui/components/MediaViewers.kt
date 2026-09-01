@@ -1861,6 +1861,17 @@ fun VideoPlayerContent(
         }
     }
 
+    DisposableEffect(file.path) {
+        onDispose {
+            try {
+                videoViewRef?.stopPlayback()
+                mediaPlayerRef?.release()
+            } catch (_: Exception) {}
+            videoViewRef = null
+            mediaPlayerRef = null
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -2152,13 +2163,55 @@ fun AudioPlayerContent(
     onPrevious: () -> Unit = {},
     onClose: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var isPlaying by remember(file.path) { mutableStateOf(true) }
     var progress by remember(file.path) { mutableFloatStateOf(0f) }
+    var totalDurationMs by remember(file.path) { mutableLongStateOf(0L) }
+    var currentPositionMs by remember(file.path) { mutableLongStateOf(0L) }
+    var mediaPlayerState by remember(file.path) { mutableStateOf<MediaPlayer?>(null) }
+    var isAudioPrepared by remember(file.path) { mutableStateOf(false) }
+
     var isLooping by remember { mutableStateOf(false) }
     var isAutoPlayNext by remember { mutableStateOf(true) }
     var showControls by remember { mutableStateOf(true) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    val totalDurationSeconds = 210 // 03:30
+
+    DisposableEffect(file.path) {
+        val mp = MediaPlayer().apply {
+            try {
+                setDataSource(context, Uri.fromFile(file))
+                setOnPreparedListener { player ->
+                    isAudioPrepared = true
+                    totalDurationMs = player.duration.toLong().coerceAtLeast(1L)
+                    player.isLooping = isLooping
+                    if (isPlaying) {
+                        player.start()
+                    }
+                }
+                setOnCompletionListener {
+                    if (isLooping) {
+                        // Repeating
+                    } else if (isAutoPlayNext) {
+                        onNext()
+                    } else {
+                        isPlaying = false
+                    }
+                }
+                prepareAsync()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        mediaPlayerState = mp
+
+        onDispose {
+            try {
+                if (mp.isPlaying) mp.stop()
+                mp.release()
+            } catch (_: Exception) {}
+            mediaPlayerState = null
+        }
+    }
 
     LaunchedEffect(showControls, isPlaying, lastInteractionTime) {
         if (showControls && isPlaying) {
@@ -2172,22 +2225,19 @@ fun AudioPlayerContent(
         lastInteractionTime = System.currentTimeMillis()
     }
 
-    LaunchedEffect(isPlaying, progress, isLooping, isAutoPlayNext) {
-        while (isPlaying) {
-            kotlinx.coroutines.delay(1000L)
-            if (progress >= 1f) {
-                if (isLooping) {
-                    progress = 0f
-                } else if (isAutoPlayNext) {
-                    progress = 0f
-                    onNext()
-                    break
-                } else {
-                    isPlaying = false
+    LaunchedEffect(isPlaying, isAudioPrepared) {
+        while (isPlaying && isAudioPrepared) {
+            kotlinx.coroutines.delay(250L)
+            try {
+                mediaPlayerState?.let { mp ->
+                    if (mp.isPlaying) {
+                        currentPositionMs = mp.currentPosition.toLong()
+                        if (totalDurationMs > 0) {
+                            progress = (currentPositionMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
+                        }
+                    }
                 }
-            } else {
-                progress = (progress + 1f / totalDurationSeconds).coerceAtMost(1f)
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -2334,9 +2384,16 @@ fun AudioPlayerContent(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Slider(
                             value = progress,
-                            onValueChange = {
+                            onValueChange = { newProgress ->
                                 resetTimer()
-                                progress = it
+                                progress = newProgress
+                                val targetMs = (newProgress * totalDurationMs).toLong()
+                                currentPositionMs = targetMs
+                                try {
+                                    if (isAudioPrepared) {
+                                        mediaPlayerState?.seekTo(targetMs.toInt())
+                                    }
+                                } catch (_: Exception) {}
                             },
                             colors = SliderDefaults.colors(
                                 thumbColor = MaterialTheme.colorScheme.primary,
@@ -2345,13 +2402,14 @@ fun AudioPlayerContent(
                             )
                         )
 
-                        val currentSeconds = (progress * totalDurationSeconds).toInt()
+                        val curSec = (currentPositionMs / 1000L).toInt()
+                        val totSec = (totalDurationMs / 1000L).toInt()
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(formatTime(currentSeconds), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                            Text(formatTime(totalDurationSeconds), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                            Text(formatTime(curSec), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                            Text(formatTime(totSec), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                         }
                     }
                 }
@@ -2373,7 +2431,11 @@ fun AudioPlayerContent(
                     // Leftmost: Infinite Loop / Repeat
                     IconButton(onClick = {
                         resetTimer()
-                        isLooping = !isLooping
+                        val newLoop = !isLooping
+                        isLooping = newLoop
+                        try {
+                            mediaPlayerState?.isLooping = newLoop
+                        } catch (_: Exception) {}
                     }) {
                         Icon(
                             imageVector = if (isLooping) Icons.Default.RepeatOne else Icons.Default.Repeat,
@@ -2387,6 +2449,7 @@ fun AudioPlayerContent(
                     IconButton(onClick = {
                         resetTimer()
                         progress = 0f
+                        currentPositionMs = 0L
                         onPrevious()
                     }) {
                         Icon(
@@ -2401,7 +2464,16 @@ fun AudioPlayerContent(
                     IconButton(
                         onClick = {
                             resetTimer()
-                            isPlaying = !isPlaying
+                            val nextState = !isPlaying
+                            isPlaying = nextState
+                            try {
+                                mediaPlayerState?.let { mp ->
+                                    if (isAudioPrepared) {
+                                        if (nextState && !mp.isPlaying) mp.start()
+                                        else if (!nextState && mp.isPlaying) mp.pause()
+                                    }
+                                }
+                            } catch (_: Exception) {}
                         },
                         modifier = Modifier
                             .size(60.dp)
@@ -2420,6 +2492,7 @@ fun AudioPlayerContent(
                     IconButton(onClick = {
                         resetTimer()
                         progress = 0f
+                        currentPositionMs = 0L
                         onNext()
                     }) {
                         Icon(

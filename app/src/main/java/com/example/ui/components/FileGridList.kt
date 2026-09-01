@@ -66,6 +66,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private val GridCardShape = RoundedCornerShape(18.dp)
+private val GridBadgeShape = RoundedCornerShape(14.dp)
+private val ListBadgeShape = RoundedCornerShape(12.dp)
+private val ImageThumbShape = RoundedCornerShape(10.dp)
+private val MediaScrimBrush = Brush.verticalGradient(
+    colors = listOf(
+        Color.Transparent,
+        Color(0xB8000000)
+    )
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ArcboxFileGridList(
@@ -131,12 +142,6 @@ fun ArcboxFileGridList(
 
     val selectedItemIds = remember(selectedItems) { selectedItems.mapTo(HashSet()) { it.id } }
 
-    val isScrolling by remember {
-        derivedStateOf {
-            if (viewMode == ViewMode.GRID) gridState.isScrollInProgress else listState.isScrollInProgress
-        }
-    }
-
     val onItemClicked: (FileItem) -> Unit = remember(
         isMultiSelecting,
         onItemClick,
@@ -169,73 +174,71 @@ fun ArcboxFileGridList(
                 EmptyFolderState(onCreateFolder = onCreateFolder)
             }
         } else {
-            CompositionLocalProvider(LocalScrollActive provides isScrolling) {
-                AnimatedContent(
-                    targetState = viewMode,
-                    transitionSpec = {
-                        fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)) togetherWith
-                                fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
-                    },
-                    label = "ViewModeAnimation"
-                ) { mode ->
-                    if (mode == ViewMode.GRID) {
-                        LazyVerticalGrid(
-                            state = gridState,
-                            columns = GridCells.Fixed(3),
-                            contentPadding = PaddingValues(10.dp, 10.dp, 10.dp, 88.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            items(
-                                items = files,
-                                key = { it.id },
-                                contentType = { it.fileType }
-                            ) { item ->
-                                FileGridCard(
-                                    item = item,
-                                    showThumbnails = showThumbnails,
-                                    showExtensions = showExtensions,
-                                    isSelected = selectedItemIds.contains(item.id),
-                                    isSelectionMode = isMultiSelecting,
-                                    onClick = onItemClicked,
-                                    onLongClick = onItemLongClick,
-                                    onToggleFavorite = onToggleFavorite,
-                                    tempZipSourcePath = tempZipSourcePath,
-                                    onExtractIndividual = onExtractIndividual,
-                                    onUninstallApp = onUninstallApp,
-                                    onOpenAppSettings = onOpenAppSettings
-                                )
-                            }
+            AnimatedContent(
+                targetState = viewMode,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)) togetherWith
+                            fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
+                },
+                label = "ViewModeAnimation"
+            ) { mode ->
+                if (mode == ViewMode.GRID) {
+                    LazyVerticalGrid(
+                        state = gridState,
+                        columns = GridCells.Fixed(3),
+                        contentPadding = PaddingValues(10.dp, 10.dp, 10.dp, 88.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(
+                            items = files,
+                            key = { it.id },
+                            contentType = { it.fileType }
+                        ) { item ->
+                            FileGridCard(
+                                item = item,
+                                showThumbnails = showThumbnails,
+                                showExtensions = showExtensions,
+                                isSelected = selectedItemIds.contains(item.id),
+                                isSelectionMode = isMultiSelecting,
+                                onClick = onItemClicked,
+                                onLongClick = onItemLongClick,
+                                onToggleFavorite = onToggleFavorite,
+                                tempZipSourcePath = tempZipSourcePath,
+                                onExtractIndividual = onExtractIndividual,
+                                onUninstallApp = onUninstallApp,
+                                onOpenAppSettings = onOpenAppSettings
+                            )
                         }
-                    } else {
-                        LazyColumn(
-                            state = listState,
-                            contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            items(
-                                items = files,
-                                key = { it.id },
-                                contentType = { it.fileType }
-                            ) { item ->
-                                FileListItem(
-                                    item = item,
-                                    showThumbnails = showThumbnails,
-                                    showExtensions = showExtensions,
-                                    isSelected = selectedItemIds.contains(item.id),
-                                    isSelectionMode = isMultiSelecting,
-                                    onClick = onItemClicked,
-                                    onLongClick = onItemLongClick,
-                                    onToggleFavorite = onToggleFavorite,
-                                    onRename = onRenameItem,
-                                    onShareItem = onShareItem,
-                                    tempZipSourcePath = tempZipSourcePath,
-                                    onExtractIndividual = onExtractIndividual,
-                                    onUninstallApp = onUninstallApp,
-                                    onOpenAppSettings = onOpenAppSettings
-                                )
-                            }
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(
+                            items = files,
+                            key = { it.id },
+                            contentType = { it.fileType }
+                        ) { item ->
+                            FileListItem(
+                                item = item,
+                                showThumbnails = showThumbnails,
+                                showExtensions = showExtensions,
+                                isSelected = selectedItemIds.contains(item.id),
+                                isSelectionMode = isMultiSelecting,
+                                onClick = onItemClicked,
+                                onLongClick = onItemLongClick,
+                                onToggleFavorite = onToggleFavorite,
+                                onRename = onRenameItem,
+                                onShareItem = onShareItem,
+                                tempZipSourcePath = tempZipSourcePath,
+                                onExtractIndividual = onExtractIndividual,
+                                onUninstallApp = onUninstallApp,
+                                onOpenAppSettings = onOpenAppSettings
+                            )
                         }
                     }
                 }
@@ -703,7 +706,7 @@ fun FileGridCard(
     val formattedSize = remember(item.size) { formatFileSize(item.size) }
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = GridCardShape,
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceContainerLow,
         tonalElevation = if (isSelected) 2.dp else 1.dp,
         modifier = Modifier
@@ -712,7 +715,7 @@ fun FileGridCard(
             .border(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(18.dp)
+                shape = GridCardShape
             )
             .combinedClickable(
                 onClick = { onClick(item) },
@@ -732,19 +735,12 @@ fun FileGridCard(
                     iconSize = 26.dp
                 )
 
-                // Bottom text overlay with gradient scrim for high legibility & fast rendering
+                // Bottom text overlay with pre-cached gradient scrim for high legibility & 120Hz rendering
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
-                        .background(
-                            androidx.compose.ui.graphics.Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.72f)
-                                )
-                            )
-                        )
+                        .background(MediaScrimBrush)
                         .padding(horizontal = 4.dp, vertical = 4.dp)
                 ) {
                     Column(
@@ -805,16 +801,16 @@ fun FileGridCard(
                         if (item.isDirectory) (if (item.childCount == 1) "1 item" else "${item.childCount} itens") else formatFileSize(item.size)
                     }
 
-                    // Category Icon / Thumbnail Badge com leve gradiente
+                    // Category Icon / Thumbnail Badge com gradiente
                     Surface(
-                        shape = RoundedCornerShape(14.dp),
+                        shape = GridBadgeShape,
                         color = Color.Transparent,
                         border = folderBadgeBorder,
                         shadowElevation = 0.dp,
                         modifier = Modifier
                             .size(44.dp)
                             .then(
-                                if (badgeBrush != null) Modifier.background(badgeBrush, RoundedCornerShape(14.dp)) else Modifier
+                                if (badgeBrush != null) Modifier.background(badgeBrush, GridBadgeShape) else Modifier
                             )
                     ) {
                         Box(
@@ -1028,14 +1024,14 @@ fun FileListItem(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = ListBadgeShape,
                     color = Color.Transparent,
                     border = folderBadgeBorder,
                     shadowElevation = 0.dp,
                     modifier = Modifier
                         .size(44.dp)
                         .then(
-                            if (badgeBrush != null) Modifier.background(badgeBrush, RoundedCornerShape(12.dp)) else Modifier
+                            if (badgeBrush != null) Modifier.background(badgeBrush, ListBadgeShape) else Modifier
                         )
                 ) {
                     Box(
@@ -1353,7 +1349,6 @@ fun FileThumbnailImage(
     val categoryColor = item.fileType.getCategoryColor()
     val finalIconTint = overrideIconTint ?: categoryColor
     val context = LocalContext.current
-    val isScrolling = LocalScrollActive.current
 
     if (!showThumbnails) {
         Icon(
@@ -1399,7 +1394,7 @@ fun FileThumbnailImage(
                     error = rememberVectorPainter(Icons.Default.Image),
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(ImageThumbShape)
                 )
             }
         }
@@ -1422,7 +1417,7 @@ fun FileThumbnailImage(
             }
 
             Box(
-                modifier = modifier.clip(RoundedCornerShape(10.dp)),
+                modifier = modifier.clip(ImageThumbShape),
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(

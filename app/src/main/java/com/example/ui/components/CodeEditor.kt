@@ -47,6 +47,10 @@ fun ArcboxCodeEditorModal(
     val lineCountCap = lines.size.coerceAtMost(2000)
     val scrollState = rememberScrollState()
 
+    val lineNumbersText = remember(lineCountCap) {
+        (1..lineCountCap.coerceAtLeast(1)).joinToString("\n")
+    }
+
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -155,23 +159,22 @@ fun ArcboxCodeEditorModal(
                             .verticalScroll(scrollState)
                     ) {
                         // Line numbers sidebar
-                        Column(
+                        Box(
                             modifier = Modifier
                                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                                 .padding(horizontal = 12.dp, vertical = 12.dp),
-                            horizontalAlignment = Alignment.End
+                            contentAlignment = Alignment.TopEnd
                         ) {
-                            for (i in 1..lineCountCap.coerceAtLeast(1)) {
-                                Text(
-                                    text = "$i",
-                                    style = TextStyle(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                    ),
-                                    lineHeight = 20.sp
-                                )
-                            }
+                            Text(
+                                text = lineNumbersText,
+                                style = TextStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                ),
+                                lineHeight = 20.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                            )
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))

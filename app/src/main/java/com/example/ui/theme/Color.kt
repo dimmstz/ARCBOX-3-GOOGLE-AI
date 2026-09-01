@@ -52,25 +52,35 @@ fun Color.darkerTone(fraction: Float = 0.2f): Color {
     )
 }
 
+private val linearGradientCache = java.util.concurrent.ConcurrentHashMap<Pair<Color, Float>, Brush>()
+private val horizontalGradientCache = java.util.concurrent.ConcurrentHashMap<Pair<Color, Float>, Brush>()
+private val badgeGradientCache = java.util.concurrent.ConcurrentHashMap<Color, Brush>()
+
 fun getVibrantLinearGradient(baseColor: Color, lightFraction: Float = 0.32f): Brush {
-    return Brush.linearGradient(
-        colors = listOf(baseColor, baseColor.lighterTone(lightFraction))
-    )
+    return linearGradientCache.getOrPut(Pair(baseColor, lightFraction)) {
+        Brush.linearGradient(
+            colors = listOf(baseColor, baseColor.lighterTone(lightFraction))
+        )
+    }
 }
 
 fun getVibrantHorizontalGradient(baseColor: Color, lightFraction: Float = 0.30f): Brush {
-    return Brush.horizontalGradient(
-        colors = listOf(baseColor, baseColor.lighterTone(lightFraction))
-    )
+    return horizontalGradientCache.getOrPut(Pair(baseColor, lightFraction)) {
+        Brush.horizontalGradient(
+            colors = listOf(baseColor, baseColor.lighterTone(lightFraction))
+        )
+    }
 }
 
 fun getVibrantBadgeGradient(baseColor: Color): Brush {
-    return Brush.linearGradient(
-        colors = listOf(
-            baseColor.copy(alpha = 0.22f),
-            baseColor.lighterTone(0.35f).copy(alpha = 0.08f)
+    return badgeGradientCache.getOrPut(baseColor) {
+        Brush.linearGradient(
+            colors = listOf(
+                baseColor.copy(alpha = 0.22f),
+                baseColor.lighterTone(0.35f).copy(alpha = 0.08f)
+            )
         )
-    )
+    }
 }
 
 // Accent Preset Colors

@@ -124,6 +124,14 @@ fun ArcboxPdfViewerModal(
         }
     }
 
+    DisposableEffect(fileItem.path) {
+        onDispose {
+            renderedPages.values.forEach { bmp ->
+                try { if (!bmp.isRecycled) bmp.recycle() } catch (_: Exception) {}
+            }
+        }
+    }
+
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -347,10 +355,10 @@ private fun openPfdForPdf(context: Context, item: FileItem): ParcelFileDescripto
 private fun renderPageBitmap(renderer: PdfRenderer, pageIndex: Int): Bitmap? {
     return try {
         val page = renderer.openPage(pageIndex)
-        // High resolution render target (3x page width or 2160px minimum) for crystal clear vector text quality
-        val targetW = (page.width * 3.0f).toInt().coerceAtLeast(2160)
+        // Scaled resolution (max 1440px width) to preserve sharpness without excessive RAM consumption
+        val targetW = (page.width * 2.0f).toInt().coerceIn(720, 1440)
         val scaleRatio = targetW.toFloat() / page.width.toFloat()
-        val targetH = (page.height * scaleRatio).toInt().coerceAtLeast(600)
+        val targetH = (page.height * scaleRatio).toInt().coerceAtLeast(400)
 
         val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(bitmap)

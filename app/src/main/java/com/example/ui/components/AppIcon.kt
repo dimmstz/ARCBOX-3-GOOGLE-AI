@@ -154,7 +154,6 @@ fun AppIconImage(
     modifier: Modifier = Modifier.size(24.dp)
 ) {
     val context = LocalContext.current
-    val isScrolling = LocalScrollActive.current
     val cacheKey = remember(packageName, apkPath) { packageName ?: apkPath }
 
     // Check fast memory cache synchronously (0ms instant lookup)

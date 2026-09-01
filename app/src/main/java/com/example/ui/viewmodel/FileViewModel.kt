@@ -2135,7 +2135,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             val fileItem = resolveFileItemFromUri(context, uri) ?: return@launch
             withContext(Dispatchers.Main) {
                 if (fileItem.path.endsWith(".zip", ignoreCase = true) || fileItem.name.endsWith(".zip", ignoreCase = true) || fileItem.fileType == FileType.ARCHIVE) {
-                    openZipArchive(fileItem)
+                    openAndExtractZipArchive(fileItem)
                 } else {
                     val isPdf = fileItem.path.endsWith(".pdf", ignoreCase = true) || fileItem.name.endsWith(".pdf", ignoreCase = true)
                     if (isPdf) {
@@ -2160,37 +2160,88 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun resolveFileItemFromUri(context: Context, uri: Uri): FileItem? {
         try {
+            // First check if it's a direct file:// uri or a content uri pointing to a real file on storage
             if (uri.scheme == "file") {
                 val path = uri.path ?: return null
                 val file = File(path)
-                if (!file.exists()) return null
-                val ext = file.extension.lowercase()
-                val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
-                val type = if (ext == "zip" || ext == "rar" || ext == "7z") FileType.ARCHIVE else getFileTypeFromExt(ext, mime)
-                return FileItem(
-                    id = file.absolutePath,
-                    name = file.name,
-                    path = file.absolutePath,
-                    size = file.length(),
-                    lastModified = file.lastModified(),
-                    isDirectory = file.isDirectory,
-                    fileType = type,
-                    extension = ext,
-                    mimeType = mime
-                )
+                if (file.exists()) {
+                    val ext = file.extension.lowercase()
+                    val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                    val type = if (ext == "zip" || ext == "rar" || ext == "7z") FileType.ARCHIVE else getFileTypeFromExt(ext, mime)
+                    return FileItem(
+                        id = file.absolutePath,
+                        name = file.name,
+                        path = file.absolutePath,
+                        size = file.length(),
+                        lastModified = file.lastModified(),
+                        isDirectory = file.isDirectory,
+                        fileType = type,
+                        extension = ext,
+                        mimeType = mime
+                    )
+                }
             } else if (uri.scheme == "content") {
-                var name = "arquivo_recebido"
-                var size = 0L
-                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                    if (cursor.moveToFirst()) {
-                        if (nameIndex != -1) name = cursor.getString(nameIndex) ?: name
-                        if (sizeIndex != -1) size = cursor.getLong(sizeIndex)
+                // Try resolving actual file path if content uri comes from external storage or file providers
+                val directPath = getRealPathFromContentUri(context, uri)
+                if (directPath != null) {
+                    val directFile = File(directPath)
+                    if (directFile.exists()) {
+                        val ext = directFile.extension.lowercase()
+                        val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                        val type = if (ext == "zip" || ext == "rar" || ext == "7z") FileType.ARCHIVE else getFileTypeFromExt(ext, mime)
+                        return FileItem(
+                            id = directFile.absolutePath,
+                            name = directFile.name,
+                            path = directFile.absolutePath,
+                            safUriString = uri.toString(),
+                            size = directFile.length(),
+                            lastModified = directFile.lastModified(),
+                            isDirectory = directFile.isDirectory,
+                            fileType = type,
+                            extension = ext,
+                            mimeType = mime
+                        )
                     }
                 }
-                val ext = name.substringAfterLast('.', "").lowercase()
-                val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+
+                var name = "arquivo_recebido"
+                var size = 0L
+                try {
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                        if (cursor.moveToFirst()) {
+                            if (nameIndex != -1) {
+                                val queriedName = cursor.getString(nameIndex)
+                                if (!queriedName.isNullOrBlank()) name = queriedName
+                            }
+                            if (sizeIndex != -1) size = cursor.getLong(sizeIndex)
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                // If name has no extension, try deducing extension from MIME type
+                val mime = try { context.contentResolver.getType(uri) ?: "application/octet-stream" } catch (_: Exception) { "application/octet-stream" }
+                var ext = name.substringAfterLast('.', "").lowercase()
+                if (ext.isEmpty() || ext == name.lowercase()) {
+                    ext = when {
+                        mime.contains("zip") -> "zip"
+                        mime.contains("pdf") -> "pdf"
+                        mime.contains("rar") -> "rar"
+                        mime.contains("7z") -> "7z"
+                        mime.contains("android.package-archive") -> "apk"
+                        mime.startsWith("image/png") -> "png"
+                        mime.startsWith("image/jpeg") -> "jpg"
+                        mime.startsWith("image/") -> "jpg"
+                        mime.startsWith("video/mp4") -> "mp4"
+                        mime.startsWith("video/") -> "mp4"
+                        mime.startsWith("audio/") -> "mp3"
+                        mime.startsWith("text/") -> "txt"
+                        else -> "bin"
+                    }
+                    name = "$name.$ext"
+                }
+
                 val type = if (ext == "zip" || ext == "rar" || ext == "7z") FileType.ARCHIVE else getFileTypeFromExt(ext, mime)
 
                 val tempDir = File(context.cacheDir, "incoming_files").apply { mkdirs() }
@@ -2217,6 +2268,27 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        return null
+    }
+
+    private fun getRealPathFromContentUri(context: Context, uri: Uri): String? {
+        try {
+            val path = uri.path ?: return null
+            if (path.startsWith("/storage/") || path.startsWith("/sdcard/")) {
+                return path
+            }
+            if (path.contains(":") && path.contains("document/primary")) {
+                val split = path.substringAfter("document/primary:").substringAfter("document/")
+                val actual = "/storage/emulated/0/" + split.substringAfter(":")
+                if (File(actual).exists()) return actual
+            }
+            if (path.contains("/document/raw:")) {
+                val rawPath = path.substringAfter("/document/raw:")
+                if (File(rawPath).exists()) return rawPath
+            }
+            val possibleFile = File(path)
+            if (possibleFile.exists()) return possibleFile.absolutePath
+        } catch (_: Exception) {}
         return null
     }
 
