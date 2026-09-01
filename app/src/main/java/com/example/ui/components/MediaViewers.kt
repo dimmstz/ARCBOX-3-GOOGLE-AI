@@ -90,7 +90,10 @@ fun ArcboxMediaViewerModal(
 
     Dialog(
         onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
         if (item.fileType == FileType.AUDIO) {
             AudioPlayerContent(
@@ -1813,14 +1816,14 @@ fun VideoPlayerContent(
     var isVideoPrepared by remember(file.path) { mutableStateOf(false) }
     var videoError by remember(file.path) { mutableStateOf(false) }
     var mediaPlayerRef by remember(file.path) { mutableStateOf<MediaPlayer?>(null) }
-    var videoViewRef by remember(file.path) { mutableStateOf<VideoView?>(null) }
+    var videoViewRef by remember(file.path) { mutableStateOf<ResizableVideoView?>(null) }
 
     // Video Options State
     var isLooping by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(false) }
-    val aspectRatios = listOf(16 / 9f, 4 / 3f, 1f, 21 / 9f)
-    val aspectRatioLabels = listOf("16:9", "4:3", "1:1", "21:9")
-    var aspectRatioIndex by remember { mutableIntStateOf(0) }
+    var videoAspectRatio by remember(file.path) { mutableFloatStateOf(16 / 9f) }
+    val scaleModeLabels = listOf("Fit (Original)", "Crop (PanScan)", "Stretch (Preencher)")
+    var scaleModeIndex by remember { mutableIntStateOf(0) }
     var isFullscreen by remember { mutableStateOf(false) }
 
     var aspectToastMessage by remember { mutableStateOf<String?>(null) }
@@ -1876,24 +1879,35 @@ fun VideoPlayerContent(
         modifier = Modifier
             .fillMaxSize()
             .navigationBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 48.dp)
+            .padding(
+                start = if (isFullscreen) 0.dp else 20.dp,
+                end = if (isFullscreen) 0.dp else 20.dp,
+                top = if (isFullscreen) 0.dp else 16.dp,
+                bottom = if (isFullscreen) 0.dp else 48.dp
+            )
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(if (isFullscreen) 9 / 16f else aspectRatios[aspectRatioIndex])
-                .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF0F172A))
-                .align(Alignment.Center)
-                .clickable {
-                    onToggleControls()
-                },
+            modifier = if (isFullscreen) {
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .clickable { onToggleControls() }
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(videoAspectRatio)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF0F172A))
+                    .align(Alignment.Center)
+                    .clickable { onToggleControls() }
+            },
             contentAlignment = Alignment.Center
         ) {
             if (!videoError && file.exists() && file.length() > 0) {
                 AndroidView(
                     factory = { ctx ->
-                        VideoView(ctx).apply {
+                        ResizableVideoView(ctx).apply {
+                            scaleMode = scaleModeIndex
                             setVideoURI(Uri.fromFile(file))
                             setOnPreparedListener { mp ->
                                 mediaPlayerRef = mp
@@ -1903,6 +1917,12 @@ fun VideoPlayerContent(
                                     totalDurationMs = dur.toLong()
                                 }
                                 mp.isLooping = isLooping
+                                val w = mp.videoWidth
+                                val h = mp.videoHeight
+                                if (w > 0 && h > 0) {
+                                    videoAspectRatio = w.toFloat() / h.toFloat()
+                                    setVideoSize(w, h)
+                                }
                                 if (isMuted) {
                                     mp.setVolume(0f, 0f)
                                 } else {
@@ -1926,6 +1946,9 @@ fun VideoPlayerContent(
                     },
                     update = { view ->
                         videoViewRef = view
+                        if (view.scaleMode != scaleModeIndex) {
+                            view.scaleMode = scaleModeIndex
+                        }
                         if (isVideoPrepared) {
                             try {
                                 mediaPlayerRef?.isLooping = isLooping
@@ -2046,7 +2069,23 @@ fun VideoPlayerContent(
             visible = showControls,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically(),
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(
+                    start = if (isFullscreen) 24.dp else 0.dp,
+                    end = if (isFullscreen) 24.dp else 0.dp,
+                    bottom = if (isFullscreen) 24.dp else 0.dp
+                )
+                .then(
+                    if (isFullscreen) {
+                        Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .padding(16.dp)
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 val currentProgress = (currentPositionMs.toFloat() / totalDurationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
@@ -2103,20 +2142,16 @@ fun VideoPlayerContent(
                         )
                     }
                     
-                    // Aspect Ratio Button
+                    // Aspect Ratio / Scale Mode Button
                     IconButton(onClick = { 
-                        if (!isFullscreen) {
-                            aspectRatioIndex = (aspectRatioIndex + 1) % aspectRatios.size 
-                            aspectToastMessage = "Proporção: ${aspectRatioLabels[aspectRatioIndex]}"
-                        } else {
-                            aspectToastMessage = "Modo Tela Cheia"
-                        }
+                        scaleModeIndex = (scaleModeIndex + 1) % scaleModeLabels.size 
+                        aspectToastMessage = "Modo: ${scaleModeLabels[scaleModeIndex]}"
                         onResetControlsTimer()
                     }) {
                         Icon(
                             Icons.Default.AspectRatio,
                             contentDescription = "Aspect Ratio",
-                            tint = if (!isFullscreen) Color.White else Color.White.copy(alpha = 0.3f)
+                            tint = Color.White
                         )
                     }
                     
