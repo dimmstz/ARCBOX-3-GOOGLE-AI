@@ -405,7 +405,7 @@ class FileRepository(private val context: Context) {
                         } else {
                             val ext = name.substringAfterLast('.', "").lowercase()
                             val type = getFileTypeFromExtension(ext, doc.type)
-                            if (type == filterCategory) {
+                            if (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL)) {
                                 val item = FileItem(
                                     id = doc.uri.toString(),
                                     name = name,
@@ -449,7 +449,7 @@ class FileRepository(private val context: Context) {
                                 val ext = file.extension.lowercase()
                                 val mime = getMimeType(file)
                                 val type = getFileTypeFromExtension(ext, mime)
-                                if (type == filterCategory) {
+                                if (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL)) {
                                     val item = FileItem(
                                         id = file.absolutePath,
                                         name = name,
@@ -653,7 +653,9 @@ class FileRepository(private val context: Context) {
 
         // Apply category filter if present
         if (filterCategory != null) {
-            filtered = filtered.filter { it.isDirectory || it.fileType == filterCategory }
+            filtered = filtered.filter { 
+                it.isDirectory || it.fileType == filterCategory || (filterCategory == FileType.OTHER && it.fileType == FileType.TEMP_RESIDUAL) 
+            }
         }
 
         // Sort items (Folders always on top)

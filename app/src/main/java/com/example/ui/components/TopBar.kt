@@ -378,7 +378,7 @@ fun ArcboxTopBar(
                         }
                     )
                 }
-                items(FileType.values().filterNot { it == FileType.FOLDER }) { cat ->
+                items(FileType.values().filterNot { it == FileType.FOLDER || it == FileType.TEMP_RESIDUAL }) { cat ->
                     val isSelected = filterCategory == cat
                     val catColor = cat.getCategoryColor()
                     FilterChip(

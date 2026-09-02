@@ -2,6 +2,12 @@ package com.example.ui.components
 
 import androidx.activity.compose.BackHandler
 import android.content.Context
+import android.app.Activity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -177,7 +183,7 @@ fun ArcboxMediaViewerModal(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .statusBarsPadding()
+                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
                                 .background(Color.Black.copy(alpha = 0.5f))
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -247,7 +253,9 @@ fun ArcboxMediaViewerModal(
                         visible = showControls,
                         enter = fadeIn(),
                         exit = fadeOut(),
-                        modifier = Modifier.align(Alignment.Center)
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                     ) {
                         Row(
                             modifier = Modifier
@@ -529,7 +537,7 @@ fun ArcboxImageViewerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -630,7 +638,7 @@ fun ArcboxImageViewerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color.Black.copy(alpha = 0.92f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                        .navigationBarsPadding()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                         .padding(top = 14.dp, bottom = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -831,7 +839,7 @@ fun ArcboxImageViewerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -922,7 +930,7 @@ fun ArcboxImageViewerScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                     .padding(bottom = 28.dp)
             ) {
                 Row(
@@ -1808,6 +1816,7 @@ fun VideoPlayerContent(
     onToggleControls: () -> Unit = {},
     onResetControlsTimer: () -> Unit = {}
 ) {
+    HideSystemBarsEffect()
     val context = LocalContext.current
     var isPlaying by remember(file.path) { mutableStateOf(true) }
     var currentPositionMs by remember(file.path) { mutableLongStateOf(0L) }
@@ -1815,14 +1824,16 @@ fun VideoPlayerContent(
     
     var isVideoPrepared by remember(file.path) { mutableStateOf(false) }
     var videoError by remember(file.path) { mutableStateOf(false) }
-    var mediaPlayerRef by remember(file.path) { mutableStateOf<MediaPlayer?>(null) }
-    var videoViewRef by remember(file.path) { mutableStateOf<ResizableVideoView?>(null) }
+    var mediaPlayerRef by remember(file.path) { mutableStateOf<android.media.MediaPlayer?>(null) }
+    var textureViewRef by remember(file.path) { mutableStateOf<android.view.TextureView?>(null) }
+    var videoWidth by remember(file.path) { mutableIntStateOf(0) }
+    var videoHeight by remember(file.path) { mutableIntStateOf(0) }
 
     // Video Options State
     var isLooping by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(false) }
     var videoAspectRatio by remember(file.path) { mutableFloatStateOf(16 / 9f) }
-    val scaleModeLabels = listOf("Fit (Original)", "Crop (PanScan)", "Stretch (Preencher)")
+    val scaleModeLabels = listOf("Fit (Original)", "Crop (PanScan)")
     var scaleModeIndex by remember { mutableIntStateOf(0) }
     var isFullscreen by remember { mutableStateOf(false) }
 
@@ -1838,10 +1849,10 @@ fun VideoPlayerContent(
     LaunchedEffect(isPlaying, isVideoPrepared, videoError) {
         while (isPlaying) {
             kotlinx.coroutines.delay(250L)
-            if (isVideoPrepared && !videoError && videoViewRef != null) {
+            if (isVideoPrepared && !videoError && mediaPlayerRef != null) {
                 try {
-                    val pos = videoViewRef?.currentPosition ?: 0
-                    val dur = videoViewRef?.duration ?: 0
+                    val pos = mediaPlayerRef?.currentPosition ?: 0
+                    val dur = mediaPlayerRef?.duration ?: 0
                     if (dur > 0) {
                         totalDurationMs = dur.toLong()
                         currentPositionMs = pos.toLong()
@@ -1865,12 +1876,55 @@ fun VideoPlayerContent(
     }
 
     DisposableEffect(file.path) {
+        val mp = android.media.MediaPlayer()
+        mediaPlayerRef = mp
+        try {
+            mp.setDataSource(file.absolutePath)
+            mp.setOnPreparedListener { preparedMp ->
+                isVideoPrepared = true
+                val dur = preparedMp.duration
+                if (dur > 0) {
+                    totalDurationMs = dur.toLong()
+                }
+                preparedMp.isLooping = isLooping
+                val w = preparedMp.videoWidth
+                val h = preparedMp.videoHeight
+                if (w > 0 && h > 0) {
+                    videoWidth = w
+                    videoHeight = h
+                    videoAspectRatio = w.toFloat() / h.toFloat()
+                }
+                if (isMuted) {
+                    preparedMp.setVolume(0f, 0f)
+                } else {
+                    preparedMp.setVolume(1f, 1f)
+                }
+                textureViewRef?.let { tv ->
+                    updateTextureViewTransform(tv, videoWidth, videoHeight, scaleModeIndex, isFullscreen)
+                }
+                if (isPlaying) {
+                    preparedMp.start()
+                }
+            }
+            mp.setOnCompletionListener {
+                if (!isLooping) {
+                    isPlaying = false
+                }
+            }
+            mp.setOnErrorListener { _, _, _ ->
+                videoError = true
+                true
+            }
+            mp.prepareAsync()
+        } catch (e: Exception) {
+            videoError = true
+        }
+
         onDispose {
             try {
-                videoViewRef?.stopPlayback()
-                mediaPlayerRef?.release()
+                if (mp.isPlaying) mp.stop()
             } catch (_: Exception) {}
-            videoViewRef = null
+            mp.release()
             mediaPlayerRef = null
         }
     }
@@ -1878,12 +1932,14 @@ fun VideoPlayerContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .navigationBarsPadding()
-            .padding(
-                start = if (isFullscreen) 0.dp else 20.dp,
-                end = if (isFullscreen) 0.dp else 20.dp,
-                top = if (isFullscreen) 0.dp else 16.dp,
-                bottom = if (isFullscreen) 0.dp else 48.dp
+            .then(
+                if (isFullscreen) {
+                    Modifier
+                } else {
+                    Modifier
+                        .safeDrawingPadding()
+                        .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 48.dp)
+                }
             )
     ) {
         Box(
@@ -1894,7 +1950,6 @@ fun VideoPlayerContent(
                     .clickable { onToggleControls() }
             } else {
                 Modifier
-                    .fillMaxWidth()
                     .aspectRatio(videoAspectRatio)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFF0F172A))
@@ -1906,49 +1961,27 @@ fun VideoPlayerContent(
             if (!videoError && file.exists() && file.length() > 0) {
                 AndroidView(
                     factory = { ctx ->
-                        ResizableVideoView(ctx).apply {
-                            scaleMode = scaleModeIndex
-                            setVideoURI(Uri.fromFile(file))
-                            setOnPreparedListener { mp ->
-                                mediaPlayerRef = mp
-                                isVideoPrepared = true
-                                val dur = mp.duration
-                                if (dur > 0) {
-                                    totalDurationMs = dur.toLong()
+                        android.view.TextureView(ctx).apply {
+                            surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+                                override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                                    mediaPlayerRef?.setSurface(android.view.Surface(surface))
+                                    updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex, isFullscreen)
                                 }
-                                mp.isLooping = isLooping
-                                val w = mp.videoWidth
-                                val h = mp.videoHeight
-                                if (w > 0 && h > 0) {
-                                    videoAspectRatio = w.toFloat() / h.toFloat()
-                                    setVideoSize(w, h)
+                                override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                                    updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex, isFullscreen)
                                 }
-                                if (isMuted) {
-                                    mp.setVolume(0f, 0f)
-                                } else {
-                                    mp.setVolume(1f, 1f)
+                                override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
+                                    mediaPlayerRef?.setSurface(null)
+                                    return true
                                 }
-                                if (isPlaying) {
-                                    start()
-                                }
+                                override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) {}
                             }
-                            setOnErrorListener { _, _, _ ->
-                                videoError = true
-                                true
-                            }
-                            setOnCompletionListener {
-                                if (!isLooping) {
-                                    isPlaying = false
-                                }
-                            }
-                            videoViewRef = this
                         }
                     },
                     update = { view ->
-                        videoViewRef = view
-                        if (view.scaleMode != scaleModeIndex) {
-                            view.scaleMode = scaleModeIndex
-                        }
+                        textureViewRef = view
+                        updateTextureViewTransform(view, videoWidth, videoHeight, scaleModeIndex, isFullscreen)
+                        
                         if (isVideoPrepared) {
                             try {
                                 mediaPlayerRef?.isLooping = isLooping
@@ -1957,12 +1990,15 @@ fun VideoPlayerContent(
                                 } else {
                                     mediaPlayerRef?.setVolume(1f, 1f)
                                 }
-                                if (isPlaying && !view.isPlaying) {
-                                    view.start()
-                                } else if (!isPlaying && view.isPlaying) {
-                                    view.pause()
+                                val mpIsPlaying = mediaPlayerRef?.isPlaying == true
+                                if (isPlaying && !mpIsPlaying) {
+                                    mediaPlayerRef?.start()
+                                } else if (!isPlaying && mpIsPlaying) {
+                                    mediaPlayerRef?.pause()
                                 }
-                            } catch (_: Exception) {}
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -2032,36 +2068,7 @@ fun VideoPlayerContent(
                 }
             }
 
-            // Play/Pause Overlay Button
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showControls,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                IconButton(
-                    onClick = {
-                        if (!isPlaying && currentPositionMs >= totalDurationMs) {
-                            currentPositionMs = 0L
-                            if (isVideoPrepared && !videoError) {
-                                try { videoViewRef?.seekTo(0) } catch (_: Exception) {}
-                            }
-                        }
-                        isPlaying = !isPlaying
-                        onResetControlsTimer()
-                    },
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(
-                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
-            }
+            // Removed central Play/Pause overlay to avoid overlaps
         }
 
         // Video Progress & Controls (hides automatically in 5s)
@@ -2071,55 +2078,50 @@ fun VideoPlayerContent(
             exit = fadeOut() + shrinkVertically(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(
-                    start = if (isFullscreen) 24.dp else 0.dp,
-                    end = if (isFullscreen) 24.dp else 0.dp,
-                    bottom = if (isFullscreen) 24.dp else 0.dp
-                )
                 .then(
-                    if (isFullscreen) {
-                        Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .padding(16.dp)
-                    } else {
-                        Modifier
-                    }
+                    if (isFullscreen) Modifier.safeDrawingPadding() else Modifier
                 )
+                .padding(
+                    start = if (isFullscreen) 24.dp else 16.dp,
+                    end = if (isFullscreen) 24.dp else 16.dp,
+                    bottom = if (isFullscreen) 24.dp else 16.dp
+                )
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black.copy(alpha = 0.6f))
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 val currentProgress = (currentPositionMs.toFloat() / totalDurationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
-
-                // Progress Slider
-                Slider(
-                    value = currentProgress,
-                    onValueChange = { newProgress ->
-                        currentPositionMs = (newProgress * totalDurationMs).toLong()
-                        if (isVideoPrepared && !videoError && videoViewRef != null) {
-                            try {
-                                videoViewRef?.seekTo(currentPositionMs.toInt())
-                            } catch (_: Exception) {}
-                        }
-                        onResetControlsTimer()
-                    },
-                    colors = SliderDefaults.colors(
-                        thumbColor = MaterialTheme.colorScheme.primary,
-                        activeTrackColor = MaterialTheme.colorScheme.primary,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                    )
-                )
-
                 val currentSeconds = (currentPositionMs / 1000L).toInt()
                 val totalSeconds = (totalDurationMs / 1000L).toInt()
+                
                 Row(
                     modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(formatTime(currentSeconds), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                    // Progress Slider
+                    Slider(
+                        value = currentProgress,
+                        onValueChange = { newProgress ->
+                            currentPositionMs = (newProgress * totalDurationMs).toLong()
+                            if (isVideoPrepared && !videoError && mediaPlayerRef != null) {
+                                try {
+                                    mediaPlayerRef?.seekTo(currentPositionMs.toInt())
+                                } catch (_: Exception) {}
+                            }
+                            onResetControlsTimer()
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+                    )
                     Text(formatTime(totalSeconds), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                 }
-                
-                Spacer(modifier = Modifier.height(16.dp))
                 
                 // Video Controls
                 Row(
@@ -2127,6 +2129,24 @@ fun VideoPlayerContent(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Play/Pause Button (Bottom row fallback)
+                    IconButton(onClick = {
+                        if (!isPlaying && currentPositionMs >= totalDurationMs) {
+                            currentPositionMs = 0L
+                            if (isVideoPrepared && !videoError) {
+                                try { mediaPlayerRef?.seekTo(0) } catch (_: Exception) {}
+                            }
+                        }
+                        isPlaying = !isPlaying
+                        onResetControlsTimer()
+                    }) {
+                        Icon(
+                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "Play/Pause",
+                            tint = Color.White
+                        )
+                    }
+
                     // Loop Button
                     IconButton(onClick = {
                         isLooping = !isLooping
@@ -2308,7 +2328,7 @@ fun AudioPlayerContent(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .navigationBarsPadding()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -3070,3 +3090,67 @@ private fun formatDate(timestamp: Long): String {
     return sdf.format(java.util.Date(timestamp))
 }
 
+
+fun updateTextureViewTransform(view: android.view.TextureView, videoWidth: Int, videoHeight: Int, scaleMode: Int, isFullscreen: Boolean) {
+    if (videoWidth == 0 || videoHeight == 0) return
+    val viewWidth = view.width
+    val viewHeight = view.height
+    if (viewWidth == 0 || viewHeight == 0) return
+
+    val matrix = android.graphics.Matrix()
+    
+    // In windowed mode, we force FIT to avoid any bleeding outside the matched aspect ratio container.
+    val effectiveScaleMode = if (isFullscreen) scaleMode else 0
+
+    if (effectiveScaleMode == 2) {
+        // Stretch
+        view.setTransform(matrix)
+        return
+    }
+    
+    val videoRatio = videoWidth.toFloat() / videoHeight.toFloat()
+    val viewRatio = viewWidth.toFloat() / viewHeight.toFloat()
+    
+    var scaleX = 1f
+    var scaleY = 1f
+    
+    if (effectiveScaleMode == 0) {
+        // Fit
+        if (videoRatio > viewRatio) {
+            scaleY = viewRatio / videoRatio
+        } else {
+            scaleX = videoRatio / viewRatio
+        }
+    } else if (effectiveScaleMode == 1) {
+        // Crop
+        if (videoRatio > viewRatio) {
+            scaleX = videoRatio / viewRatio
+        } else {
+            scaleY = viewRatio / videoRatio
+        }
+    }
+    
+    matrix.setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
+    view.setTransform(matrix)
+}
+
+@Composable
+fun HideSystemBarsEffect() {
+    val view = LocalView.current
+    val context = LocalContext.current
+    DisposableEffect(view, context) {
+        val window = (view.parent as? DialogWindowProvider)?.window
+            ?: (context as? Activity)?.window
+        
+        var controller: WindowInsetsControllerCompat? = null
+        if (window != null) {
+            controller = WindowCompat.getInsetsController(window, view)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+}
