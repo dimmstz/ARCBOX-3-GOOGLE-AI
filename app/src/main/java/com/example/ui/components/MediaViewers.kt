@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.activity.compose.BackHandler
 import android.content.Context
 import android.content.ContextWrapper
@@ -3226,26 +3227,60 @@ fun Context.findActivity(): Activity? {
     return null
 }
 
+
 @Composable
 fun HideSystemBarsEffect() {
     val view = LocalView.current
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     
+    fun applyWindowConfig(dialogWindow: Window) {
+        dialogWindow.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        dialogWindow.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
+        dialogWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        dialogWindow.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        dialogWindow.setFlags(
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        )
+        dialogWindow.statusBarColor = android.graphics.Color.TRANSPARENT
+        dialogWindow.navigationBarColor = android.graphics.Color.TRANSPARENT
+        dialogWindow.decorView.setPadding(0, 0, 0, 0)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            dialogWindow.attributes = dialogWindow.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                width = ViewGroup.LayoutParams.MATCH_PARENT
+                height = ViewGroup.LayoutParams.MATCH_PARENT
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            dialogWindow.attributes = dialogWindow.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                width = ViewGroup.LayoutParams.MATCH_PARENT
+                height = ViewGroup.LayoutParams.MATCH_PARENT
+            }
+        } else {
+            dialogWindow.attributes = dialogWindow.attributes.apply {
+                width = ViewGroup.LayoutParams.MATCH_PARENT
+                height = ViewGroup.LayoutParams.MATCH_PARENT
+            }
+        }
+        WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
+    }
+
     SideEffect {
         val activity = context.findActivity()
         val dialogWindow = findDialogWindow(view) ?: activity?.window
         if (dialogWindow != null) {
-            dialogWindow.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            dialogWindow.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
-            dialogWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            dialogWindow.statusBarColor = android.graphics.Color.TRANSPARENT
-            dialogWindow.navigationBarColor = android.graphics.Color.TRANSPARENT
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                dialogWindow.attributes = dialogWindow.attributes.apply {
-                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-                }
-            }
-            WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
+            applyWindowConfig(dialogWindow)
+        }
+    }
+
+    LaunchedEffect(configuration.orientation) {
+        val activity = context.findActivity()
+        val dialogWindow = findDialogWindow(view) ?: activity?.window
+        if (dialogWindow != null) {
+            applyWindowConfig(dialogWindow)
         }
     }
 
@@ -3255,6 +3290,7 @@ fun HideSystemBarsEffect() {
         
         var controller: WindowInsetsControllerCompat? = null
         if (dialogWindow != null) {
+            applyWindowConfig(dialogWindow)
             controller = WindowCompat.getInsetsController(dialogWindow, view)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.isAppearanceLightStatusBars = false
