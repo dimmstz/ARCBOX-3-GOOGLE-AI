@@ -1,8 +1,15 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.basicMarquee
 import androidx.activity.compose.BackHandler
 import android.content.Context
 import android.app.Activity
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import android.graphics.drawable.ColorDrawable
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.os.Build
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
@@ -149,7 +156,7 @@ fun ArcboxMediaViewerModal(
 
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                color = Color.Black.copy(alpha = 0.95f)
+                color = Color.Black
             ) {
                 Box(
                     modifier = Modifier
@@ -189,22 +196,21 @@ fun ArcboxMediaViewerModal(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            IconButton(onClick = {
-                                resetControlsTimer()
-                                onClose()
-                            }) {
-                                Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
-                            }
                             Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.weight(1f)
+                                horizontalAlignment = Alignment.Start,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 12.dp)
                             ) {
                                 Text(
                                     text = item.name,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
-                                    maxLines = 1
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .basicMarquee()
                                 )
                                 Text(
                                     text = formatFileSize(item.size),
@@ -835,32 +841,18 @@ fun ArcboxImageViewerScreen(
                 )
             }
 
-            // Top App Bar matching Screenshot (Back arrow, title, size & resolution, info button)
+            // Top App Bar matching Screenshot (Title with marquee, size & resolution, info button)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = handleClose,
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Voltar",
-                        tint = iconTint,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(4.dp))
-
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 4.dp),
+                        .padding(end = 12.dp),
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
@@ -869,7 +861,10 @@ fun ArcboxImageViewerScreen(
                         fontWeight = FontWeight.Bold,
                         color = topBarTextColor,
                         maxLines = 1,
-                        fontSize = 18.sp
+                        fontSize = 18.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .basicMarquee()
                     )
 
                     val dimText = if (dimensions.first > 0 && dimensions.second > 0) {
@@ -1835,7 +1830,6 @@ fun VideoPlayerContent(
     var videoAspectRatio by remember(file.path) { mutableFloatStateOf(16 / 9f) }
     val scaleModeLabels = listOf("Fit (Original)", "Crop (PanScan)")
     var scaleModeIndex by remember { mutableIntStateOf(0) }
-    var isFullscreen by remember { mutableStateOf(false) }
 
     var aspectToastMessage by remember { mutableStateOf<String?>(null) }
 
@@ -1900,7 +1894,7 @@ fun VideoPlayerContent(
                     preparedMp.setVolume(1f, 1f)
                 }
                 textureViewRef?.let { tv ->
-                    updateTextureViewTransform(tv, videoWidth, videoHeight, scaleModeIndex, isFullscreen)
+                    updateTextureViewTransform(tv, videoWidth, videoHeight, scaleModeIndex)
                 }
                 if (isPlaying) {
                     preparedMp.start()
@@ -1932,30 +1926,13 @@ fun VideoPlayerContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .then(
-                if (isFullscreen) {
-                    Modifier
-                } else {
-                    Modifier
-                        .safeDrawingPadding()
-                        .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 48.dp)
-                }
-            )
+            .background(Color.Black)
     ) {
         Box(
-            modifier = if (isFullscreen) {
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-                    .clickable { onToggleControls() }
-            } else {
-                Modifier
-                    .aspectRatio(videoAspectRatio)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF0F172A))
-                    .align(Alignment.Center)
-                    .clickable { onToggleControls() }
-            },
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable { onToggleControls() },
             contentAlignment = Alignment.Center
         ) {
             if (!videoError && file.exists() && file.length() > 0) {
@@ -1965,10 +1942,10 @@ fun VideoPlayerContent(
                             surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
                                 override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
                                     mediaPlayerRef?.setSurface(android.view.Surface(surface))
-                                    updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex, isFullscreen)
+                                    updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex)
                                 }
                                 override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
-                                    updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex, isFullscreen)
+                                    updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex)
                                 }
                                 override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
                                     mediaPlayerRef?.setSurface(null)
@@ -1980,7 +1957,7 @@ fun VideoPlayerContent(
                     },
                     update = { view ->
                         textureViewRef = view
-                        updateTextureViewTransform(view, videoWidth, videoHeight, scaleModeIndex, isFullscreen)
+                        updateTextureViewTransform(view, videoWidth, videoHeight, scaleModeIndex)
                         
                         if (isVideoPrepared) {
                             try {
@@ -2067,8 +2044,6 @@ fun VideoPlayerContent(
                     )
                 }
             }
-
-            // Removed central Play/Pause overlay to avoid overlaps
         }
 
         // Video Progress & Controls (hides automatically in 5s)
@@ -2078,16 +2053,10 @@ fun VideoPlayerContent(
             exit = fadeOut() + shrinkVertically(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .then(
-                    if (isFullscreen) Modifier.safeDrawingPadding() else Modifier
-                )
-                .padding(
-                    start = if (isFullscreen) 24.dp else 16.dp,
-                    end = if (isFullscreen) 24.dp else 16.dp,
-                    bottom = if (isFullscreen) 24.dp else 16.dp
-                )
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color.Black.copy(alpha = 0.6f))
+                .background(Color.Black.copy(alpha = 0.65f))
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -2129,7 +2098,7 @@ fun VideoPlayerContent(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Play/Pause Button (Bottom row fallback)
+                    // Play/Pause Button
                     IconButton(onClick = {
                         if (!isPlaying && currentPositionMs >= totalDurationMs) {
                             currentPositionMs = 0L
@@ -2194,15 +2163,25 @@ fun VideoPlayerContent(
                         )
                     }
                     
-                    // Fullscreen Button
+                    // Screen Orientation / Rotate Button (Alterna entre Retrato e Paisagem)
                     IconButton(onClick = {
-                        isFullscreen = !isFullscreen
+                        val activity = context as? Activity
+                        if (activity != null) {
+                            val currentOrientation = context.resources.configuration.orientation
+                            if (currentOrientation == Configuration.ORIENTATION_LANDSCAPE) {
+                                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                aspectToastMessage = "Modo Retrato"
+                            } else {
+                                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                aspectToastMessage = "Modo Paisagem"
+                            }
+                        }
                         onResetControlsTimer()
                     }) {
                         Icon(
-                            if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                            contentDescription = "Fullscreen",
-                            tint = if (isFullscreen) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
+                            Icons.Default.ScreenRotation,
+                            contentDescription = "Girar Tela",
+                            tint = Color.White
                         )
                     }
                 }
@@ -3091,7 +3070,7 @@ private fun formatDate(timestamp: Long): String {
 }
 
 
-fun updateTextureViewTransform(view: android.view.TextureView, videoWidth: Int, videoHeight: Int, scaleMode: Int, isFullscreen: Boolean) {
+fun updateTextureViewTransform(view: android.view.TextureView, videoWidth: Int, videoHeight: Int, scaleMode: Int) {
     if (videoWidth == 0 || videoHeight == 0) return
     val viewWidth = view.width
     val viewHeight = view.height
@@ -3099,30 +3078,21 @@ fun updateTextureViewTransform(view: android.view.TextureView, videoWidth: Int, 
 
     val matrix = android.graphics.Matrix()
     
-    // In windowed mode, we force FIT to avoid any bleeding outside the matched aspect ratio container.
-    val effectiveScaleMode = if (isFullscreen) scaleMode else 0
-
-    if (effectiveScaleMode == 2) {
-        // Stretch
-        view.setTransform(matrix)
-        return
-    }
-    
     val videoRatio = videoWidth.toFloat() / videoHeight.toFloat()
     val viewRatio = viewWidth.toFloat() / viewHeight.toFloat()
     
     var scaleX = 1f
     var scaleY = 1f
     
-    if (effectiveScaleMode == 0) {
-        // Fit
+    if (scaleMode == 0) {
+        // Fit (Original)
         if (videoRatio > viewRatio) {
             scaleY = viewRatio / videoRatio
         } else {
             scaleX = videoRatio / viewRatio
         }
-    } else if (effectiveScaleMode == 1) {
-        // Crop
+    } else if (scaleMode == 1) {
+        // Crop (PanScan)
         if (videoRatio > viewRatio) {
             scaleX = videoRatio / viewRatio
         } else {
@@ -3144,6 +3114,14 @@ fun HideSystemBarsEffect() {
         
         var controller: WindowInsetsControllerCompat? = null
         if (window != null) {
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
+            WindowCompat.setDecorFitsSystemWindows(window, false)
             controller = WindowCompat.getInsetsController(window, view)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
@@ -3151,6 +3129,8 @@ fun HideSystemBarsEffect() {
         
         onDispose {
             controller?.show(WindowInsetsCompat.Type.systemBars())
+            val activity = context as? Activity
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 }
