@@ -20,7 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
@@ -44,6 +43,8 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -176,9 +177,9 @@ fun ArcboxStorageDashboardModal(
                             onClick = { selectedTab = 1 },
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(painter = painterResource(R.drawable.ic_broom), contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Central de Limpeza", fontWeight = FontWeight.Bold)
+                                    Text("Limpeza", fontWeight = FontWeight.Bold)
                                 }
                             }
                         )
@@ -195,31 +196,8 @@ fun ArcboxStorageDashboardModal(
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.End
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f, fill = false)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Storage,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Unidade selecionada:",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(8.dp))
-
                                 Box {
                                     Surface(
                                         onClick = { showVolumeDropdown = true },
@@ -437,9 +415,10 @@ fun StorageCategoriesView(
     val totalBytes = stats.sumOf { it.bytes }.coerceAtLeast(1L)
     val activeVol = selectedVolume ?: storageVolumes.firstOrNull()
     
-    // Animation for the donut chart
+    // Animation for the donut chart and progress bars (single shared factor to avoid per-item recomposition)
     var animationPlayed by remember { mutableStateOf(false) }
     val donutAnimatedRatio by animateFloatAsState(targetValue = if (animationPlayed) 1f else 0f, animationSpec = tween(1500, easing = FastOutSlowInEasing), label = "donut_anim")
+    val progressAnimatedFactor by animateFloatAsState(targetValue = if (animationPlayed) 1f else 0f, animationSpec = tween(1000, easing = FastOutSlowInEasing), label = "progress_factor")
     LaunchedEffect(Unit) {
         animationPlayed = true
     }
@@ -524,9 +503,9 @@ fun StorageCategoriesView(
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(painter = painterResource(R.drawable.ic_broom), contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Ir para Central de Limpeza", fontWeight = FontWeight.Bold)
+                        Text("Ir para Limpeza", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -545,11 +524,6 @@ fun StorageCategoriesView(
         items(stats, key = { it.fileType.name }) { stat ->
             val ratio = stat.bytes.toFloat() / totalBytes
             val catColor = stat.fileType.getCategoryColor()
-            val animatedRatio by animateFloatAsState(
-                targetValue = if (animationPlayed) ratio else 0f,
-                animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
-                label = "progress"
-            )
 
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -620,7 +594,7 @@ fun StorageCategoriesView(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     LinearProgressIndicator(
-                        progress = { animatedRatio },
+                        progress = { ratio * progressAnimatedFactor },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(8.dp)
@@ -664,7 +638,7 @@ fun CleaningHubView(
                 FilterChip(
                     selected = subTab == 0,
                     onClick = { subTab = 0 },
-                    leadingIcon = { Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    leadingIcon = { Icon(painter = painterResource(R.drawable.ic_broom), contentDescription = null, modifier = Modifier.size(16.dp)) },
                     label = { Text("Rápida", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium, maxLines = 1) },
                     modifier = Modifier.weight(1f)
                 )
@@ -706,7 +680,7 @@ fun LargeFilesView(
     if (largeFiles.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                Icon(painter = painterResource(R.drawable.ic_broom), contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Ótimo! Nenhum arquivo excessivamente grande encontrado.")
             }
@@ -881,7 +855,7 @@ fun DuplicateFilesView(
     if (duplicateGroups.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                Icon(painter = painterResource(R.drawable.ic_broom), contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Seu armazenamento está limpo! Sem duplicatas.")
             }
@@ -1041,6 +1015,16 @@ fun StorageVolumesView(
     onSelectVolume: (StorageVolume) -> Unit,
     onOpenCloudManager: () -> Unit
 ) {
+    var animationPlayed by remember { mutableStateOf(false) }
+    val progressAnimatedFactor by animateFloatAsState(
+        targetValue = if (animationPlayed) 1f else 0f,
+        animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+        label = "volume_progress_factor"
+    )
+    LaunchedEffect(Unit) {
+        animationPlayed = true
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1108,7 +1092,6 @@ fun StorageVolumesView(
         items(storageVolumes, key = { "vol_${it.id}" }) { volume ->
             val usedBytes = (volume.totalBytes - volume.freeBytes).coerceAtLeast(0L)
             val usedRatio = if (volume.totalBytes > 0) usedBytes.toFloat() / volume.totalBytes.toFloat() else 0f
-            val animatedRatio by animateFloatAsState(targetValue = usedRatio, animationSpec = tween(1000), label = "volume_progress")
             val isCloud = volume.typeKey == "CLOUD"
 
             Surface(
@@ -1197,12 +1180,12 @@ fun StorageVolumesView(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     LinearProgressIndicator(
-                        progress = { animatedRatio },
+                        progress = { usedRatio * progressAnimatedFactor },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(10.dp)
                             .clip(RoundedCornerShape(5.dp)),
-                        color = if (animatedRatio > 0.9f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        color = if (usedRatio > 0.9f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                         strokeCap = StrokeCap.Round,
                         gapSize = 0.dp,
@@ -1225,7 +1208,7 @@ fun StorageVolumesView(
                             text = "${formatFileSize(volume.freeBytes)} livres",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (animatedRatio > 0.9f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            color = if (usedRatio > 0.9f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -1610,7 +1593,7 @@ fun SmartCleanerTab(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        Icons.Default.AutoFixHigh,
+                                        painter = painterResource(R.drawable.ic_broom),
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onPrimary,
                                         modifier = Modifier.size(28.dp)

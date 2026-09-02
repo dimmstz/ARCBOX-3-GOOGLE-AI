@@ -303,18 +303,6 @@ fun ArcboxTopBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                item {
-                    FilterChip(
-                        selected = isGlobalSearch,
-                        onClick = onToggleGlobalSearch,
-                        label = { Text(if (isGlobalSearch) "🌐 Todo Armazenamento" else "📂 Pasta Atual") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    )
-                }
-
                 val quickExts = listOf(".pdf", ".jpg", ".mp4", ".mp3", ".apk", ".zip", ".doc", ".txt")
                 items(quickExts) { ext ->
                     val isSelected = searchQuery.equals(ext, ignoreCase = true) || searchQuery.equals(ext.removePrefix("."), ignoreCase = true)

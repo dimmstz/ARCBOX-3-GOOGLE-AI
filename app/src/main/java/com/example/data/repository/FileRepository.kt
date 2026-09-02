@@ -15,6 +15,7 @@ import com.example.data.db.AppDatabase
 import com.example.data.db.FavoriteEntity
 import com.example.data.db.TrashEntity
 import com.example.data.models.*
+import com.example.util.FileSearchMatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -364,8 +365,8 @@ class FileRepository(private val context: Context) {
             val installedAndStorageApps = getInstalledApps(appSubFilter)
             val filtered = if (searchQuery.isNotEmpty()) {
                 installedAndStorageApps.filter {
-                    it.name.contains(searchQuery, ignoreCase = true) ||
-                    (it.packageName?.contains(searchQuery, ignoreCase = true) == true)
+                    FileSearchMatcher.matches(it.name, searchQuery) ||
+                    (it.packageName?.let { pkg -> FileSearchMatcher.matches(pkg, searchQuery) } == true)
                 }
             } else {
                 installedAndStorageApps
@@ -405,7 +406,8 @@ class FileRepository(private val context: Context) {
                         } else {
                             val ext = name.substringAfterLast('.', "").lowercase()
                             val type = getFileTypeFromExtension(ext, doc.type)
-                            if (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL)) {
+                            val matchesSearch = searchQuery.isBlank() || FileSearchMatcher.matches(name, searchQuery)
+                            if (matchesSearch && (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL))) {
                                 val item = FileItem(
                                     id = doc.uri.toString(),
                                     name = name,
@@ -449,7 +451,8 @@ class FileRepository(private val context: Context) {
                                 val ext = file.extension.lowercase()
                                 val mime = getMimeType(file)
                                 val type = getFileTypeFromExtension(ext, mime)
-                                if (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL)) {
+                                val matchesSearch = searchQuery.isBlank() || FileSearchMatcher.matches(name, searchQuery)
+                                if (matchesSearch && (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL))) {
                                     val item = FileItem(
                                         id = file.absolutePath,
                                         name = name,
@@ -488,13 +491,15 @@ class FileRepository(private val context: Context) {
 
                 if (rootDoc != null && rootDoc.isDirectory) {
                     if (searchQuery.isNotBlank()) {
-                        suspend fun searchSafRecursive(dir: DocumentFile, depth: Int = 0) {
-                            if (depth > 5) return
+                        suspend fun searchSafRecursive(dir: DocumentFile, depth: Int = 0, visited: MutableSet<String> = mutableSetOf()) {
+                            if (depth > 25) return
+                            val uriStr = dir.uri.toString()
+                            if (!visited.add(uriStr)) return
                             val files = try { dir.listFiles() } catch (_: Exception) { emptyArray() }
                             for (doc in files) {
                                 val docName = doc.name ?: continue
                                 if (docName.startsWith(".")) continue
-                                if (docName.contains(searchQuery, ignoreCase = true)) {
+                                if (FileSearchMatcher.matches(docName, searchQuery)) {
                                     val isDir = doc.isDirectory
                                     val ext = docName.substringAfterLast('.', "").lowercase()
                                     val mime = doc.type ?: getMimeTypeFromExtension(ext)
@@ -518,7 +523,7 @@ class FileRepository(private val context: Context) {
                                     )
                                 }
                                 if (doc.isDirectory) {
-                                    searchSafRecursive(doc, depth + 1)
+                                    searchSafRecursive(doc, depth + 1, visited)
                                 }
                             }
                         }
@@ -555,10 +560,18 @@ class FileRepository(private val context: Context) {
             } else {
                 // Read via standard java File
                 if (searchQuery.isNotBlank()) {
-                    val rootDirPath = if (isGlobalSearch) {
-                        getStorageVolumes().find { directoryPath.startsWith(it.path) }?.path ?: directoryPath
+                    val rootDirPath = if (directoryPath.startsWith("/cloud/")) {
+                        val providerSegment = directoryPath.removePrefix("/cloud/").substringBefore("/")
+                        "/cloud/$providerSegment"
                     } else {
-                        directoryPath
+                        val volumes = getStorageVolumes()
+                        volumes.sortedByDescending { it.path.length }
+                            .find { directoryPath.startsWith(it.path) }?.path
+                            ?: if (directoryPath.startsWith("/storage/emulated/0") || directoryPath.startsWith("/sdcard")) {
+                                Environment.getExternalStorageDirectory()?.absolutePath ?: "/storage/emulated/0"
+                            } else {
+                                volumes.firstOrNull()?.path ?: directoryPath
+                            }
                     }
                     val searchDir = resolveFile(rootDirPath)
                     val searchResults = searchRecursiveCloudOrLocal(searchDir, rootDirPath, searchQuery, favoritePaths)
@@ -645,8 +658,8 @@ class FileRepository(private val context: Context) {
         }
 
         // Apply search filter if present (for SAF or category filtered results)
-        var filtered = if (searchQuery.isNotBlank() && items.isNotEmpty() && items.all { !it.path.contains("/") || it.name.contains(searchQuery, ignoreCase = true) }) {
-            items.filter { it.name.contains(searchQuery, ignoreCase = true) || it.extension.equals(searchQuery.removePrefix("."), ignoreCase = true) }
+        var filtered = if (searchQuery.isNotBlank() && items.isNotEmpty()) {
+            items.filter { FileSearchMatcher.matches(it.name, searchQuery) }
         } else {
             items
         }
@@ -681,11 +694,16 @@ class FileRepository(private val context: Context) {
         dir: File,
         virtualPath: String,
         query: String,
-        favoritePaths: Set<String>
+        favoritePaths: Set<String>,
+        visitedPaths: MutableSet<String> = mutableSetOf()
     ): List<FileItem> {
         val result = mutableListOf<FileItem>()
         if (!dir.exists() || !dir.isDirectory) return result
-        val files = dir.listFiles() ?: return result
+
+        val canonicalPath = try { dir.canonicalPath } catch (_: Exception) { dir.absolutePath }
+        if (!visitedPaths.add(canonicalPath)) return result
+
+        val files = try { dir.listFiles() } catch (_: Exception) { null } ?: return result
         for (file in files) {
             val name = file.name
             if (name.startsWith(".")) continue
@@ -694,7 +712,7 @@ class FileRepository(private val context: Context) {
             } else {
                 file.absolutePath
             }
-            val matches = name.contains(query, ignoreCase = true)
+            val matches = FileSearchMatcher.matches(name, query)
             val isDir = file.isDirectory
             val ext = file.extension.lowercase()
             val mime = getMimeType(file)
@@ -712,13 +730,17 @@ class FileRepository(private val context: Context) {
                         fileType = type,
                         extension = ext,
                         isFavorite = favoritePaths.contains(itemVirtualPath),
-                        childCount = if (isDir) (file.list()?.size ?: 0) else 0,
+                        childCount = if (isDir) (try { file.list()?.size } catch (_: Exception) { 0 } ?: 0) else 0,
                         mimeType = mime
                     )
                 )
             }
             if (isDir) {
-                result.addAll(searchRecursiveCloudOrLocal(file, itemVirtualPath, query, favoritePaths))
+                val isRestrictedAndroidSubdir = name.equals("Android", ignoreCase = true) && 
+                    (file.parentFile?.absolutePath == "/storage/emulated/0" || file.parentFile?.name == "0")
+                if (!isRestrictedAndroidSubdir) {
+                    result.addAll(searchRecursiveCloudOrLocal(file, itemVirtualPath, query, favoritePaths, visitedPaths))
+                }
             }
         }
         return result
@@ -1173,7 +1195,7 @@ class FileRepository(private val context: Context) {
         }
 
         val filtered = if (searchQuery.isNotBlank()) {
-            items.filter { it.name.contains(searchQuery, ignoreCase = true) || it.extension.equals(searchQuery.removePrefix("."), ignoreCase = true) }
+            items.filter { FileSearchMatcher.matches(it.name, searchQuery) }
         } else {
             items
         }

@@ -46,7 +46,15 @@ private val appIconMemoryCache = object : LruCache<String, Bitmap>(cacheSizeKb) 
     }
 }
 private val nullIconCache = LruCache<String, Boolean>(1000)
-private val appIconDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
+private val appIconThreadFactory = java.util.concurrent.ThreadFactory { runnable: Runnable ->
+    Thread({
+        try {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+        } catch (_: Throwable) {}
+        runnable.run()
+    }, "arcbox-app-icon-worker")
+}
+private val appIconDispatcher = Executors.newFixedThreadPool(2, appIconThreadFactory).asCoroutineDispatcher()
 
 @Composable
 fun ArcboxLogoIcon(

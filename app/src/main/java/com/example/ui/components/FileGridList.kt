@@ -130,7 +130,6 @@ fun ArcboxFileGridList(
     var showFabMenu by remember { mutableStateOf(false) }
     val isMultiSelecting = selectedItems.isNotEmpty()
 
-    // Smooth rotation angle for + into X (135 degrees)
     val fabRotation by animateFloatAsState(
         targetValue = if (isMultiSelecting || showFabMenu) 135f else 0f,
         animationSpec = spring(
@@ -174,13 +173,11 @@ fun ArcboxFileGridList(
                 EmptyFolderState(onCreateFolder = onCreateFolder)
             }
         } else {
-            AnimatedContent(
+            Crossfade(
                 targetState = viewMode,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)) togetherWith
-                            fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
-                },
-                label = "ViewModeAnimation"
+                animationSpec = tween(durationMillis = 150),
+                label = "ViewModeAnimation",
+                modifier = Modifier.fillMaxSize()
             ) { mode ->
                 if (mode == ViewMode.GRID) {
                     LazyVerticalGrid(
@@ -634,7 +631,7 @@ fun ArcboxFileGridList(
                                         tint = onPrimaryColor,
                                         modifier = Modifier
                                             .size(26.dp)
-                                            .graphicsLayer(rotationZ = fabRotation)
+                                            .graphicsLayer { rotationZ = fabRotation }
                                     )
                                 }
                             }
@@ -853,25 +850,15 @@ fun FileGridCard(
                 }
             }
 
-            // Controls overlay: Checkbox with slide animation in selection mode
-            AnimatedVisibility(
-                visible = isSelectionMode,
-                enter = slideInHorizontally(
-                    initialOffsetX = { -it },
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
-                ) + fadeIn(),
-                exit = slideOutHorizontally(
-                    targetOffsetX = { -it },
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                ) + fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(4.dp)
-            ) {
+            // Controls overlay: Checkbox in selection mode (direct condition to eliminate animator overhead during scroll)
+            if (isSelectionMode) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                    shadowElevation = 2.dp
+                    shadowElevation = 2.dp,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(4.dp)
                 ) {
                     Checkbox(
                         checked = isSelected,
@@ -978,21 +965,8 @@ fun FileListItem(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                // Caixa de seleção com animação de slide na frente do arquivo
-                AnimatedVisibility(
-                    visible = isSelectionMode,
-                    enter = slideInHorizontally(
-                        initialOffsetX = { -it },
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioLowBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) + expandHorizontally() + fadeIn(),
-                    exit = slideOutHorizontally(
-                        targetOffsetX = { -it },
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                    ) + shrinkHorizontally() + fadeOut()
-                ) {
+                // Caixa de seleção na frente do arquivo em modo de seleção
+                if (isSelectionMode) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(end = 6.dp)
@@ -1245,7 +1219,7 @@ fun EmptySearchState(
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Não encontramos nenhum arquivo para \"$searchQuery\" em ${if (isGlobalSearch) "todo o armazenamento" else "esta pasta"}.",
+            text = "Não encontramos nenhum arquivo para \"$searchQuery\" nesta unidade.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -1254,13 +1228,6 @@ fun EmptySearchState(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = onClearSearch) {
                 Text("Limpar Pesquisa")
-            }
-            if (!isGlobalSearch) {
-                Button(onClick = onToggleGlobalSearch) {
-                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Buscar em tudo")
-                }
             }
         }
     }
@@ -1386,12 +1353,16 @@ fun FileThumbnailImage(
             }
 
             Box(modifier = modifier, contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.Image,
+                    contentDescription = null,
+                    tint = finalIconTint.copy(alpha = 0.45f),
+                    modifier = Modifier.size(iconSize)
+                )
                 AsyncImage(
                     model = imageRequest,
                     contentDescription = item.name,
                     contentScale = ContentScale.Crop,
-                    placeholder = rememberVectorPainter(Icons.Default.Image),
-                    error = rememberVectorPainter(Icons.Default.Image),
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(ImageThumbShape)
@@ -1420,12 +1391,16 @@ fun FileThumbnailImage(
                 modifier = modifier.clip(ImageThumbShape),
                 contentAlignment = Alignment.Center
             ) {
+                Icon(
+                    Icons.Default.Movie,
+                    contentDescription = null,
+                    tint = finalIconTint.copy(alpha = 0.45f),
+                    modifier = Modifier.size(iconSize)
+                )
                 AsyncImage(
                     model = imageRequest,
                     contentDescription = item.name,
                     contentScale = ContentScale.Crop,
-                    placeholder = rememberVectorPainter(Icons.Default.Movie),
-                    error = rememberVectorPainter(Icons.Default.Movie),
                     modifier = Modifier.fillMaxSize()
                 )
                 Box(

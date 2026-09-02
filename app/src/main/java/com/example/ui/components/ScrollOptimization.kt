@@ -1,32 +1,29 @@
 package com.example.ui.components
 
+import android.os.Process
 import androidx.compose.runtime.compositionLocalOf
 import kotlinx.coroutines.asCoroutineDispatcher
 
 /**
  * CompositionLocal indicating whether user scrolling (drag or inertial fling) is currently active.
- *
- * Used across the Arcbox UI (FileGridList, AppIcon, TrashBin) to decouple scrolling physics
- * from disk I/O, BitmapFactory decodes, and video frame extraction.
- *
- * - When active (isScrolling = true): Non-cached thumbnail decoding is deferred. Lightweight
- *   vector placeholders render with zero CPU overhead, ensuring a locked 60/120Hz frame rate.
- * - When settled (isScrolling = false): Newly visible items smoothly trigger background decoding
- *   on a dedicated, low-priority worker thread pool.
- * - Items already resident in Coil's in-memory LRU cache display instantly with 0ms delay,
- *   even during high-velocity scrolling.
  */
 val LocalScrollActive = compositionLocalOf { false }
 
 object ArcboxScheduler {
     private val threadFactory = java.util.concurrent.ThreadFactory { runnable: Runnable ->
-        Thread(runnable, "arcbox-bg-optimized-worker").apply {
-            priority = Thread.NORM_PRIORITY - 1 // slightly lower priority to avoid starving UI thread
-        }
+        Thread({
+            // Set Linux process nice level to background (+10) to prevent starving UI and RenderThread
+            try {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+            } catch (_: Throwable) {}
+            runnable.run()
+        }, "arcbox-bg-optimized-worker")
     }
 
-    // Dedicated Thread Pool for metadata and thumbnail processing, isolated from other Dispatchers
+    // Dedicated background thread pool for metadata and thumbnail processing
     @JvmField
-    val metadataAndThumbnailDispatcher = java.util.concurrent.Executors.newFixedThreadPool(4, threadFactory)
-        .asCoroutineDispatcher()
+    val metadataAndThumbnailDispatcher = java.util.concurrent.Executors.newFixedThreadPool(
+        Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
+        threadFactory
+    ).asCoroutineDispatcher()
 }
