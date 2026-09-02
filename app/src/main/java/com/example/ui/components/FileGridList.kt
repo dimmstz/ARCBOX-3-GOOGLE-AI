@@ -1169,26 +1169,20 @@ fun FileGridCard(
                 }
             }
 
-            // Controls overlay: Checkbox in selection mode (direct condition to eliminate animator overhead during scroll)
+            // Controls overlay: Checkbox in selection mode
             if (isSelectionMode) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                    shadowElevation = 2.dp,
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick(item) },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = MaterialTheme.colorScheme.primary,
+                        uncheckedColor = if (isMedia) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        checkmarkColor = MaterialTheme.colorScheme.onPrimary
+                    ),
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(4.dp)
-                ) {
-                    Checkbox(
-                        checked = isSelected,
-                        onCheckedChange = { onClick(item) },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = MaterialTheme.colorScheme.primary,
-                            uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            checkmarkColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    )
-                }
+                        .padding(2.dp)
+                )
             }
 
             if (tempZipSourcePath != null && onExtractIndividual != null) {

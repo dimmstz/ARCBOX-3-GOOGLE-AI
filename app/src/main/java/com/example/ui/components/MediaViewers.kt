@@ -334,7 +334,7 @@ fun ArcboxMediaViewerModal(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    "Modificado: ${formatDate(item.lastModified)}",
+                                    "Modificado: ${formatMediaDate(item.lastModified)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -385,6 +385,7 @@ fun ArcboxImageViewerScreen(
     var selectedAspectIndex by remember { mutableIntStateOf(0) }
     var showCropSaveConfirmationDialog by remember { mutableStateOf(false) }
 
+    var showControls by remember { mutableStateOf(true) }
     var activeFilterIndex by remember { mutableIntStateOf(0) }
     var backgroundModeIndex by remember { mutableIntStateOf(0) } // 0 = Gradiente, 1 = Preto, 2 = Branco
     var contentScaleIndex by remember { mutableIntStateOf(0) }
@@ -812,6 +813,9 @@ fun ArcboxImageViewerScreen(
                     .fillMaxSize()
                     .pointerInput(file.path) {
                         detectTapGestures(
+                            onTap = {
+                                showControls = !showControls
+                            },
                             onDoubleTap = {
                                 scale = if (scale > 1.2f) 1f else 2.2f
                                 offset = Offset.Zero
@@ -848,61 +852,74 @@ fun ArcboxImageViewerScreen(
                 )
             }
 
-            // Navigation Side Buttons for Images (Previous / Next)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+            // Navigation Side Buttons for Images (Previous / Next) (hides with showControls)
+            AnimatedVisibility(
+                visible = showControls,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.fillMaxSize()
             ) {
-                IconButton(
-                    onClick = {
-                        scale = 1f
-                        offset = Offset.Zero
-                        onPrevious()
-                    },
+                Box(
                     modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 16.dp)
-                        .background(Color.Black.copy(alpha = 0.52f), CircleShape)
-                        .size(52.dp)
+                        .fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Imagem Anterior",
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
+                    IconButton(
+                        onClick = {
+                            scale = 1f
+                            offset = Offset.Zero
+                            onPrevious()
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = 16.dp)
+                            .background(Color.Black.copy(alpha = 0.52f), CircleShape)
+                            .size(52.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Imagem Anterior",
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
 
-                IconButton(
-                    onClick = {
-                        scale = 1f
-                        offset = Offset.Zero
-                        onNext()
-                    },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 16.dp)
-                        .background(Color.Black.copy(alpha = 0.52f), CircleShape)
-                        .size(52.dp)
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Próxima Imagem",
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp)
-                    )
+                    IconButton(
+                        onClick = {
+                            scale = 1f
+                            offset = Offset.Zero
+                            onNext()
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 16.dp)
+                            .background(Color.Black.copy(alpha = 0.52f), CircleShape)
+                            .size(52.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Próxima Imagem",
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
                 }
             }
 
-            // Top App Bar matching Screenshot (Title with marquee, size & resolution, info button)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Top App Bar matching Screenshot (hides with showControls)
+            AnimatedVisibility(
+                visible = showControls,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter)
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -949,6 +966,7 @@ fun ArcboxImageViewerScreen(
                     )
                 }
             }
+            }
 
             // Feedback Toast
             AnimatedVisibility(
@@ -975,13 +993,18 @@ fun ArcboxImageViewerScreen(
                 }
             }
 
-            // Bottom Action Bar with buttons
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                    .padding(bottom = 28.dp)
+            // Bottom Action Bar with buttons (hides with showControls)
+            AnimatedVisibility(
+                visible = showControls,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
             ) {
+                Box(
+                    modifier = Modifier
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                        .padding(bottom = 28.dp)
+                ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(18.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1075,6 +1098,7 @@ fun ArcboxImageViewerScreen(
                         }
                     }
                 }
+            }
             }
         }
 
@@ -1245,7 +1269,7 @@ fun ArcboxImageViewerScreen(
                         DetailRow(label = "Tamanho", value = formatFileSize(item.size))
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         
-                        DetailRow(label = "Modificado", value = formatDate(item.lastModified))
+                        DetailRow(label = "Modificado", value = formatMediaDate(item.lastModified))
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         
                         DetailRow(label = "Caminho", value = item.path)
@@ -1990,50 +2014,62 @@ fun VideoPlayerContent(
             contentAlignment = Alignment.Center
         ) {
             if (!videoError && file.exists() && file.length() > 0) {
-                AndroidView(
-                    factory = { ctx ->
-                        android.view.TextureView(ctx).apply {
-                            surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
-                                override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
-                                    mediaPlayerRef?.setSurface(android.view.Surface(surface))
-                                    updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex)
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AndroidView(
+                        factory = { ctx ->
+                            android.view.TextureView(ctx).apply {
+                                setOnClickListener { onToggleControls() }
+                                surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+                                    override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                                        mediaPlayerRef?.setSurface(android.view.Surface(surface))
+                                        updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex)
+                                    }
+                                    override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                                        updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex)
+                                    }
+                                    override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
+                                        mediaPlayerRef?.setSurface(null)
+                                        return true
+                                    }
+                                    override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) {}
                                 }
-                                override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
-                                    updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex)
-                                }
-                                override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
-                                    mediaPlayerRef?.setSurface(null)
-                                    return true
-                                }
-                                override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) {}
                             }
-                        }
-                    },
-                    update = { view ->
-                        textureViewRef = view
-                        updateTextureViewTransform(view, videoWidth, videoHeight, scaleModeIndex)
-                        
-                        if (isVideoPrepared) {
-                            try {
-                                mediaPlayerRef?.isLooping = isLooping
-                                if (isMuted) {
-                                    mediaPlayerRef?.setVolume(0f, 0f)
-                                } else {
-                                    mediaPlayerRef?.setVolume(1f, 1f)
+                        },
+                        update = { view ->
+                            textureViewRef = view
+                            updateTextureViewTransform(view, videoWidth, videoHeight, scaleModeIndex)
+                            
+                            if (isVideoPrepared) {
+                                try {
+                                    mediaPlayerRef?.isLooping = isLooping
+                                    if (isMuted) {
+                                        mediaPlayerRef?.setVolume(0f, 0f)
+                                    } else {
+                                        mediaPlayerRef?.setVolume(1f, 1f)
+                                    }
+                                    val mpIsPlaying = mediaPlayerRef?.isPlaying == true
+                                    if (isPlaying && !mpIsPlaying) {
+                                        mediaPlayerRef?.start()
+                                    } else if (!isPlaying && mpIsPlaying) {
+                                        mediaPlayerRef?.pause()
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
                                 }
-                                val mpIsPlaying = mediaPlayerRef?.isPlaying == true
-                                if (isPlaying && !mpIsPlaying) {
-                                    mediaPlayerRef?.start()
-                                } else if (!isPlaying && mpIsPlaying) {
-                                    mediaPlayerRef?.pause()
-                                }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
                             }
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                            ) { onToggleControls() }
+                    )
+                }
             }
 
             // Fallback / Cover / Preview image when videoError or before prepared
@@ -3120,7 +3156,7 @@ private fun cropAndRotateImageFile(
     }
 }
 
-private fun formatDate(timestamp: Long): String {
+fun formatMediaDate(timestamp: Long): String {
     val sdf = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
     return sdf.format(java.util.Date(timestamp))
 }
@@ -3194,23 +3230,35 @@ fun Context.findActivity(): Activity? {
 fun HideSystemBarsEffect() {
     val view = LocalView.current
     val context = LocalContext.current
-    DisposableEffect(view, context) {
+    
+    SideEffect {
         val activity = context.findActivity()
         val dialogWindow = findDialogWindow(view) ?: activity?.window
-        
-        var controller: WindowInsetsControllerCompat? = null
         if (dialogWindow != null) {
             dialogWindow.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             dialogWindow.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
             dialogWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            dialogWindow.statusBarColor = android.graphics.Color.TRANSPARENT
+            dialogWindow.navigationBarColor = android.graphics.Color.TRANSPARENT
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 dialogWindow.attributes = dialogWindow.attributes.apply {
                     layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
             }
             WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
+        }
+    }
+
+    DisposableEffect(view, context) {
+        val activity = context.findActivity()
+        val dialogWindow = findDialogWindow(view) ?: activity?.window
+        
+        var controller: WindowInsetsControllerCompat? = null
+        if (dialogWindow != null) {
             controller = WindowCompat.getInsetsController(dialogWindow, view)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.isAppearanceLightStatusBars = false
+            controller.isAppearanceLightNavigationBars = false
             controller.hide(WindowInsetsCompat.Type.systemBars())
         }
         
