@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.foundation.basicMarquee
 import androidx.activity.compose.BackHandler
 import android.content.Context
+import android.content.ContextWrapper
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
@@ -400,8 +401,8 @@ fun ArcboxImageViewerScreen(
     }
 
     val contentScales = listOf(
-        Pair(ContentScale.Fit, "Ajustado à tela"),
-        Pair(ContentScale.Crop, "Preencher tela"),
+        Pair(ContentScale.Crop, "Preencher tela (Estendido)"),
+        Pair(ContentScale.Fit, "Ajustado à tela (Original)"),
         Pair(ContentScale.Inside, "Tamanho real")
     )
 
@@ -1828,7 +1829,7 @@ fun VideoPlayerContent(
     var isLooping by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(false) }
     var videoAspectRatio by remember(file.path) { mutableFloatStateOf(16 / 9f) }
-    val scaleModeLabels = listOf("Fit (Original)", "Crop (PanScan)")
+    val scaleModeLabels = listOf("Preencher / Estendido", "Ajustar (Original)", "Esticar (Preenchimento Total)")
     var scaleModeIndex by remember { mutableIntStateOf(0) }
 
     var aspectToastMessage by remember { mutableStateOf<String?>(null) }
@@ -2165,14 +2166,14 @@ fun VideoPlayerContent(
                     
                     // Screen Orientation / Rotate Button (Alterna entre Retrato e Paisagem)
                     IconButton(onClick = {
-                        val activity = context as? Activity
+                        val activity = context.findActivity()
                         if (activity != null) {
                             val currentOrientation = context.resources.configuration.orientation
                             if (currentOrientation == Configuration.ORIENTATION_LANDSCAPE) {
                                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                 aspectToastMessage = "Modo Retrato"
                             } else {
-                                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                 aspectToastMessage = "Modo Paisagem"
                             }
                         }
@@ -3085,23 +3086,42 @@ fun updateTextureViewTransform(view: android.view.TextureView, videoWidth: Int, 
     var scaleY = 1f
     
     if (scaleMode == 0) {
-        // Fit (Original)
+        // Preencher / Estendido (Preenchimento total da tela, sem bordas pretas)
         if (videoRatio > viewRatio) {
-            scaleY = viewRatio / videoRatio
-        } else {
             scaleX = videoRatio / viewRatio
+            scaleY = 1f
+        } else {
+            scaleX = 1f
+            scaleY = viewRatio / videoRatio
         }
     } else if (scaleMode == 1) {
-        // Crop (PanScan)
+        // Ajustar (Original / Fit)
         if (videoRatio > viewRatio) {
-            scaleX = videoRatio / viewRatio
-        } else {
+            scaleX = 1f
             scaleY = viewRatio / videoRatio
+        } else {
+            scaleX = videoRatio / viewRatio
+            scaleY = 1f
         }
+    } else if (scaleMode == 2) {
+        // Esticar (Preenchimento Total / Stretch)
+        scaleX = 1f
+        scaleY = 1f
     }
     
     matrix.setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
     view.setTransform(matrix)
+}
+
+fun Context.findActivity(): Activity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is Activity) {
+            return current
+        }
+        current = current.baseContext
+    }
+    return null
 }
 
 @Composable
@@ -3109,8 +3129,9 @@ fun HideSystemBarsEffect() {
     val view = LocalView.current
     val context = LocalContext.current
     DisposableEffect(view, context) {
+        val activity = context.findActivity()
         val window = (view.parent as? DialogWindowProvider)?.window
-            ?: (context as? Activity)?.window
+            ?: activity?.window
         
         var controller: WindowInsetsControllerCompat? = null
         if (window != null) {
@@ -3129,7 +3150,6 @@ fun HideSystemBarsEffect() {
         
         onDispose {
             controller?.show(WindowInsetsCompat.Type.systemBars())
-            val activity = context as? Activity
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
