@@ -8,6 +8,8 @@ import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.drawable.ColorDrawable
+import android.view.View
+import android.view.Window
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.os.Build
@@ -16,6 +18,7 @@ import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.foundation.BorderStroke
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -109,6 +112,7 @@ fun ArcboxMediaViewerModal(
             decorFitsSystemWindows = false
         )
     ) {
+        HideSystemBarsEffect()
         if (item.fileType == FileType.AUDIO) {
             AudioPlayerContent(
                 file = resolvedFile,
@@ -1829,7 +1833,7 @@ fun VideoPlayerContent(
     var isLooping by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(false) }
     var videoAspectRatio by remember(file.path) { mutableFloatStateOf(16 / 9f) }
-    val scaleModeLabels = listOf("Preencher / Estendido", "Ajustar (Original)", "Esticar (Preenchimento Total)")
+    val scaleModeLabels = listOf("Preencher (Crop)", "Ajustar (Fit)")
     var scaleModeIndex by remember { mutableIntStateOf(0) }
 
     var aspectToastMessage by remember { mutableStateOf<String?>(null) }
@@ -2029,19 +2033,21 @@ fun VideoPlayerContent(
                 exit = fadeOut() + shrinkVertically(),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 16.dp)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                    .padding(top = 76.dp)
             ) {
                 Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-                    shape = CircleShape,
-                    shadowElevation = 6.dp
+                    color = Color.Black.copy(alpha = 0.85f),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                    shadowElevation = 8.dp
                 ) {
                     Text(
                         text = aspectToastMessage ?: "",
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
                         fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
             }
@@ -3086,7 +3092,7 @@ fun updateTextureViewTransform(view: android.view.TextureView, videoWidth: Int, 
     var scaleY = 1f
     
     if (scaleMode == 0) {
-        // Preencher / Estendido (Preenchimento total da tela, sem bordas pretas)
+        // Preencher (Crop) - Preenchimento total da tela, sem bordas pretas
         if (videoRatio > viewRatio) {
             scaleX = videoRatio / viewRatio
             scaleY = 1f
@@ -3094,8 +3100,8 @@ fun updateTextureViewTransform(view: android.view.TextureView, videoWidth: Int, 
             scaleX = 1f
             scaleY = viewRatio / videoRatio
         }
-    } else if (scaleMode == 1) {
-        // Ajustar (Original / Fit)
+    } else {
+        // Ajustar (Fit) - Mantém proporção original
         if (videoRatio > viewRatio) {
             scaleX = 1f
             scaleY = viewRatio / videoRatio
@@ -3103,14 +3109,25 @@ fun updateTextureViewTransform(view: android.view.TextureView, videoWidth: Int, 
             scaleX = videoRatio / viewRatio
             scaleY = 1f
         }
-    } else if (scaleMode == 2) {
-        // Esticar (Preenchimento Total / Stretch)
-        scaleX = 1f
-        scaleY = 1f
     }
     
     matrix.setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
     view.setTransform(matrix)
+}
+
+fun findDialogWindow(view: View): Window? {
+    var current: Any? = view
+    while (current != null) {
+        if (current is DialogWindowProvider) {
+            return current.window
+        }
+        if (current is View) {
+            current = current.parent
+        } else {
+            break
+        }
+    }
+    return null
 }
 
 fun Context.findActivity(): Activity? {
@@ -3130,20 +3147,20 @@ fun HideSystemBarsEffect() {
     val context = LocalContext.current
     DisposableEffect(view, context) {
         val activity = context.findActivity()
-        val window = (view.parent as? DialogWindowProvider)?.window
-            ?: activity?.window
+        val dialogWindow = findDialogWindow(view) ?: activity?.window
         
         var controller: WindowInsetsControllerCompat? = null
-        if (window != null) {
-            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
+        if (dialogWindow != null) {
+            dialogWindow.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            dialogWindow.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
+            dialogWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.attributes = window.attributes.apply {
+                dialogWindow.attributes = dialogWindow.attributes.apply {
                     layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
             }
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            controller = WindowCompat.getInsetsController(window, view)
+            WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
+            controller = WindowCompat.getInsetsController(dialogWindow, view)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
         }
