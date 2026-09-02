@@ -137,7 +137,10 @@ fun ArcboxPdfViewerModal(
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding(),
             color = Color(0xFF1E1E1E)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {

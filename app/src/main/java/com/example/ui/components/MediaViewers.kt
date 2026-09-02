@@ -854,6 +854,13 @@ fun ArcboxImageViewerScreen(
             }
 
             // Navigation Side Buttons for Images (Previous / Next) (hides with showControls)
+            LaunchedEffect(showControls) {
+                if (showControls) {
+                    kotlinx.coroutines.delay(5000L)
+                    showControls = false
+                }
+            }
+
             AnimatedVisibility(
                 visible = showControls,
                 enter = fadeIn(),
@@ -1890,7 +1897,6 @@ fun VideoPlayerContent(
     onToggleControls: () -> Unit = {},
     onResetControlsTimer: () -> Unit = {}
 ) {
-    HideSystemBarsEffect()
     val context = LocalContext.current
     var isPlaying by remember(file.path) { mutableStateOf(true) }
     var currentPositionMs by remember(file.path) { mutableLongStateOf(0L) }
@@ -3292,14 +3298,11 @@ fun HideSystemBarsEffect() {
         if (dialogWindow != null) {
             applyWindowConfig(dialogWindow)
             controller = WindowCompat.getInsetsController(dialogWindow, view)
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = false
-            controller.hide(WindowInsetsCompat.Type.systemBars())
         }
         
         onDispose {
-            controller?.show(WindowInsetsCompat.Type.systemBars())
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }

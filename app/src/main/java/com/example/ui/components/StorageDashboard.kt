@@ -123,6 +123,7 @@ fun ArcboxStorageDashboardModal(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
+                    .navigationBarsPadding()
             ) {
                 TopAppBar(
                     title = {
