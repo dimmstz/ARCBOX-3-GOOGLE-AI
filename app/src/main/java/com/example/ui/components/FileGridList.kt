@@ -76,6 +76,11 @@ private val MediaScrimBrush = Brush.verticalGradient(
         Color(0xB8000000)
     )
 )
+private val MediaTextShadow = androidx.compose.ui.graphics.Shadow(
+    color = Color.Black,
+    offset = Offset(0f, 1f),
+    blurRadius = 3f
+)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -130,7 +135,7 @@ fun ArcboxFileGridList(
     var showFabMenu by remember { mutableStateOf(false) }
     val isMultiSelecting = selectedItems.isNotEmpty()
 
-    val fabRotation by animateFloatAsState(
+    val fabRotation = animateFloatAsState(
         targetValue = if (isMultiSelecting || showFabMenu) 135f else 0f,
         animationSpec = spring(
             dampingRatio = 0.82f,
@@ -631,7 +636,7 @@ fun ArcboxFileGridList(
                                         tint = onPrimaryColor,
                                         modifier = Modifier
                                             .size(26.dp)
-                                            .graphicsLayer { rotationZ = fabRotation }
+                                            .graphicsLayer { rotationZ = fabRotation.value }
                                     )
                                 }
                             }
@@ -747,11 +752,7 @@ fun FileGridCard(
                         Text(
                             text = displayName,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                shadow = androidx.compose.ui.graphics.Shadow(
-                                    color = Color.Black,
-                                    offset = Offset(0f, 1f),
-                                    blurRadius = 3f
-                                )
+                                shadow = MediaTextShadow
                             ),
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 11.sp,
@@ -763,11 +764,7 @@ fun FileGridCard(
                         Text(
                             text = formattedSize,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                shadow = androidx.compose.ui.graphics.Shadow(
-                                    color = Color.Black,
-                                    offset = Offset(0f, 1f),
-                                    blurRadius = 3f
-                                )
+                                shadow = MediaTextShadow
                             ),
                             fontWeight = FontWeight.Normal,
                             fontSize = 10.sp,
@@ -1427,71 +1424,6 @@ fun FileThumbnailImage(
                 modifier = Modifier.size(iconSize)
             )
         }
-    }
-}
-
-@Composable
-private fun OutlinedGridText(
-    text: String,
-    fontSize: androidx.compose.ui.unit.TextUnit,
-    fontWeight: FontWeight = FontWeight.SemiBold,
-    textColor: Color = Color.White,
-    outlineColor: Color = Color.Black.copy(alpha = 0.95f),
-    maxLines: Int = 1,
-    overflow: TextOverflow = TextOverflow.Ellipsis,
-    textAlign: TextAlign = TextAlign.Center,
-    style: TextStyle = MaterialTheme.typography.bodySmall,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        val outlineOffsets = remember {
-            listOf(
-                Offset(-1.2f, -1.2f),
-                Offset(1.2f, -1.2f),
-                Offset(-1.2f, 1.2f),
-                Offset(1.2f, 1.2f),
-                Offset(0f, 1.5f)
-            )
-        }
-        for (offset in outlineOffsets) {
-            Text(
-                text = text,
-                style = style.copy(
-                    shadow = Shadow(
-                        color = outlineColor,
-                        offset = offset,
-                        blurRadius = 3f
-                    )
-                ),
-                fontWeight = fontWeight,
-                fontSize = fontSize,
-                maxLines = maxLines,
-                overflow = overflow,
-                textAlign = textAlign,
-                color = outlineColor,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Text(
-            text = text,
-            style = style.copy(
-                shadow = Shadow(
-                    color = Color.Black,
-                    offset = Offset(0f, 1f),
-                    blurRadius = 3f
-                )
-            ),
-            fontWeight = fontWeight,
-            fontSize = fontSize,
-            maxLines = maxLines,
-            overflow = overflow,
-            textAlign = textAlign,
-            color = textColor,
-            modifier = Modifier.fillMaxWidth()
-        )
     }
 }
 
