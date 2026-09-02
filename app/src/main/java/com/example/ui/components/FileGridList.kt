@@ -61,6 +61,7 @@ import kotlinx.coroutines.delay
 import com.example.data.models.ClipboardMode
 import com.example.data.models.FileItem
 import com.example.data.models.FileType
+import com.example.data.models.FolderTransitionType
 import com.example.data.models.ViewMode
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -119,17 +120,21 @@ fun ArcboxFileGridList(
     onClearSearch: () -> Unit = {},
     onToggleGlobalSearch: () -> Unit = {},
     currentPath: String = "",
+    folderTransition: FolderTransitionType = FolderTransitionType.MATERIAL_SLIDE,
     tempZipSourcePath: String? = null,
     onExtractIndividual: ((FileItem) -> Unit)? = null,
     onUninstallApp: ((String) -> Unit)? = null,
     onOpenAppSettings: ((String) -> Unit)? = null
 ) {
-    val gridState = rememberLazyGridState()
-    val listState = rememberLazyListState()
-
-    LaunchedEffect(currentPath) {
-        gridState.scrollToItem(0)
-        listState.scrollToItem(0)
+    val folderCache = remember { mutableStateMapOf<String, List<FileItem>>() }
+    LaunchedEffect(currentPath, files) {
+        if (files.isNotEmpty() || !folderCache.containsKey(currentPath)) {
+            folderCache[currentPath] = files
+        }
+        if (folderCache.size > 25) {
+            val keyToRemove = folderCache.keys.firstOrNull { it != currentPath }
+            if (keyToRemove != null) folderCache.remove(keyToRemove)
+        }
     }
 
     var showFabMenu by remember { mutableStateOf(false) }
@@ -166,8 +171,8 @@ fun ArcboxFileGridList(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (files.isEmpty()) {
-            if (searchQuery.isNotBlank()) {
+        if (searchQuery.isNotBlank()) {
+            if (files.isEmpty()) {
                 EmptySearchState(
                     searchQuery = searchQuery,
                     isGlobalSearch = isGlobalSearch,
@@ -175,72 +180,389 @@ fun ArcboxFileGridList(
                     onToggleGlobalSearch = onToggleGlobalSearch
                 )
             } else {
-                EmptyFolderState(onCreateFolder = onCreateFolder)
-            }
-        } else {
-            Crossfade(
-                targetState = viewMode,
-                animationSpec = tween(durationMillis = 150),
-                label = "ViewModeAnimation",
-                modifier = Modifier.fillMaxSize()
-            ) { mode ->
-                if (mode == ViewMode.GRID) {
-                    LazyVerticalGrid(
-                        state = gridState,
-                        columns = GridCells.Fixed(3),
-                        contentPadding = PaddingValues(10.dp, 10.dp, 10.dp, 88.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(
-                            items = files,
-                            key = { it.id },
-                            contentType = { it.fileType }
-                        ) { item ->
-                            FileGridCard(
-                                item = item,
-                                showThumbnails = showThumbnails,
-                                showExtensions = showExtensions,
-                                isSelected = selectedItemIds.contains(item.id),
-                                isSelectionMode = isMultiSelecting,
-                                onClick = onItemClicked,
-                                onLongClick = onItemLongClick,
-                                onToggleFavorite = onToggleFavorite,
-                                tempZipSourcePath = tempZipSourcePath,
-                                onExtractIndividual = onExtractIndividual,
-                                onUninstallApp = onUninstallApp,
-                                onOpenAppSettings = onOpenAppSettings
-                            )
+                Crossfade(
+                    targetState = viewMode,
+                    animationSpec = tween(durationMillis = 150),
+                    label = "ViewModeSearchAnimation",
+                    modifier = Modifier.fillMaxSize()
+                ) { mode ->
+                    if (mode == ViewMode.GRID) {
+                        val searchGridState = rememberLazyGridState()
+                        LazyVerticalGrid(
+                            state = searchGridState,
+                            columns = GridCells.Fixed(3),
+                            contentPadding = PaddingValues(10.dp, 10.dp, 10.dp, 88.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(
+                                items = files,
+                                key = { it.id },
+                                contentType = { it.fileType }
+                            ) { item ->
+                                FileGridCard(
+                                    item = item,
+                                    showThumbnails = showThumbnails,
+                                    showExtensions = showExtensions,
+                                    isSelected = selectedItemIds.contains(item.id),
+                                    isSelectionMode = isMultiSelecting,
+                                    onClick = onItemClicked,
+                                    onLongClick = onItemLongClick,
+                                    onToggleFavorite = onToggleFavorite,
+                                    tempZipSourcePath = tempZipSourcePath,
+                                    onExtractIndividual = onExtractIndividual,
+                                    onUninstallApp = onUninstallApp,
+                                    onOpenAppSettings = onOpenAppSettings
+                                )
+                            }
+                        }
+                    } else {
+                        val searchListState = rememberLazyListState()
+                        LazyColumn(
+                            state = searchListState,
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(
+                                items = files,
+                                key = { it.id },
+                                contentType = { it.fileType }
+                            ) { item ->
+                                FileListItem(
+                                    item = item,
+                                    showThumbnails = showThumbnails,
+                                    showExtensions = showExtensions,
+                                    isSelected = selectedItemIds.contains(item.id),
+                                    isSelectionMode = isMultiSelecting,
+                                    onClick = onItemClicked,
+                                    onLongClick = onItemLongClick,
+                                    onToggleFavorite = onToggleFavorite,
+                                    onRename = onRenameItem,
+                                    onShareItem = onShareItem,
+                                    tempZipSourcePath = tempZipSourcePath,
+                                    onExtractIndividual = onExtractIndividual,
+                                    onUninstallApp = onUninstallApp,
+                                    onOpenAppSettings = onOpenAppSettings
+                                )
+                            }
                         }
                     }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(
-                            items = files,
-                            key = { it.id },
-                            contentType = { it.fileType }
-                        ) { item ->
-                            FileListItem(
-                                item = item,
-                                showThumbnails = showThumbnails,
-                                showExtensions = showExtensions,
-                                isSelected = selectedItemIds.contains(item.id),
-                                isSelectionMode = isMultiSelecting,
-                                onClick = onItemClicked,
-                                onLongClick = onItemLongClick,
-                                onToggleFavorite = onToggleFavorite,
-                                onRename = onRenameItem,
-                                onShareItem = onShareItem,
-                                tempZipSourcePath = tempZipSourcePath,
-                                onExtractIndividual = onExtractIndividual,
-                                onUninstallApp = onUninstallApp,
-                                onOpenAppSettings = onOpenAppSettings
+                }
+            }
+        } else {
+            AnimatedContent(
+                targetState = currentPath,
+                transitionSpec = {
+                    val initialDepth = initialState.count { it == '/' }
+                    val targetDepth = targetState.count { it == '/' }
+                    val isSubfolder = (targetState.startsWith(initialState) && targetState.length > initialState.length) || targetDepth > initialDepth
+                    val isParent = (initialState.startsWith(targetState) && initialState.length > targetState.length) || targetDepth < initialDepth
+
+                    when (folderTransition) {
+                        FolderTransitionType.MATERIAL_SLIDE -> {
+                            if (isSubfolder) {
+                                (slideInHorizontally(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { fullWidth -> (fullWidth * 0.28f).toInt() }
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing)
+                                ) + scaleIn(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialScale = 0.94f
+                                )).togetherWith(
+                                    slideOutHorizontally(
+                                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                        targetOffsetX = { fullWidth -> -(fullWidth * 0.20f).toInt() }
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    ) + scaleOut(
+                                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                        targetScale = 0.94f
+                                    )
+                                ).apply {
+                                    targetContentZIndex = 1f
+                                }
+                            } else if (isParent) {
+                                (slideInHorizontally(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { fullWidth -> -(fullWidth * 0.20f).toInt() }
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing)
+                                ) + scaleIn(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialScale = 1.05f
+                                )).togetherWith(
+                                    slideOutHorizontally(
+                                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                        targetOffsetX = { fullWidth -> (fullWidth * 0.28f).toInt() }
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    ) + scaleOut(
+                                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                        targetScale = 1.05f
+                                    )
+                                ).apply {
+                                    targetContentZIndex = -1f
+                                }
+                            } else {
+                                (fadeIn(animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing)) +
+                                 scaleIn(animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing), initialScale = 0.96f)
+                                ).togetherWith(
+                                    fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)) +
+                                    scaleOut(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing), targetScale = 0.96f)
+                                )
+                            }
+                        }
+
+                        FolderTransitionType.ZOOM_EXPAND -> {
+                            if (isSubfolder) {
+                                (scaleIn(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialScale = 0.82f
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 240, easing = LinearOutSlowInEasing)
+                                )).togetherWith(
+                                    scaleOut(
+                                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                        targetScale = 1.15f
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    )
+                                ).apply {
+                                    targetContentZIndex = 1f
+                                }
+                            } else if (isParent) {
+                                (scaleIn(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialScale = 1.15f
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 240, easing = LinearOutSlowInEasing)
+                                )).togetherWith(
+                                    scaleOut(
+                                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                        targetScale = 0.82f
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    )
+                                ).apply {
+                                    targetContentZIndex = -1f
+                                }
+                            } else {
+                                (scaleIn(
+                                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                    initialScale = 0.92f
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 200, easing = LinearOutSlowInEasing)
+                                )).togetherWith(
+                                    scaleOut(
+                                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                                        targetScale = 1.08f
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    )
+                                )
+                            }
+                        }
+
+                        FolderTransitionType.VERTICAL_SLIDE -> {
+                            if (isSubfolder) {
+                                (slideInVertically(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialOffsetY = { fullHeight -> (fullHeight * 0.25f).toInt() }
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing)
+                                ) + scaleIn(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialScale = 0.96f
+                                )).togetherWith(
+                                    slideOutVertically(
+                                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                        targetOffsetY = { fullHeight -> -(fullHeight * 0.15f).toInt() }
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    )
+                                ).apply {
+                                    targetContentZIndex = 1f
+                                }
+                            } else if (isParent) {
+                                (slideInVertically(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialOffsetY = { fullHeight -> -(fullHeight * 0.15f).toInt() }
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing)
+                                ) + scaleIn(
+                                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                    initialScale = 1.04f
+                                )).togetherWith(
+                                    slideOutVertically(
+                                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                        targetOffsetY = { fullHeight -> (fullHeight * 0.25f).toInt() }
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    ) + scaleOut(
+                                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                        targetScale = 0.96f
+                                    )
+                                ).apply {
+                                    targetContentZIndex = -1f
+                                }
+                            } else {
+                                (fadeIn(animationSpec = tween(durationMillis = 200, easing = LinearOutSlowInEasing)) +
+                                 slideInVertically(animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)) { (it * 0.08f).toInt() }
+                                ).togetherWith(
+                                    fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)) +
+                                    slideOutVertically(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)) { -(it * 0.08f).toInt() }
+                                )
+                            }
+                        }
+
+                        FolderTransitionType.FADE_THROUGH -> {
+                            (fadeIn(
+                                animationSpec = tween(durationMillis = 260, easing = LinearOutSlowInEasing)
+                            ) + scaleIn(
+                                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                                initialScale = 0.95f
+                            )).togetherWith(
+                                fadeOut(
+                                    animationSpec = tween(durationMillis = 190, easing = FastOutLinearInEasing)
+                                ) + scaleOut(
+                                    animationSpec = tween(durationMillis = 190, easing = FastOutSlowInEasing),
+                                    targetScale = 1.03f
+                                )
                             )
+                        }
+
+                        FolderTransitionType.STACK_OVERLAY -> {
+                            if (isSubfolder) {
+                                (slideInHorizontally(
+                                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { fullWidth -> fullWidth }
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing)
+                                )).togetherWith(
+                                    scaleOut(
+                                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                                        targetScale = 0.92f
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 220, easing = FastOutLinearInEasing)
+                                    )
+                                ).apply {
+                                    targetContentZIndex = 2f
+                                }
+                            } else if (isParent) {
+                                (scaleIn(
+                                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                                    initialScale = 0.92f
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing)
+                                )).togetherWith(
+                                    slideOutHorizontally(
+                                        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                                        targetOffsetX = { fullWidth -> fullWidth }
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
+                                    )
+                                ).apply {
+                                    targetContentZIndex = -1f
+                                }
+                            } else {
+                                (slideInHorizontally(
+                                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { (it * 0.3f).toInt() }
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 200, easing = LinearOutSlowInEasing)
+                                )).togetherWith(
+                                    slideOutHorizontally(
+                                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                                        targetOffsetX = { -(it * 0.3f).toInt() }
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                },
+                label = "FolderTransition",
+                modifier = Modifier.fillMaxSize()
+            ) { displayedPath ->
+                val currentFolderFiles = if (displayedPath == currentPath) {
+                    files
+                } else {
+                    folderCache[displayedPath] ?: emptyList()
+                }
+
+                if (currentFolderFiles.isEmpty()) {
+                    EmptyFolderState(onCreateFolder = onCreateFolder)
+                } else {
+                    Crossfade(
+                        targetState = viewMode,
+                        animationSpec = tween(durationMillis = 150),
+                        label = "ViewModeAnimation",
+                        modifier = Modifier.fillMaxSize()
+                    ) { mode ->
+                        if (mode == ViewMode.GRID) {
+                            val folderGridState = rememberLazyGridState()
+                            LazyVerticalGrid(
+                                state = folderGridState,
+                                columns = GridCells.Fixed(3),
+                                contentPadding = PaddingValues(10.dp, 10.dp, 10.dp, 88.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(
+                                    items = currentFolderFiles,
+                                    key = { it.id },
+                                    contentType = { it.fileType }
+                                ) { item ->
+                                    FileGridCard(
+                                        item = item,
+                                        showThumbnails = showThumbnails,
+                                        showExtensions = showExtensions,
+                                        isSelected = selectedItemIds.contains(item.id),
+                                        isSelectionMode = isMultiSelecting,
+                                        onClick = onItemClicked,
+                                        onLongClick = onItemLongClick,
+                                        onToggleFavorite = onToggleFavorite,
+                                        tempZipSourcePath = tempZipSourcePath,
+                                        onExtractIndividual = onExtractIndividual,
+                                        onUninstallApp = onUninstallApp,
+                                        onOpenAppSettings = onOpenAppSettings
+                                    )
+                                }
+                            }
+                        } else {
+                            val folderListState = rememberLazyListState()
+                            LazyColumn(
+                                state = folderListState,
+                                contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(
+                                    items = currentFolderFiles,
+                                    key = { it.id },
+                                    contentType = { it.fileType }
+                                ) { item ->
+                                    FileListItem(
+                                        item = item,
+                                        showThumbnails = showThumbnails,
+                                        showExtensions = showExtensions,
+                                        isSelected = selectedItemIds.contains(item.id),
+                                        isSelectionMode = isMultiSelecting,
+                                        onClick = onItemClicked,
+                                        onLongClick = onItemLongClick,
+                                        onToggleFavorite = onToggleFavorite,
+                                        onRename = onRenameItem,
+                                        onShareItem = onShareItem,
+                                        tempZipSourcePath = tempZipSourcePath,
+                                        onExtractIndividual = onExtractIndividual,
+                                        onUninstallApp = onUninstallApp,
+                                        onOpenAppSettings = onOpenAppSettings
+                                    )
+                                }
+                            }
                         }
                     }
                 }

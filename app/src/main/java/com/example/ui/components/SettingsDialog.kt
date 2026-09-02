@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.models.FolderTransitionType
 import com.example.data.models.ThemeMode
 import com.example.ui.theme.AccentColorOption
 import com.example.ui.theme.PredefinedCustomColors
@@ -49,6 +50,8 @@ fun ArcboxSettingsModal(
     currentThemeMode: ThemeMode,
     currentAccent: AccentColorOption,
     customAccentColorHex: Long = 0xFF4F46E5L,
+    currentFolderTransition: FolderTransitionType = FolderTransitionType.MATERIAL_SLIDE,
+    onSelectFolderTransition: (FolderTransitionType) -> Unit = {},
     deletePermanently: Boolean,
     onToggleDeletePermanently: (Boolean) -> Unit,
     confirmDelete: Boolean,
@@ -512,6 +515,122 @@ fun ArcboxSettingsModal(
                             checked = showExtensions,
                             onCheckedChange = { onToggleShowExtensions(it) }
                         )
+                    }
+
+                    // CATEGORY: TRANSIÇÕES ENTRE PASTAS (5 ESTILOS SUAVES)
+                    SettingsSectionCard(
+                        title = "Transição entre Pastas",
+                        icon = Icons.Default.Animation
+                    ) {
+                        Text(
+                            text = "Selecione o estilo visual e dinâmica da transição suave de 120Hz ao abrir pastas e voltar aos diretórios anteriores.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            FolderTransitionType.values().forEach { transition ->
+                                val isSelected = currentFolderTransition == transition
+
+                                val (icon, badgeLabel) = when (transition) {
+                                    FolderTransitionType.MATERIAL_SLIDE -> Pair(Icons.Default.SwapHoriz, "Padrão M3")
+                                    FolderTransitionType.ZOOM_EXPAND -> Pair(Icons.Default.ZoomIn, "Zoom 3D")
+                                    FolderTransitionType.VERTICAL_SLIDE -> Pair(Icons.Default.SwapVert, "Gaveta")
+                                    FolderTransitionType.FADE_THROUGH -> Pair(Icons.Default.BlurOn, "Esmaecer")
+                                    FolderTransitionType.STACK_OVERLAY -> Pair(Icons.Default.Layers, "Camadas")
+                                }
+
+                                Surface(
+                                    onClick = { onSelectFolderTransition(transition) },
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(
+                                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.surfaceVariant
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = icon,
+                                                contentDescription = null,
+                                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                                       else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = transition.title,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                                                )
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                            else MaterialTheme.colorScheme.surfaceVariant,
+                                                    modifier = Modifier.padding(horizontal = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = badgeLabel,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = transition.description,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontSize = 11.5.sp,
+                                                lineHeight = 15.sp
+                                            )
+                                        }
+
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = { onSelectFolderTransition(transition) },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // CATEGORY 2: DESEMPENHO & CACHE

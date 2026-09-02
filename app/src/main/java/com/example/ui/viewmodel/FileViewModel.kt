@@ -100,6 +100,7 @@ data class FileUiState(
     val showHiddenFiles: Boolean = false,
     val showExtensions: Boolean = true,
     val parallelDirectoryReading: Boolean = true,
+    val folderTransition: FolderTransitionType = FolderTransitionType.MATERIAL_SLIDE,
     val compressionLevel: String = "Normal",
     val biometricLock: Boolean = false,
     val isAppLocked: Boolean = false,
@@ -148,6 +149,8 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             val showHiddenFiles = prefs.getBoolean("show_hidden_files", false)
             val showExtensions = prefs.getBoolean("show_extensions", true)
             val parallelDirectoryReading = prefs.getBoolean("parallel_directory_reading", true)
+            val savedFolderTransitionName = prefs.getString("folder_transition", FolderTransitionType.MATERIAL_SLIDE.name) ?: FolderTransitionType.MATERIAL_SLIDE.name
+            val loadedFolderTransition = try { FolderTransitionType.valueOf(savedFolderTransitionName) } catch (_: Exception) { FolderTransitionType.MATERIAL_SLIDE }
             val compressionLevel = prefs.getString("compression_level", "Normal") ?: "Normal"
             val biometricLock = prefs.getBoolean("biometric_lock", false)
             val autoLockVault = prefs.getBoolean("auto_lock_vault", true)
@@ -187,6 +190,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 showHiddenFiles = showHiddenFiles,
                 showExtensions = showExtensions,
                 parallelDirectoryReading = parallelDirectoryReading,
+                folderTransition = loadedFolderTransition,
                 compressionLevel = compressionLevel,
                 biometricLock = biometricLock,
                 isAppLocked = biometricLock,
@@ -417,10 +421,33 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 currentTabs[currentTabIdx] = updatedTab
 
+                val state = _uiState.value
+                val loadedFiles = try {
+                    withContext(Dispatchers.IO) {
+                        repository.listFiles(
+                            directoryPath = path,
+                            safUriString = null,
+                            sortOption = state.sortOption,
+                            sortOrder = state.sortOrder,
+                            searchQuery = "",
+                            filterCategory = null,
+                            appSubFilter = state.appSubFilter,
+                            isGlobalSearch = false,
+                            isAppManagerMode = state.isAppManagerOpen,
+                            showHiddenFiles = state.showHiddenFiles,
+                            parallelDirectoryReading = state.parallelDirectoryReading
+                        )
+                    }
+                } catch (e: Exception) {
+                    emptyList()
+                }
+
                 _uiState.update {
                     it.copy(
                         tabs = currentTabs,
                         currentPath = path,
+                        currentFiles = loadedFiles,
+                        isLoading = false,
                         selectedItems = emptySet(),
                         isFavoritesOnly = false,
                         isRecentsOnly = false,
@@ -429,7 +456,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                         tempZipSourcePath = if (path.startsWith(tempViewsDir)) it.tempZipSourcePath else null
                     )
                 }
-                refreshFiles()
+                startDirectoryWatcher(path)
             }
         }
     }
@@ -465,15 +492,40 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                     historyIndex = newIndex
                 )
                 currentTabs[currentTabIdx] = updatedTab
-                _uiState.update {
-                    it.copy(
-                        tabs = currentTabs,
-                        currentPath = newPath,
-                        selectedItems = emptySet(),
-                        tempZipSourcePath = if (newPath.startsWith(tempViewsDir)) it.tempZipSourcePath else null
-                    )
+                viewModelScope.launch {
+                    val state = _uiState.value
+                    val loadedFiles = try {
+                        withContext(Dispatchers.IO) {
+                            repository.listFiles(
+                                directoryPath = newPath,
+                                safUriString = null,
+                                sortOption = state.sortOption,
+                                sortOrder = state.sortOrder,
+                                searchQuery = "",
+                                filterCategory = null,
+                                appSubFilter = state.appSubFilter,
+                                isGlobalSearch = false,
+                                isAppManagerMode = state.isAppManagerOpen,
+                                showHiddenFiles = state.showHiddenFiles,
+                                parallelDirectoryReading = state.parallelDirectoryReading
+                            )
+                        }
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+
+                    _uiState.update {
+                        it.copy(
+                            tabs = currentTabs,
+                            currentPath = newPath,
+                            currentFiles = loadedFiles,
+                            isLoading = false,
+                            selectedItems = emptySet(),
+                            tempZipSourcePath = if (newPath.startsWith(tempViewsDir)) it.tempZipSourcePath else null
+                        )
+                    }
+                    startDirectoryWatcher(newPath)
                 }
-                refreshFiles()
                 return true
             }
         }
@@ -928,12 +980,18 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(trashAutoCleanDays = days) }
     }
 
+    fun setFolderTransition(transition: FolderTransitionType) {
+        prefs.edit().putString("folder_transition", transition.name).apply()
+        _uiState.update { it.copy(folderTransition = transition) }
+    }
+
     fun restoreDefaultSettings() {
         prefs.edit()
             .putBoolean("show_hidden_files", false)
             .putBoolean("show_extensions", true)
             .putBoolean("show_thumbnails", true)
             .putBoolean("parallel_directory_reading", true)
+            .putString("folder_transition", FolderTransitionType.MATERIAL_SLIDE.name)
             .putString("compression_level", "Normal")
             .putBoolean("biometric_lock", false)
             .putBoolean("auto_lock_vault", true)
@@ -951,6 +1009,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 showExtensions = true,
                 showThumbnails = true,
                 parallelDirectoryReading = true,
+                folderTransition = FolderTransitionType.MATERIAL_SLIDE,
                 compressionLevel = "Normal",
                 biometricLock = false,
                 autoLockVault = true,

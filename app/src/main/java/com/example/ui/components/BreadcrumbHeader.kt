@@ -80,13 +80,19 @@ fun ArcboxBreadcrumbHeader(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            itemsIndexed(segments) { index, segment ->
+            itemsIndexed(
+                items = segments,
+                key = { _, segment -> segment.fullPath }
+            ) { index, segment ->
                 val isLast = index == segments.size - 1
                 val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                 val lastContainerColor = MaterialTheme.colorScheme.primaryContainer
                 val lastContentColor = MaterialTheme.colorScheme.primary
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.animateItem()
+                ) {
                     Surface(
                         onClick = { onNavigateToPath(segment.fullPath) },
                         shape = RoundedCornerShape(8.dp),

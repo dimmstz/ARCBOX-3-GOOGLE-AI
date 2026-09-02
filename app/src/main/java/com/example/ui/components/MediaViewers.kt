@@ -264,16 +264,12 @@ fun ArcboxMediaViewerModal(
                         visible = showControls,
                         enter = fadeIn(),
                         exit = fadeOut(),
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        Row(
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .fillMaxSize()
+                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                         ) {
                             IconButton(
                                 onClick = {
@@ -281,13 +277,16 @@ fun ArcboxMediaViewerModal(
                                     onPrevious()
                                 },
                                 modifier = Modifier
-                                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-                                    .size(48.dp)
+                                    .align(Alignment.CenterStart)
+                                    .padding(start = 16.dp)
+                                    .background(Color.Black.copy(alpha = 0.52f), CircleShape)
+                                    .size(52.dp)
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Anterior",
-                                    tint = Color.White
+                                    tint = Color.White,
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
                             IconButton(
@@ -296,13 +295,16 @@ fun ArcboxMediaViewerModal(
                                     onNext()
                                 },
                                 modifier = Modifier
-                                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-                                    .size(48.dp)
+                                    .align(Alignment.CenterEnd)
+                                    .padding(end = 16.dp)
+                                    .background(Color.Black.copy(alpha = 0.52f), CircleShape)
+                                    .size(52.dp)
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = "Próxima",
-                                    tint = Color.White
+                                    tint = Color.White,
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
                         }
@@ -405,8 +407,8 @@ fun ArcboxImageViewerScreen(
     }
 
     val contentScales = listOf(
-        Pair(ContentScale.Crop, "Preencher tela (Estendido)"),
         Pair(ContentScale.Fit, "Ajustado à tela (Original)"),
+        Pair(ContentScale.Crop, "Preencher tela (Estendido)"),
         Pair(ContentScale.Inside, "Tamanho real")
     )
 
@@ -844,6 +846,53 @@ fun ArcboxImageViewerScreen(
                             rotationZ = animateRotation
                         )
                 )
+            }
+
+            // Navigation Side Buttons for Images (Previous / Next)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+            ) {
+                IconButton(
+                    onClick = {
+                        scale = 1f
+                        offset = Offset.Zero
+                        onPrevious()
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 16.dp)
+                        .background(Color.Black.copy(alpha = 0.52f), CircleShape)
+                        .size(52.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Imagem Anterior",
+                        tint = Color.White,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        scale = 1f
+                        offset = Offset.Zero
+                        onNext()
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 16.dp)
+                        .background(Color.Black.copy(alpha = 0.52f), CircleShape)
+                        .size(52.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Próxima Imagem",
+                        tint = Color.White,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
             }
 
             // Top App Bar matching Screenshot (Title with marquee, size & resolution, info button)
@@ -1833,7 +1882,7 @@ fun VideoPlayerContent(
     var isLooping by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(false) }
     var videoAspectRatio by remember(file.path) { mutableFloatStateOf(16 / 9f) }
-    val scaleModeLabels = listOf("Preencher (Crop)", "Ajustar (Fit)")
+    val scaleModeLabels = listOf("Ajustar (Fit)", "Preencher (Crop)")
     var scaleModeIndex by remember { mutableIntStateOf(0) }
 
     var aspectToastMessage by remember { mutableStateOf<String?>(null) }
@@ -2000,7 +2049,7 @@ fun VideoPlayerContent(
                             .crossfade(true)
                             .build(),
                         contentDescription = file.name,
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize()
                     )
                     Box(
@@ -3092,22 +3141,22 @@ fun updateTextureViewTransform(view: android.view.TextureView, videoWidth: Int, 
     var scaleY = 1f
     
     if (scaleMode == 0) {
-        // Preencher (Crop) - Preenchimento total da tela, sem bordas pretas
+        // Ajustar (Fit) - Mantém proporção original encostando nos extremos da tela sem cortar
         if (videoRatio > viewRatio) {
-            scaleX = videoRatio / viewRatio
-            scaleY = 1f
-        } else {
             scaleX = 1f
             scaleY = viewRatio / videoRatio
+        } else {
+            scaleX = videoRatio / viewRatio
+            scaleY = 1f
         }
     } else {
-        // Ajustar (Fit) - Mantém proporção original
+        // Preencher (Crop) - Preenchimento total da tela cortando bordas se necessário
         if (videoRatio > viewRatio) {
-            scaleX = 1f
-            scaleY = viewRatio / videoRatio
-        } else {
             scaleX = videoRatio / viewRatio
             scaleY = 1f
+        } else {
+            scaleX = 1f
+            scaleY = viewRatio / videoRatio
         }
     }
     

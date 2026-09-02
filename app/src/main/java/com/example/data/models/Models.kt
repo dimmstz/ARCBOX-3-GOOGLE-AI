@@ -74,6 +74,32 @@ enum class ViewMode { GRID, LIST }
 enum class ThemeMode { LIGHT, DARK, SYSTEM }
 enum class ClipboardMode { COPY, CUT }
 
+enum class FolderTransitionType(
+    val title: String,
+    val description: String
+) {
+    MATERIAL_SLIDE(
+        title = "Deslize Suave (M3)",
+        description = "Deslize lateral dinâmico com escala e fade suave"
+    ),
+    ZOOM_EXPAND(
+        title = "Zoom & Expansão",
+        description = "Expansão a partir do centro com efeito de aproximação"
+    ),
+    VERTICAL_SLIDE(
+        title = "Deslize Vertical",
+        description = "Movimento vertical fluido ascendente e descendente"
+    ),
+    FADE_THROUGH(
+        title = "Fade Suave",
+        description = "Esmaecimento elegante com micro-escala fluida"
+    ),
+    STACK_OVERLAY(
+        title = "Sobreposição em Pilha",
+        description = "Efeito de camadas sobrepostas com profundidade visual"
+    )
+}
+
 data class ApkInfo(
     val packageName: String,
     val versionName: String,

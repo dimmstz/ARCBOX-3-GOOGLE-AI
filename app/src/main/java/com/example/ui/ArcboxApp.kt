@@ -528,6 +528,7 @@ fun ArcboxApp(
                         showExtensions = uiState.showExtensions,
                         selectedItems = uiState.selectedItems,
                         currentPath = uiState.currentPath,
+                        folderTransition = uiState.folderTransition,
                         onItemClick = { item ->
                             if (item.isDirectory) {
                                 viewModel.navigateToDirectory(item.path)
@@ -813,6 +814,8 @@ fun ArcboxApp(
                 currentThemeMode = uiState.themeMode,
                 currentAccent = uiState.accentOption,
                 customAccentColorHex = uiState.customAccentColorHex,
+                currentFolderTransition = uiState.folderTransition,
+                onSelectFolderTransition = { viewModel.setFolderTransition(it) },
                 deletePermanently = uiState.deletePermanently,
                 onToggleDeletePermanently = { viewModel.setDeletePermanently(it) },
                 confirmDelete = uiState.confirmDelete,
