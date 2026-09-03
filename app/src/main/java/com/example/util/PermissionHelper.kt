@@ -184,8 +184,56 @@ object PermissionHelper {
     }
 
     // =========================================================================
-    // INTENT OPENERS WITH MULTI-VENDOR FALLBACK
+    // INTENT FACTORIES & OPENERS WITH MULTI-VENDOR FALLBACK
     // =========================================================================
+
+    /**
+     * Creates intent for All Files Access permission screen (Android 11+).
+     */
+    fun getAllFilesAccessIntent(context: Context): Intent {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+        } else {
+            getAppDetailsSettingsIntent(context)
+        }
+    }
+
+    /**
+     * Creates intent for Unknown Sources / Install Packages permission screen.
+     */
+    fun getInstallPackagesIntent(context: Context): Intent {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+        } else {
+            getAppDetailsSettingsIntent(context)
+        }
+    }
+
+    /**
+     * Creates intent for App Notification settings screen.
+     */
+    fun getNotificationSettingsIntent(context: Context): Intent {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            }
+        } else {
+            getAppDetailsSettingsIntent(context)
+        }
+    }
+
+    /**
+     * Creates intent for App Info / Details settings.
+     */
+    fun getAppDetailsSettingsIntent(context: Context): Intent {
+        return Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        }
+    }
 
     /**
      * Opens the All Files Access permission screen (Android 11+), with resilient fallback.

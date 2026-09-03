@@ -74,6 +74,16 @@ fun PermissionWelcomeScreen(
         }
     }
 
+    // Activity Result Launcher for All Files Access (Android 11+ / Settings)
+    val storageActivityLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        hasStoragePermission = PermissionHelper.hasAllFilesAccess(context)
+        hasInstallPermission = PermissionHelper.hasInstallPackagesPermission(context)
+        hasNotificationPermission = PermissionHelper.hasNotificationPermission(context)
+    }
+
+    // Activity Result Launcher for Legacy Storage (Android 10 and below)
     val legacyStorageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -81,15 +91,45 @@ fun PermissionWelcomeScreen(
         hasNotificationPermission = PermissionHelper.hasNotificationPermission(context)
     }
 
-    val notificationLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
+    // Activity Result Launcher for Unknown App Sources (Install APKs)
+    val installPackagesLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        hasInstallPermission = PermissionHelper.hasInstallPackagesPermission(context)
+        hasStoragePermission = PermissionHelper.hasAllFilesAccess(context)
+        hasNotificationPermission = PermissionHelper.hasNotificationPermission(context)
+    }
+
+    // Activity Result Launcher for Notification Settings Screen
+    val notificationSettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
     ) {
         hasNotificationPermission = PermissionHelper.hasNotificationPermission(context)
+        hasStoragePermission = PermissionHelper.hasAllFilesAccess(context)
+        hasInstallPermission = PermissionHelper.hasInstallPackagesPermission(context)
+    }
+
+    // Activity Result Launcher for Notification Runtime Prompt (Android 13+)
+    var notificationRequestedOnce by remember { mutableStateOf(false) }
+    val notificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotificationPermission = isGranted || PermissionHelper.hasNotificationPermission(context)
     }
 
     fun requestStorage() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            PermissionHelper.requestAllFilesAccess(context)
+            val intent = PermissionHelper.getAllFilesAccessIntent(context)
+            try {
+                storageActivityLauncher.launch(intent)
+            } catch (_: Exception) {
+                try {
+                    val fallbackIntent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    storageActivityLauncher.launch(fallbackIntent)
+                } catch (_: Exception) {
+                    PermissionHelper.openAppDetailsSettings(context)
+                }
+            }
         } else {
             legacyStorageLauncher.launch(
                 arrayOf(
@@ -97,6 +137,38 @@ fun PermissionWelcomeScreen(
                     Manifest.permission.WRITE_EXTERNAL_STORAGE
                 )
             )
+        }
+    }
+
+    fun requestInstallPackages() {
+        val intent = PermissionHelper.getInstallPackagesIntent(context)
+        try {
+            installPackagesLauncher.launch(intent)
+        } catch (_: Exception) {
+            PermissionHelper.openAppDetailsSettings(context)
+        }
+    }
+
+    fun requestNotifications() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (!notificationRequestedOnce) {
+                notificationRequestedOnce = true
+                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                val intent = PermissionHelper.getNotificationSettingsIntent(context)
+                try {
+                    notificationSettingsLauncher.launch(intent)
+                } catch (_: Exception) {
+                    PermissionHelper.openAppDetailsSettings(context)
+                }
+            }
+        } else {
+            val intent = PermissionHelper.getNotificationSettingsIntent(context)
+            try {
+                notificationSettingsLauncher.launch(intent)
+            } catch (_: Exception) {
+                PermissionHelper.openAppDetailsSettings(context)
+            }
         }
     }
 
@@ -385,7 +457,7 @@ fun PermissionWelcomeScreen(
                             description = "Instale e atualize aplicativos direto pelo app",
                             isGranted = hasInstallPermission,
                             onAction = {
-                                PermissionHelper.requestInstallPackagesPermission(context)
+                                requestInstallPackages()
                             }
                         )
 
@@ -402,7 +474,7 @@ fun PermissionWelcomeScreen(
                                 description = "Acompanhe o progresso de tarefas em segundo plano",
                                 isGranted = hasNotificationPermission,
                                 onAction = {
-                                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    requestNotifications()
                                 }
                             )
                         }

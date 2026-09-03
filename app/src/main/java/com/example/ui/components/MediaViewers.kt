@@ -107,12 +107,12 @@ fun ArcboxMediaViewerModal(
     val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
     var showInfo by remember { mutableStateOf(false) }
 
-    Dialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
+    BackHandler(enabled = true) {
+        onClose()
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
         if (item.fileType == FileType.AUDIO) {
             AudioPlayerContent(
@@ -3310,48 +3310,48 @@ fun HideSystemBarsEffect(showControls: Boolean = false, isLightBackground: Boole
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     
-    fun applyWindowConfig(dialogWindow: Window) {
-        dialogWindow.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        dialogWindow.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
-        dialogWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        dialogWindow.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-        dialogWindow.setFlags(
+    fun applyWindowConfig(window: Window) {
+        window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        window.setFlags(
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         )
-        dialogWindow.statusBarColor = android.graphics.Color.TRANSPARENT
-        dialogWindow.navigationBarColor = android.graphics.Color.TRANSPARENT
-        dialogWindow.decorView.setPadding(0, 0, 0, 0)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        window.decorView.setPadding(0, 0, 0, 0)
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            dialogWindow.attributes = dialogWindow.attributes.apply {
+            window.attributes = window.attributes.apply {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
                 width = ViewGroup.LayoutParams.MATCH_PARENT
                 height = ViewGroup.LayoutParams.MATCH_PARENT
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            dialogWindow.attributes = dialogWindow.attributes.apply {
+            window.attributes = window.attributes.apply {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 width = ViewGroup.LayoutParams.MATCH_PARENT
                 height = ViewGroup.LayoutParams.MATCH_PARENT
             }
         } else {
-            dialogWindow.attributes = dialogWindow.attributes.apply {
+            window.attributes = window.attributes.apply {
                 width = ViewGroup.LayoutParams.MATCH_PARENT
                 height = ViewGroup.LayoutParams.MATCH_PARENT
             }
         }
-        WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
     }
 
     DisposableEffect(view, context, isLightBackground) {
         val activity = context.findActivity()
-        val dialogWindow = findDialogWindow(view) ?: activity?.window
+        val targetWindow = findDialogWindow(view) ?: activity?.window
         
         var controller: WindowInsetsControllerCompat? = null
-        if (dialogWindow != null) {
-            applyWindowConfig(dialogWindow)
-            controller = WindowCompat.getInsetsController(dialogWindow, view)
+        if (targetWindow != null) {
+            applyWindowConfig(targetWindow)
+            controller = WindowCompat.getInsetsController(targetWindow, view)
             controller.isAppearanceLightStatusBars = isLightBackground
             controller.isAppearanceLightNavigationBars = isLightBackground
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -3365,9 +3365,9 @@ fun HideSystemBarsEffect(showControls: Boolean = false, isLightBackground: Boole
 
     LaunchedEffect(showControls, isLightBackground, configuration.orientation) {
         val activity = context.findActivity()
-        val dialogWindow = findDialogWindow(view) ?: activity?.window
-        if (dialogWindow != null) {
-            val controller = WindowCompat.getInsetsController(dialogWindow, view)
+        val targetWindow = findDialogWindow(view) ?: activity?.window
+        if (targetWindow != null) {
+            val controller = WindowCompat.getInsetsController(targetWindow, view)
             if (showControls) {
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 controller.isAppearanceLightStatusBars = isLightBackground

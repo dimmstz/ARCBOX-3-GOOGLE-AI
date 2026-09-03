@@ -181,15 +181,17 @@ fun ArcboxApkInspectorModal(
                     }
                 }
 
-                IconButton(
-                    onClick = { onOpenSettings(apkInfo.packageName) },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Settings,
-                        contentDescription = "Configurações do Sistema",
-                        modifier = Modifier.size(22.dp)
-                    )
+                if (apkInfo.isInstalledApp || !apkInfo.appCategory.isNullOrEmpty()) {
+                    IconButton(
+                        onClick = { onOpenSettings(apkInfo.packageName) },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Configurações do Sistema",
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
 

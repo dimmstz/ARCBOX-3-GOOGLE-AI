@@ -1556,8 +1556,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             val ext = item.extension.lowercase()
             when {
                 item.fileType == FileType.APK -> {
-                    val info = repository.inspectApk(item.path)
-                    _uiState.update { it.copy(activeApkInfo = info) }
+                    inspectApk(item)
                 }
                 item.fileType == FileType.ARCHIVE -> {
                     val entries = repository.listZipContents(item.path)
