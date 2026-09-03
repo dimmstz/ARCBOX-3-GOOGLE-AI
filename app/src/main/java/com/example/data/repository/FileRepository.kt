@@ -477,17 +477,18 @@ class FileRepository(private val context: Context) {
         } else {
             val isSafTarget = directoryPath.startsWith("content://") || (safUriString != null && safUriString.startsWith("content://"))
             if (isSafTarget) {
-                val safTargetUriStr = if (directoryPath.startsWith("content://")) directoryPath else safUriString!!
-                val targetUri = Uri.parse(safTargetUriStr)
-                val rootDoc = try {
-                    if (safTargetUriStr.contains("/tree/")) {
-                        DocumentFile.fromTreeUri(context, targetUri) ?: DocumentFile.fromSingleUri(context, targetUri)
-                    } else {
-                        DocumentFile.fromSingleUri(context, targetUri) ?: DocumentFile.fromTreeUri(context, targetUri)
+                val safTargetUriStr = if (directoryPath.startsWith("content://")) directoryPath else (safUriString ?: "")
+                if (safTargetUriStr.isNotBlank()) {
+                    val targetUri = Uri.parse(safTargetUriStr)
+                    val rootDoc = try {
+                        if (safTargetUriStr.contains("/tree/")) {
+                            DocumentFile.fromTreeUri(context, targetUri) ?: DocumentFile.fromSingleUri(context, targetUri)
+                        } else {
+                            DocumentFile.fromSingleUri(context, targetUri) ?: DocumentFile.fromTreeUri(context, targetUri)
+                        }
+                    } catch (_: Exception) {
+                        null
                     }
-                } catch (_: Exception) {
-                    null
-                }
 
                 if (rootDoc != null && rootDoc.isDirectory) {
                     if (searchQuery.isNotBlank()) {
@@ -556,6 +557,7 @@ class FileRepository(private val context: Context) {
                             items.add(item)
                         }
                     }
+                }
                 }
             } else {
                 // Read via standard java File

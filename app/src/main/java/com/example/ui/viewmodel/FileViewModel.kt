@@ -1833,8 +1833,9 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
             if (originalZipPath != null) {
                 val origFile = File(originalZipPath)
-                if (origFile.parentFile != null) {
-                    navigateToDirectory(origFile.parentFile!!.absolutePath)
+                val parentFile = origFile.parentFile
+                if (parentFile != null) {
+                    navigateToDirectory(parentFile.absolutePath)
                 } else {
                     refreshFiles()
                 }
