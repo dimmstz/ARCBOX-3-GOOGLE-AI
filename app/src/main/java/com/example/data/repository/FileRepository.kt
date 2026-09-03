@@ -847,7 +847,7 @@ class FileRepository(private val context: Context) {
                 val sourceUri = if (sourcePath.startsWith("content://")) Uri.parse(sourcePath) else null
                 val targetUri = if (targetDirectory.startsWith("content://")) Uri.parse(targetDirectory) else null
 
-                val resolvedFileName = customFileName?.ifBlank { null }
+                var resolvedFileName = customFileName?.ifBlank { null }
                     ?: if (sourceUri != null) (DocumentFile.fromSingleUri(context, sourceUri)?.name ?: "arquivo")
                     else File(sourcePath).name
 
@@ -866,10 +866,34 @@ class FileRepository(private val context: Context) {
                     } else {
                         DocumentFile.fromSingleUri(context, targetUri) ?: DocumentFile.fromTreeUri(context, targetUri)
                     }
+                    if (destDirDoc != null) {
+                        var finalName = resolvedFileName
+                        val nameWithoutExt = if (finalName.contains(".")) finalName.substringBeforeLast(".") else finalName
+                        val extMatch = if (finalName.contains(".")) ".${finalName.substringAfterLast(".")}" else ""
+                        var count = 1
+                        while (destDirDoc.findFile(finalName) != null) {
+                            finalName = "$nameWithoutExt($count)$extMatch"
+                            count++
+                        }
+                        resolvedFileName = finalName
+                    }
                     val newDoc = destDirDoc?.createFile(mime, resolvedFileName) ?: return@withContext false
                     context.contentResolver.openOutputStream(newDoc.uri)
                 } else {
-                    val destFile = File(resolveFile(targetDirectory), resolvedFileName)
+                    var finalName = resolvedFileName
+                    val destDir = resolveFile(targetDirectory)
+                    var destFile = File(destDir, finalName)
+                    if (destFile.exists()) {
+                        val nameWithoutExt = if (finalName.contains(".")) finalName.substringBeforeLast(".") else finalName
+                        val extMatch = if (finalName.contains(".")) ".${finalName.substringAfterLast(".")}" else ""
+                        var count = 1
+                        while (destFile.exists()) {
+                            finalName = "$nameWithoutExt($count)$extMatch"
+                            destFile = File(destDir, finalName)
+                            count++
+                        }
+                        resolvedFileName = finalName
+                    }
                     destFile.parentFile?.mkdirs()
                     destFile.outputStream()
                 } ?: return@withContext false
@@ -900,8 +924,20 @@ class FileRepository(private val context: Context) {
             return@withContext false
         }
 
-        val fileName = customFileName?.ifBlank { null } ?: src.name
-        val dest = File(destDir, fileName)
+        val fileNameBase = customFileName?.ifBlank { null } ?: src.name
+        var fileName = fileNameBase
+        var dest = File(destDir, fileName)
+        if (dest.exists()) {
+            val nameWithoutExt = if (fileName.contains(".")) fileName.substringBeforeLast(".") else fileName
+            val extMatch = if (fileName.contains(".")) ".${fileName.substringAfterLast(".")}" else ""
+            var count = 1
+            while (dest.exists()) {
+                fileName = "$nameWithoutExt($count)$extMatch"
+                dest = File(destDir, fileName)
+                count++
+            }
+        }
+        
         try {
             if (src.isDirectory) {
                 src.copyRecursively(dest, overwrite = true)
@@ -952,10 +988,21 @@ class FileRepository(private val context: Context) {
         val src = resolveFile(sourcePath)
         val destDir = resolveFile(targetDirectory)
         if (!destDir.exists()) destDir.mkdirs()
-        val fileName = customFileName?.ifBlank { null } ?: src.name
-        val dest = File(destDir, fileName)
+        val fileNameBase = customFileName?.ifBlank { null } ?: src.name
+        var fileName = fileNameBase
+        var dest = File(destDir, fileName)
+        if (dest.exists()) {
+            val nameWithoutExt = if (fileName.contains(".")) fileName.substringBeforeLast(".") else fileName
+            val extMatch = if (fileName.contains(".")) ".${fileName.substringAfterLast(".")}" else ""
+            var count = 1
+            while (dest.exists()) {
+                fileName = "$nameWithoutExt($count)$extMatch"
+                dest = File(destDir, fileName)
+                count++
+            }
+        }
         val renamed = try {
-            if (customFileName == null) src.renameTo(dest) else false
+            src.renameTo(dest)
         } catch (_: Exception) { false }
 
         if (sourcePath.startsWith("/cloud/") && targetDirectory.startsWith("/cloud/")) {

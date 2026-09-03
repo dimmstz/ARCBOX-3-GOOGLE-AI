@@ -67,14 +67,13 @@ fun ArcboxApkInspectorModal(
                     Box(
                         modifier = Modifier
                             .size(52.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF10B981).copy(alpha = 0.15f)),
+                            .clip(RoundedCornerShape(14.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         AppIconImage(
                             packageName = if (apkInfo.isInstalledApp) apkInfo.packageName else null,
                             apkPath = apkInfo.apkFilePath,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))

@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -113,7 +114,6 @@ fun ArcboxMediaViewerModal(
             decorFitsSystemWindows = false
         )
     ) {
-        HideSystemBarsEffect()
         if (item.fileType == FileType.AUDIO) {
             AudioPlayerContent(
                 file = resolvedFile,
@@ -134,11 +134,13 @@ fun ArcboxMediaViewerModal(
             )
         } else {
             var showControls by remember { mutableStateOf(true) }
-            var interactionToken by remember { mutableIntStateOf(0) }
+            var isTouching by remember { mutableStateOf(false) }
+            var lastTouchTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+            HideSystemBarsEffect(showControls)
 
             fun resetControlsTimer() {
                 showControls = true
-                interactionToken++
+                lastTouchTime = System.currentTimeMillis()
             }
 
             fun toggleControls() {
@@ -149,8 +151,11 @@ fun ArcboxMediaViewerModal(
                 }
             }
 
-            LaunchedEffect(showControls, interactionToken, item.path) {
-                if (showControls) {
+            LaunchedEffect(showControls, isTouching, lastTouchTime, item.path, showInfo) {
+                if (showControls && !showInfo) {
+                    while (isTouching) {
+                        kotlinx.coroutines.delay(100L)
+                    }
                     kotlinx.coroutines.delay(5000L)
                     showControls = false
                 }
@@ -167,6 +172,16 @@ fun ArcboxMediaViewerModal(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val anyPressed = event.changes.any { it.pressed }
+                                    isTouching = anyPressed
+                                    lastTouchTime = System.currentTimeMillis()
+                                }
+                            }
+                        }
                         .pointerInput(item.path) {
                             detectTapGestures(
                                 onTap = { toggleControls() }
@@ -191,13 +206,21 @@ fun ArcboxMediaViewerModal(
                         visible = showControls,
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically(),
-                        modifier = Modifier.align(Alignment.TopCenter)
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        awaitPointerEvent(PointerEventPass.Initial)
+                                        resetControlsTimer()
+                                    }
+                                }
+                            }
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
-                                .background(Color.Black.copy(alpha = 0.5f))
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -368,9 +391,9 @@ fun ArcboxImageViewerScreen(
         }
     }
 
-    // Dynamic dominant color extraction with smooth gradient
-    var dominantColors by remember(item.path, item.safUriString) {
-        mutableStateOf(Pair(Color(0xFF6BA3F5), Color(0xFFE8F0FE)))
+    // Dynamic dominant color extraction with smooth gradient (defaults to dark neutral)
+    var dominantColors by remember {
+        mutableStateOf(Pair(Color(0xFF0F172A), Color(0xFF020617)))
     }
     var dimensions by remember(item.path, item.safUriString) {
         mutableStateOf(Pair(0, 0))
@@ -387,6 +410,8 @@ fun ArcboxImageViewerScreen(
     var showCropSaveConfirmationDialog by remember { mutableStateOf(false) }
 
     var showControls by remember { mutableStateOf(true) }
+    var isTouching by remember { mutableStateOf(false) }
+    var lastTouchTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var activeFilterIndex by remember { mutableIntStateOf(0) }
     var backgroundModeIndex by remember { mutableIntStateOf(0) } // 0 = Gradiente, 1 = Preto, 2 = Branco
     var contentScaleIndex by remember { mutableIntStateOf(0) }
@@ -394,7 +419,11 @@ fun ArcboxImageViewerScreen(
     var imageVersion by remember(item.path, item.safUriString) { mutableLongStateOf(file.lastModified()) }
     val coroutineScope = rememberCoroutineScope()
 
+    HideSystemBarsEffect(showControls, isLightBackground = backgroundModeIndex == 2)
+
     LaunchedEffect(item.path, item.safUriString) {
+        showControls = true
+        lastTouchTime = System.currentTimeMillis()
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             dominantColors = extractDominantColors(context, item, file)
             dimensions = getImageDimensions(context, item, file)
@@ -543,6 +572,16 @@ fun ArcboxImageViewerScreen(
         modifier = Modifier
             .fillMaxSize()
             .then(backgroundModifier)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val anyPressed = event.changes.any { it.pressed }
+                        isTouching = anyPressed
+                        lastTouchTime = System.currentTimeMillis()
+                    }
+                }
+            }
     ) {
         if (isCropMode) {
             Column(
@@ -815,9 +854,15 @@ fun ArcboxImageViewerScreen(
                     .pointerInput(file.path) {
                         detectTapGestures(
                             onTap = {
-                                showControls = !showControls
+                                if (showControls) {
+                                    showControls = false
+                                } else {
+                                    lastTouchTime = System.currentTimeMillis()
+                                    showControls = true
+                                }
                             },
                             onDoubleTap = {
+                                lastTouchTime = System.currentTimeMillis()
                                 scale = if (scale > 1.2f) 1f else 2.2f
                                 offset = Offset.Zero
                             }
@@ -853,9 +898,12 @@ fun ArcboxImageViewerScreen(
                 )
             }
 
-            // Navigation Side Buttons for Images (Previous / Next) (hides with showControls)
-            LaunchedEffect(showControls) {
-                if (showControls) {
+            // Controls auto-hide after 5 seconds of inactivity/no touch
+            LaunchedEffect(showControls, isTouching, lastTouchTime, isCropMode, showInfoModal) {
+                if (showControls && !isCropMode && !showInfoModal) {
+                    while (isTouching) {
+                        kotlinx.coroutines.delay(100L)
+                    }
                     kotlinx.coroutines.delay(5000L)
                     showControls = false
                 }
@@ -2080,7 +2128,7 @@ fun VideoPlayerContent(
             }
 
             // Fallback / Cover / Preview image when videoError or before prepared
-            if (videoError || !isVideoPrepared) {
+            if (videoError) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -2098,7 +2146,7 @@ fun VideoPlayerContent(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.45f))
+                            .background(Color.Black.copy(alpha = 0.55f))
                     )
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
@@ -2116,6 +2164,18 @@ fun VideoPlayerContent(
                         )
                     }
                 }
+            } else if (!isVideoPrepared) {
+                // Smooth first frame preview without the intrusive movie icon flicker
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(file)
+                        .decoderFactory(VideoFrameDecoder.Factory())
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = file.name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
             // Aspect Ratio Toast Notification
@@ -2145,7 +2205,7 @@ fun VideoPlayerContent(
             }
         }
 
-        // Video Progress & Controls (hides automatically in 5s)
+        // Video Progress & Controls (hides automatically in 5s if no touch)
         androidx.compose.animation.AnimatedVisibility(
             visible = showControls,
             enter = fadeIn() + expandVertically(),
@@ -2156,6 +2216,14 @@ fun VideoPlayerContent(
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.Black.copy(alpha = 0.65f))
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            awaitPointerEvent(PointerEventPass.Initial)
+                            onResetControlsTimer()
+                        }
+                    }
+                }
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -2308,6 +2376,8 @@ fun AudioPlayerContent(
     var isAutoPlayNext by remember { mutableStateOf(true) }
     var showControls by remember { mutableStateOf(true) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    HideSystemBarsEffect(showControls)
 
     DisposableEffect(file.path) {
         val mp = MediaPlayer().apply {
@@ -3235,7 +3305,7 @@ fun Context.findActivity(): Activity? {
 
 
 @Composable
-fun HideSystemBarsEffect() {
+fun HideSystemBarsEffect(showControls: Boolean = false, isLightBackground: Boolean = false) {
     val view = LocalView.current
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -3274,23 +3344,7 @@ fun HideSystemBarsEffect() {
         WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
     }
 
-    SideEffect {
-        val activity = context.findActivity()
-        val dialogWindow = findDialogWindow(view) ?: activity?.window
-        if (dialogWindow != null) {
-            applyWindowConfig(dialogWindow)
-        }
-    }
-
-    LaunchedEffect(configuration.orientation) {
-        val activity = context.findActivity()
-        val dialogWindow = findDialogWindow(view) ?: activity?.window
-        if (dialogWindow != null) {
-            applyWindowConfig(dialogWindow)
-        }
-    }
-
-    DisposableEffect(view, context) {
+    DisposableEffect(view, context, isLightBackground) {
         val activity = context.findActivity()
         val dialogWindow = findDialogWindow(view) ?: activity?.window
         
@@ -3298,12 +3352,29 @@ fun HideSystemBarsEffect() {
         if (dialogWindow != null) {
             applyWindowConfig(dialogWindow)
             controller = WindowCompat.getInsetsController(dialogWindow, view)
-            controller.isAppearanceLightStatusBars = false
-            controller.isAppearanceLightNavigationBars = false
+            controller.isAppearanceLightStatusBars = isLightBackground
+            controller.isAppearanceLightNavigationBars = isLightBackground
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         
         onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    LaunchedEffect(showControls, isLightBackground, configuration.orientation) {
+        val activity = context.findActivity()
+        val dialogWindow = findDialogWindow(view) ?: activity?.window
+        if (dialogWindow != null) {
+            val controller = WindowCompat.getInsetsController(dialogWindow, view)
+            if (showControls) {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+                controller.isAppearanceLightStatusBars = isLightBackground
+                controller.isAppearanceLightNavigationBars = isLightBackground
+            } else {
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 }

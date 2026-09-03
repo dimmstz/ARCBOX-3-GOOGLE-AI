@@ -1107,24 +1107,25 @@ fun FileGridCard(
                         .padding(horizontal = 4.dp, vertical = 2.dp)
                 ) {
                     val isFolder = item.fileType == FileType.FOLDER
-                    val badgeBrush = remember(categoryColor, isFolder) {
-                        if (isFolder) null else getVibrantBadgeGradient(categoryColor)
+                    val hasCustomThumbnail = showThumbnails && (item.fileType == FileType.IMAGE || item.fileType == FileType.VIDEO || item.fileType == FileType.APK)
+                    val badgeBrush = remember(categoryColor, isFolder, hasCustomThumbnail) {
+                        if (isFolder || hasCustomThumbnail) null else getVibrantBadgeGradient(categoryColor)
                     }
-                    val folderBadgeBorder = remember(categoryColor, isFolder) {
-                        androidx.compose.foundation.BorderStroke(1.dp, categoryColor.copy(alpha = if (isFolder) 0.35f else 0.25f))
+                    val folderBadgeBorder = remember(categoryColor, isFolder, hasCustomThumbnail) {
+                        if (hasCustomThumbnail) null else androidx.compose.foundation.BorderStroke(1.dp, categoryColor.copy(alpha = if (isFolder) 0.35f else 0.25f))
                     }
                     val formattedSubtext = remember(item.size, item.childCount, item.isDirectory) {
                         if (item.isDirectory) (if (item.childCount == 1) "1 item" else "${item.childCount} itens") else formatFileSize(item.size)
                     }
 
-                    // Category Icon / Thumbnail Badge com gradiente
+                    // Category Icon / Thumbnail Badge
                     Surface(
                         shape = GridBadgeShape,
                         color = Color.Transparent,
                         border = folderBadgeBorder,
                         shadowElevation = 0.dp,
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(if (hasCustomThumbnail) 48.dp else 44.dp)
                             .then(
                                 if (badgeBrush != null) Modifier.background(badgeBrush, GridBadgeShape) else Modifier
                             )
@@ -1297,11 +1298,12 @@ fun FileListItem(
                 }
 
                 val isFolder = item.fileType == FileType.FOLDER
-                val badgeBrush = remember(categoryColor, isFolder) {
-                    if (isFolder) null else getVibrantBadgeGradient(categoryColor)
+                val hasCustomThumbnail = showThumbnails && (item.fileType == FileType.IMAGE || item.fileType == FileType.VIDEO || item.fileType == FileType.APK)
+                val badgeBrush = remember(categoryColor, isFolder, hasCustomThumbnail) {
+                    if (isFolder || hasCustomThumbnail) null else getVibrantBadgeGradient(categoryColor)
                 }
-                val folderBadgeBorder = remember(categoryColor, isFolder) {
-                    androidx.compose.foundation.BorderStroke(1.dp, categoryColor.copy(alpha = if (isFolder) 0.35f else 0.25f))
+                val folderBadgeBorder = remember(categoryColor, isFolder, hasCustomThumbnail) {
+                    if (hasCustomThumbnail) null else androidx.compose.foundation.BorderStroke(1.dp, categoryColor.copy(alpha = if (isFolder) 0.35f else 0.25f))
                 }
                 val formattedSize = remember(item.size, item.childCount, item.isDirectory) {
                     if (item.isDirectory) (if (item.childCount == 1) "1 item" else "${item.childCount} itens") else formatFileSize(item.size)
@@ -1665,20 +1667,26 @@ fun FileThumbnailImage(
                     .build()
             }
 
-            Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Box(
+                modifier = modifier.clip(ListBadgeShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                )
                 Icon(
                     Icons.Default.Image,
                     contentDescription = null,
-                    tint = finalIconTint.copy(alpha = 0.45f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(iconSize)
                 )
                 AsyncImage(
                     model = imageRequest,
                     contentDescription = item.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(ImageThumbShape)
+                    modifier = Modifier.fillMaxSize()
                 )
             }
         }
@@ -1701,13 +1709,18 @@ fun FileThumbnailImage(
             }
 
             Box(
-                modifier = modifier.clip(ImageThumbShape),
+                modifier = modifier.clip(ListBadgeShape),
                 contentAlignment = Alignment.Center
             ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                )
                 Icon(
                     Icons.Default.Movie,
                     contentDescription = null,
-                    tint = finalIconTint.copy(alpha = 0.45f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(iconSize)
                 )
                 AsyncImage(

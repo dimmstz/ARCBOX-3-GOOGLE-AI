@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.R
@@ -162,7 +164,7 @@ fun AppIconImage(
     modifier: Modifier = Modifier.size(24.dp)
 ) {
     val context = LocalContext.current
-    val cacheKey = remember(packageName, apkPath) { packageName ?: apkPath }
+    val cacheKey = remember(packageName, apkPath) { "v2_${packageName ?: apkPath}" }
 
     // Check fast memory cache synchronously (0ms instant lookup)
     var bitmap by remember(cacheKey) { mutableStateOf(appIconMemoryCache.get(cacheKey)) }
@@ -222,30 +224,66 @@ fun AppIconImage(
         Image(
             bitmap = currentBitmap.asImageBitmap(),
             contentDescription = null,
-            modifier = modifier
+            contentScale = ContentScale.Crop,
+            modifier = modifier.clip(RoundedCornerShape(10.dp))
         )
     } else {
-        Icon(
-            Icons.Default.Android,
-            contentDescription = null,
-            tint = FileType.APK.getCategoryColor(),
+        Box(
             modifier = modifier
-        )
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Android,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                modifier = Modifier.fillMaxSize(0.6f)
+            )
+        }
     }
 }
 
 private fun drawableToBitmap(drawable: Drawable): Bitmap {
+    // Handle modern Android AdaptiveIconDrawable (API 26+)
+    // AdaptiveIconDrawable has 108x108 bounds with 18dp outer padding around 72x72 safe region.
+    // Scaling bounds by ~1.40x centered expands the icon to fill the canvas cleanly without empty gaps.
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+        drawable is android.graphics.drawable.AdaptiveIconDrawable
+    ) {
+        val size = 96
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val factor = 1.40f
+        val fullSize = (size * factor).toInt()
+        val offset = (fullSize - size) / 2
+        drawable.setBounds(-offset, -offset, size + offset, size + offset)
+
+        // Clip to smooth squircle so app icon corners are crisp and modern
+        val path = android.graphics.Path().apply {
+            addRoundRect(
+                0f, 0f, size.toFloat(), size.toFloat(),
+                size * 0.22f, size * 0.22f,
+                android.graphics.Path.Direction.CW
+            )
+        }
+        canvas.clipPath(path)
+        drawable.draw(canvas)
+        return bitmap
+    }
+
     if (drawable is BitmapDrawable && drawable.bitmap != null && !drawable.bitmap.isRecycled) {
         val src = drawable.bitmap
-        if (src.width in 48..128 && src.height in 48..128) {
+        if (src.width in 64..128 && src.height in 64..128) {
             return src
         }
-        return Bitmap.createScaledBitmap(src, 72, 72, true)
+        return Bitmap.createScaledBitmap(src, 96, 96, true)
     }
-    val w = if (drawable.intrinsicWidth in 1..256) drawable.intrinsicWidth else 72
-    val h = if (drawable.intrinsicHeight in 1..256) drawable.intrinsicHeight else 72
-    val targetW = w.coerceIn(48, 96)
-    val targetH = h.coerceIn(48, 96)
+
+    val w = if (drawable.intrinsicWidth in 1..256) drawable.intrinsicWidth else 96
+    val h = if (drawable.intrinsicHeight in 1..256) drawable.intrinsicHeight else 96
+    val targetW = w.coerceIn(64, 96)
+    val targetH = h.coerceIn(64, 96)
     val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     drawable.setBounds(0, 0, canvas.width, canvas.height)
