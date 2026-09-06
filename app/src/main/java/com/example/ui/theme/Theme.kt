@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.Density
 fun ArcboxTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     accentOption: AccentColorOption = AccentColorOption.AZUL_CLARO,
-    customColorHex: Long = 0xFF4F46E5L,
+    customColorHex: Long = 0xFF0066FFL,
     content: @Composable () -> Unit
 ) {
     val view = LocalView.current

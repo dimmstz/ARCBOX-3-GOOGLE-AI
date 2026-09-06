@@ -13,24 +13,24 @@ val ArcboxLightBg = Color(0xFFFFFFFF) // Pure white background
 val ArcboxLightCard = Color(0xFFFFFFFF)
 val ArcboxLightBorder = Color(0xFFD8E6F5)
 
-// Accent Colors (Chave de Destaque Arcbox - Saturadas e Vivas)
-val ArcboxBlue = Color(0xFF007AFF)
-val ArcboxEmerald = Color(0xFF00C853)
-val ArcboxFuchsia = Color(0xFFFF1493)
-val ArcboxRose = Color(0xFFFF2D55)
-val ArcboxAmber = Color(0xFFFF9500)
-val ArcboxIndigo = Color(0xFF5856D6)
+// Accent Colors (Chave de Destaque Arcbox - Saturadas, Vivas e Elétricas)
+val ArcboxBlue = Color(0xFF0066FF)     // Azul Elétrico Puro & Saturado
+val ArcboxEmerald = Color(0xFF00E676)  // Verde Esmeralda Néon
+val ArcboxFuchsia = Color(0xFFFF007F)  // Pink / Fuchsia Elétrico
+val ArcboxRose = Color(0xFFFF0055)     // Rosa / Vermelho Choque Radiante
+val ArcboxAmber = Color(0xFFFF9100)    // Âmbar / Laranja Elétrico Bright
+val ArcboxIndigo = Color(0xFF651FFF)   // Índigo / Violeta Puro Ultra Sat
 
 // Cores por Categoria de Arquivo (Saturadas, Vivas e Marcantes)
-val ColorFolder = Color(0xFF007AFF)      // Azul elétrico saturado
-val ColorImage = Color(0xFF00C853)       // Verde esmeralda vivo
-val ColorVideo = Color(0xFFFF9500)       // Âmbar / Laranja vibrante
-val ColorAudio = Color(0xFFFF2D55)       // Rosa / Magenta saturado
-val ColorDocument = Color(0xFF5856D6)    // Índigo vivo
-val ColorApk = Color(0xFFAF52DE)         // Roxo / Violeta vibrante
-val ColorArchive = Color(0xFF00BCD4)     // Ciano / Turquesa vivo
-val ColorCode = Color(0xFF00D2D3)        // Ciano código saturado
-val ColorTrash = Color(0xFF718096)
+val ColorFolder = Color(0xFF0066FF)      // Azul elétrico ultra saturado
+val ColorImage = Color(0xFF00E676)       // Verde esmeralda vivo & néon
+val ColorVideo = Color(0xFFFF9100)       // Âmbar / Laranja elétrico vibrante
+val ColorAudio = Color(0xFFFF0055)       // Rosa / Magenta elétrico saturado
+val ColorDocument = Color(0xFF651FFF)    // Índigo / Violeta elétrico
+val ColorApk = Color(0xFFD500F9)         // Roxo / Violeta néon super vibrante
+val ColorArchive = Color(0xFF00E5FF)     // Ciano / Turquesa elétrico radiante
+val ColorCode = Color(0xFF00F0FF)        // Ciano código ultra brilhante
+val ColorTrash = Color(0xFF8E9AAF)
 
 // Funções utilitárias para gerar gradiente suave puxando para um tom mais claro
 fun Color.lighterTone(fraction: Float = 0.28f): Color {
@@ -94,16 +94,16 @@ enum class AccentColorOption(
 ) {
     AZUL_CLARO(
         label = "Azul Claro",
-        color = Color(0xFF007AFF),
-        darkColor = Color(0xFF38BDF8),
+        color = Color(0xFF0066FF),       // Azul Elétrico Ultra Saturado
+        darkColor = Color(0xFF00A2FF),   // Azul Elétrico Neon
         lightBg = Color(0xFFFFFFFF),
         lightBorder = Color(0xFFE2E8F0),
         lightSurfaceVariant = Color(0xFFF8FAFC)
     ),
     ROXO(
         label = "Roxo",
-        color = Color(0xFF7C3AED),
-        darkColor = Color(0xFFA78BFA),
+        color = Color(0xFF8A2BE2),       // Roxo Violeta Elétrico
+        darkColor = Color(0xFFB042FF),   // Roxo Neon Vibrante
         lightBg = Color(0xFFFFFFFF),
         lightBorder = Color(0xFFE2E8F0),
         lightSurfaceVariant = Color(0xFFF8FAFC)
@@ -111,22 +111,22 @@ enum class AccentColorOption(
     PRETO(
         label = "Preto/Branco",
         color = Color(0xFF18181B),
-        darkColor = Color(0xFFE2E8F0),
+        darkColor = Color(0xFFFAFAFA),
         lightBg = Color(0xFFFFFFFF),
         lightBorder = Color(0xFFE2E8F0),
         lightSurfaceVariant = Color(0xFFF8FAFC)
     ),
     PERSONALIZADO(
         label = "Personalizado",
-        color = Color(0xFFFF5500),
-        darkColor = Color(0xFFFB923C),
+        color = Color(0xFFFF5500),       // Laranja Elétrico
+        darkColor = Color(0xFFFF6D00),   // Laranja Neon Radiante
         lightBg = Color(0xFFFFFFFF),
         lightBorder = Color(0xFFE2E8F0),
         lightSurfaceVariant = Color(0xFFF8FAFC)
     )
 }
 
-// 16 Cores Modernas, Vivas e Equilibradas
+// 16 Cores Ultra Vivas, Saturadas e Elétricas
 data class CustomColorPreset(
     val name: String,
     val hexValue: Long,
@@ -136,44 +136,48 @@ data class CustomColorPreset(
 
 val PredefinedCustomColors = listOf(
     // Linha 1: Tons de Azul & Violeta (Ciano, Azul Claro, Azul Escuro, Roxo)
-    CustomColorPreset("Ciano", 0xFF0284C7L, Color(0xFF0284C7), Color(0xFF38BDF8)),
-    CustomColorPreset("Azul Claro", 0xFF0080FFL, Color(0xFF0080FF), Color(0xFF38BDF8)),
-    CustomColorPreset("Azul Escuro", 0xFF0055FFL, Color(0xFF0055FF), Color(0xFF60A5FA)),
-    CustomColorPreset("Roxo", 0xFF7C3AEDL, Color(0xFF7C3AED), Color(0xFFA78BFA)),
+    CustomColorPreset("Ciano", 0xFF00B2FFL, Color(0xFF00B2FF), Color(0xFF00E5FF)),
+    CustomColorPreset("Azul Claro", 0xFF0066FFL, Color(0xFF0066FF), Color(0xFF00A2FF)),
+    CustomColorPreset("Azul Escuro", 0xFF0038FFL, Color(0xFF0038FF), Color(0xFF3D66FF)),
+    CustomColorPreset("Roxo", 0xFF7000FFL, Color(0xFF7000FF), Color(0xFF9933FF)),
 
     // Linha 2: Tons de Lilás, Rosa & Vermelho (Lilás, Rosa Claro, Rosa Choque, Vermelho)
-    CustomColorPreset("Lilás", 0xFF9333EAL, Color(0xFF9333EA), Color(0xFFC084FC)),
-    CustomColorPreset("Rosa Claro", 0xFFFF5E8AL, Color(0xFFFF5E8A), Color(0xFFF472B6)),
-    CustomColorPreset("Rosa Choque", 0xFFFF007FL, Color(0xFFFF007F), Color(0xFFFF4081)),
-    CustomColorPreset("Vermelho", 0xFFE60000L, Color(0xFFE60000), Color(0xFFFF3344)), // Vermelho Ferrari Puro (Rosso Corsa)
+    CustomColorPreset("Lilás", 0xFFA800FFL, Color(0xFFA800FF), Color(0xFFC440FF)),
+    CustomColorPreset("Rosa Claro", 0xFFFF007FL, Color(0xFFFF007F), Color(0xFFFF3399)),
+    CustomColorPreset("Rosa Choque", 0xFFFF0055L, Color(0xFFFF0055), Color(0xFFFF1A66)),
+    CustomColorPreset("Vermelho", 0xFFFF0000L, Color(0xFFFF0000), Color(0xFFFF2A2A)),
 
     // Linha 3: Tons de Vinho, Terra & Laranja (Vinho, Marrom, Laranja, Dourado)
-    CustomColorPreset("Vinho", 0xFF9F1239L, Color(0xFF9F1239), Color(0xFFF43F5E)),   // Vinho Ruby Nobre & Vibrante
-    CustomColorPreset("Marrom", 0xFF92400EL, Color(0xFF92400E), Color(0xFFF59E0B)),    // Bronze terracota quente e moderno
-    CustomColorPreset("Laranja", 0xFFFF5500L, Color(0xFFFF5500), Color(0xFFFB923C)),   // Laranja elétrico vívido
-    CustomColorPreset("Dourado", 0xFFD97706L, Color(0xFFD97706), Color(0xFFFCD34D)),   // Ouro imperial rico e radiante
+    CustomColorPreset("Vinho", 0xFFC20038L, Color(0xFFC20038), Color(0xFFFF1A53)),
+    CustomColorPreset("Marrom", 0xFFD44800L, Color(0xFFD44800), Color(0xFFFF6014)),
+    CustomColorPreset("Laranja", 0xFFFF5500L, Color(0xFFFF5500), Color(0xFFFF6D00)),
+    CustomColorPreset("Dourado", 0xFFFF9900L, Color(0xFFFF9900), Color(0xFFFFAB00)),
 
     // Linha 4: Tons de Amarelo & Verde (Amarelo, Verde Lima, Verde, Verde Água)
-    CustomColorPreset("Amarelo", 0xFFEAB308L, Color(0xFFEAB308), Color(0xFFFACC15)),   // Amarelo dourado vivo, encorpado e legível
-    CustomColorPreset("Verde Lima", 0xFF70B800L, Color(0xFF70B800), Color(0xFFA3E635)), // Lima vibrante com contraste nítido
-    CustomColorPreset("Verde", 0xFF00C853L, Color(0xFF00C853), Color(0xFF4ADE80)),
-    CustomColorPreset("Verde Água", 0xFF0D9488L, Color(0xFF0D9488), Color(0xFF2DD4BF))  // Verde água tropical moderno
+    CustomColorPreset("Amarelo", 0xFFFFC400L, Color(0xFFFFC400), Color(0xFFFFD600)),
+    CustomColorPreset("Verde Lima", 0xFF66E000L, Color(0xFF66E000), Color(0xFF76FF03)),
+    CustomColorPreset("Verde", 0xFF00C853L, Color(0xFF00C853), Color(0xFF00E676)),
+    CustomColorPreset("Verde Água", 0xFF00BFA5L, Color(0xFF00BFA5), Color(0xFF1DE9B6))
 )
 
 fun findCustomColorPreset(hexValue: Long): CustomColorPreset? {
     return PredefinedCustomColors.find { it.hexValue == hexValue }
         ?: when (hexValue) {
-            0xFFFF3B30L -> PredefinedCustomColors.find { it.name == "Vermelho" }
-            0xFF990033L -> PredefinedCustomColors.find { it.name == "Vinho" }
-            0xFFFF69B4L -> PredefinedCustomColors.find { it.name == "Rosa Claro" }
-            0xFFFF1493L -> PredefinedCustomColors.find { it.name == "Rosa Choque" }
-            0xFF76FF03L -> PredefinedCustomColors.find { it.name == "Verde Lima" }
-            0xFF00E5FFL -> PredefinedCustomColors.find { it.name == "Verde Água" }
-            0xFFFF6D00L -> PredefinedCustomColors.find { it.name == "Laranja" }
-            0xFFFFD600L -> PredefinedCustomColors.find { it.name == "Amarelo" }
-            0xFFFFAB00L -> PredefinedCustomColors.find { it.name == "Dourado" }
-            0xFF8D4004L -> PredefinedCustomColors.find { it.name == "Marrom" }
-            0xFF00F0FFL -> PredefinedCustomColors.find { it.name == "Ciano" }
+            0xFFFF0000L, 0xFFFF3B30L, 0xFFE60000L -> PredefinedCustomColors.find { it.name == "Vermelho" }
+            0xFFC20038L, 0xFF990033L, 0xFF9F1239L -> PredefinedCustomColors.find { it.name == "Vinho" }
+            0xFFFF007FL, 0xFFFF69B4L, 0xFFFF5E8AL -> PredefinedCustomColors.find { it.name == "Rosa Claro" }
+            0xFFFF0055L, 0xFFFF1493L -> PredefinedCustomColors.find { it.name == "Rosa Choque" }
+            0xFF66E000L, 0xFF76FF03L, 0xFF70B800L -> PredefinedCustomColors.find { it.name == "Verde Lima" }
+            0xFF00BFA5L, 0xFF00E5FFL, 0xFF0D9488L -> PredefinedCustomColors.find { it.name == "Verde Água" }
+            0xFFFF5500L, 0xFFFF6D00L -> PredefinedCustomColors.find { it.name == "Laranja" }
+            0xFFFFC400L, 0xFFFFD600L, 0xFFEAB308L -> PredefinedCustomColors.find { it.name == "Amarelo" }
+            0xFFFF9900L, 0xFFFFAB00L, 0xFFD97706L -> PredefinedCustomColors.find { it.name == "Dourado" }
+            0xFFD44800L, 0xFF92400EL, 0xFF8D4004L -> PredefinedCustomColors.find { it.name == "Marrom" }
+            0xFF00B2FFL, 0xFF0284C7L, 0xFF00F0FFL -> PredefinedCustomColors.find { it.name == "Ciano" }
+            0xFF0066FFL, 0xFF0080FFL, 0xFF007AFFL -> PredefinedCustomColors.find { it.name == "Azul Claro" }
+            0xFF7000FFL, 0xFF7C3AEDL -> PredefinedCustomColors.find { it.name == "Roxo" }
+            0xFFA800FFL, 0xFF9333EAL -> PredefinedCustomColors.find { it.name == "Lilás" }
+            0xFF00C853L -> PredefinedCustomColors.find { it.name == "Verde" }
             else -> null
         }
 }
