@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.models.FileType
@@ -70,90 +71,12 @@ fun ArcboxLogoIcon(
             .background(backgroundColor),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            val strokeW = (w * 0.13f).coerceAtLeast(2f)
-
-            // Dynamic Arch gradient (Cyan -> Blue -> Indigo -> Violet)
-            val archBrush = Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFF0099FF),
-                    Color(0xFF0284C7),
-                    Color(0xFF6366F1),
-                    Color(0xFF8B5CF6)
-                ),
-                start = Offset(w * 0.2f, h * 0.8f),
-                end = Offset(w * 0.8f, h * 0.8f)
-            )
-
-            // Left Leg of Arch 'A'
-            drawLine(
-                brush = archBrush,
-                start = Offset(w * 0.24f, h * 0.78f),
-                end = Offset(w * 0.50f, h * 0.22f),
-                strokeWidth = strokeW,
-                cap = StrokeCap.Round
-            )
-
-            // Right Leg of Arch 'A'
-            drawLine(
-                brush = archBrush,
-                start = Offset(w * 0.50f, h * 0.22f),
-                end = Offset(w * 0.76f, h * 0.78f),
-                strokeWidth = strokeW,
-                cap = StrokeCap.Round
-            )
-
-            // Storage Folder Tab (Cyan/Blue)
-            val folderPath = Path().apply {
-                moveTo(w * 0.36f, h * 0.50f)
-                lineTo(w * 0.50f, h * 0.50f)
-                lineTo(w * 0.54f, h * 0.54f)
-                lineTo(w * 0.66f, h * 0.54f)
-                lineTo(w * 0.66f, h * 0.62f)
-                lineTo(w * 0.34f, h * 0.62f)
-                lineTo(w * 0.34f, h * 0.52f)
-                close()
-            }
-            drawPath(
-                path = folderPath,
-                color = Color(0xFF0284C7)
-            )
-
-            // Clean Drawer Box
-            val boxLeft = w * 0.31f
-            val boxTop = h * 0.58f
-            val boxWidth = w * 0.38f
-            val boxHeight = h * 0.22f
-            val cornerR = CornerRadius(w * 0.04f, w * 0.04f)
-
-            drawRoundRect(
-                color = Color.White,
-                topLeft = Offset(boxLeft, boxTop),
-                size = Size(boxWidth, boxHeight),
-                cornerRadius = cornerR
-            )
-
-            // Drawer Box subtle outline
-            drawRoundRect(
-                color = Color(0xFFCBD5E1),
-                topLeft = Offset(boxLeft, boxTop),
-                size = Size(boxWidth, boxHeight),
-                cornerRadius = cornerR,
-                style = Stroke(width = (w * 0.02f).coerceAtLeast(1f))
-            )
-
-            // Drawer Handle
-            val handleWidth = w * 0.12f
-            val handleHeight = h * 0.035f
-            drawRoundRect(
-                color = Color(0xFF94A3B8),
-                topLeft = Offset(w * 0.5f - handleWidth / 2f, boxTop + boxHeight * 0.45f),
-                size = Size(handleWidth, handleHeight),
-                cornerRadius = CornerRadius(handleHeight / 2f, handleHeight / 2f)
-            )
-        }
+        Image(
+            painter = painterResource(id = R.drawable.arcbox_icon),
+            contentDescription = "Arcbox Logo",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 

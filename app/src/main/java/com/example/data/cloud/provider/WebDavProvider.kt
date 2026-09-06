@@ -551,29 +551,6 @@ class WebDavProvider(
 
     private fun ensureInitialWorkspace(cloudDir: File, providerName: String, accountEmail: String) {
         if (!cloudDir.exists()) cloudDir.mkdirs()
-        val docsDir = File(cloudDir, "Documentos")
-        if (!docsDir.exists()) {
-            docsDir.mkdirs()
-            File(docsDir, "WebDAV-Nextcloud.txt").writeText(
-                """
-                === $providerName UNIDADE DE ARMAZENAMENTO ===
-                Conta Conectada: $accountEmail
-                Integração: RFC 4918 WebDAV Client
-                Data: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}
-                
-                Unidade WebDAV conectada com sucesso ao Arcbox.
-                """.trimIndent()
-            )
-
-            val photosDir = File(cloudDir, "Fotos")
-            photosDir.mkdirs()
-
-            val downloadsDir = File(cloudDir, "Downloads")
-            downloadsDir.mkdirs()
-
-            val backupDir = File(cloudDir, "Backups")
-            backupDir.mkdirs()
-        }
     }
 
     private fun getFolderSize(file: File): Long {

@@ -37,7 +37,6 @@ class FileRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("arcbox_prefs", Context.MODE_PRIVATE)
     private val cloudStorageService = com.example.data.cloud.CloudStorageService(context)
     val safCloudManager = com.example.data.cloud.SafCloudManager(context)
-    private var mockFilesCreated = false
     private val dirCountCache = ConcurrentHashMap<String, Pair<Long, Int>>()
     private var cachedVolumes: List<StorageVolume>? = null
     private var lastVolumesCheckTime: Long = 0L
@@ -1475,7 +1474,7 @@ class FileRepository(private val context: Context) {
                     apkFilePath = apkFilePath
                 )
             } else {
-                // Fallback ApkInfo for mock/external files
+                // Fallback ApkInfo for external files when package info cannot be parsed
                 return@withContext ApkInfo(
                     packageName = context.packageName,
                     versionName = "1.0",
@@ -1981,31 +1980,6 @@ class FileRepository(private val context: Context) {
         FileType.CODE -> "Código & Texto"
         FileType.TEMP_RESIDUAL -> "Temporários & Residuais"
         FileType.OTHER -> "Outros"
-    }
-
-    private fun writeBitmapToFile(file: File, label: String, bgColor: Int, isPng: Boolean = false) {
-        try {
-            val bmp = android.graphics.Bitmap.createBitmap(400, 400, android.graphics.Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(bmp)
-            canvas.drawColor(bgColor)
-            val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 32f
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.CENTER
-            }
-            canvas.drawText(label, 200f, 210f, paint)
-            val format = if (isPng) android.graphics.Bitmap.CompressFormat.PNG else android.graphics.Bitmap.CompressFormat.JPEG
-            FileOutputStream(file).use { out ->
-                bmp.compress(format, 90, out)
-            }
-        } catch (_: Exception) {
-            file.writeBytes(ByteArray(10000) { 0 })
-        }
-    }
-
-    fun ensureMockFilesExist() {
-        // No-op: Do not generate mock files or write test bitmaps to avoid freezing on startup
     }
 
     private fun searchRecursive(

@@ -40,26 +40,11 @@ class MainActivity : FragmentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                if (downloadsDir != null) {
-                    if (!downloadsDir.exists()) downloadsDir.mkdirs()
-                    
-                    val mockPhoto = File(downloadsDir, "mock_photo.jpg")
-                    val mockVideo = File(downloadsDir, "mock_video.mp4")
-                    
-                    if (!mockPhoto.exists()) {
-                        resources.openRawResource(R.raw.mock_photo).use { input ->
-                            FileOutputStream(mockPhoto).use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                    }
-                    if (!mockVideo.exists()) {
-                        resources.openRawResource(R.raw.mock_video).use { input ->
-                            FileOutputStream(mockVideo).use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                    }
+                if (downloadsDir != null && downloadsDir.exists()) {
+                    val legacyMockPhoto = File(downloadsDir, "mock_photo.jpg")
+                    val legacyMockVideo = File(downloadsDir, "mock_video.mp4")
+                    if (legacyMockPhoto.exists()) legacyMockPhoto.delete()
+                    if (legacyMockVideo.exists()) legacyMockVideo.delete()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
