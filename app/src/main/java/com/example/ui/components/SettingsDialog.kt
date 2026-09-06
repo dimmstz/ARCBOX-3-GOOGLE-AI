@@ -593,7 +593,8 @@ fun ArcboxSettingsModal(
                                                     text = transition.title,
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                                                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
+                                                    modifier = Modifier.weight(1f, fill = false)
                                                 )
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
@@ -606,7 +607,9 @@ fun ArcboxSettingsModal(
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Medium,
                                                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        maxLines = 1,
+                                                        softWrap = false
                                                     )
                                                 }
                                             }

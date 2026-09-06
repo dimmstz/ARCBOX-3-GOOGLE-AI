@@ -14,8 +14,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -229,24 +231,34 @@ fun BiometricLockScreen(
                             onClick = { requestAuthentication() },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(54.dp)
+                                .defaultMinSize(minHeight = 52.dp)
                                 .testTag("unlock_biometric_button"),
                             shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(
+                                horizontal = 16.dp,
+                                vertical = 12.dp
+                            ),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Fingerprint,
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = if (authErrorMsg != null) "Tentar Novamente" else "Desbloquear com Biometria",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Fingerprint,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = if (authErrorMsg != null) "Tentar Novamente" else "Desbloquear com Biometria",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
 
                         // Fallback option for testing/emulator or when credentials are not enrolled
