@@ -1948,12 +1948,14 @@ fun VideoPlayerContent(
     val context = LocalContext.current
     var isPlaying by remember(file.path) { mutableStateOf(true) }
     var currentPositionMs by remember(file.path) { mutableLongStateOf(0L) }
-    var totalDurationMs by remember(file.path) { mutableLongStateOf(270000L) } // default 04:30
+    var totalDurationMs by remember(file.path) { mutableLongStateOf(0L) }
     
     var isVideoPrepared by remember(file.path) { mutableStateOf(false) }
     var videoError by remember(file.path) { mutableStateOf(false) }
     var mediaPlayerRef by remember(file.path) { mutableStateOf<android.media.MediaPlayer?>(null) }
     var textureViewRef by remember(file.path) { mutableStateOf<android.view.TextureView?>(null) }
+    var surfaceRef by remember(file.path) { mutableStateOf<android.view.Surface?>(null) }
+    var isDraggingSlider by remember { mutableStateOf(false) }
     var videoWidth by remember(file.path) { mutableIntStateOf(0) }
     var videoHeight by remember(file.path) { mutableIntStateOf(0) }
 
@@ -1976,7 +1978,7 @@ fun VideoPlayerContent(
     LaunchedEffect(isPlaying, isVideoPrepared, videoError) {
         while (isPlaying) {
             kotlinx.coroutines.delay(250L)
-            if (isVideoPrepared && !videoError && mediaPlayerRef != null) {
+            if (!isDraggingSlider && isVideoPrepared && !videoError && mediaPlayerRef != null) {
                 try {
                     val pos = mediaPlayerRef?.currentPosition ?: 0
                     val dur = mediaPlayerRef?.duration ?: 0
@@ -1985,19 +1987,6 @@ fun VideoPlayerContent(
                         currentPositionMs = pos.toLong()
                     }
                 } catch (_: Exception) {}
-            } else {
-                val totalSec = (totalDurationMs / 1000L).coerceAtLeast(1L)
-                val nextMs = currentPositionMs + 250L
-                if (nextMs >= totalDurationMs) {
-                    if (isLooping) {
-                        currentPositionMs = 0L
-                    } else {
-                        currentPositionMs = totalDurationMs
-                        isPlaying = false
-                    }
-                } else {
-                    currentPositionMs = nextMs
-                }
             }
         }
     }
@@ -2007,6 +1996,11 @@ fun VideoPlayerContent(
         mediaPlayerRef = mp
         try {
             mp.setDataSource(file.absolutePath)
+            surfaceRef?.let { surf ->
+                if (surf.isValid) {
+                    mp.setSurface(surf)
+                }
+            }
             mp.setOnPreparedListener { preparedMp ->
                 isVideoPrepared = true
                 val dur = preparedMp.duration
@@ -2038,12 +2032,14 @@ fun VideoPlayerContent(
                     isPlaying = false
                 }
             }
-            mp.setOnErrorListener { _, _, _ ->
+            mp.setOnErrorListener { _, what, extra ->
+                android.util.Log.e("ArcboxVideo", "MediaPlayer error: what=$what, extra=$extra")
                 videoError = true
                 true
             }
             mp.prepareAsync()
         } catch (e: Exception) {
+            android.util.Log.e("ArcboxVideo", "Exception setting up MediaPlayer", e)
             videoError = true
         }
 
@@ -2053,6 +2049,26 @@ fun VideoPlayerContent(
             } catch (_: Exception) {}
             mp.release()
             mediaPlayerRef = null
+            surfaceRef?.release()
+            surfaceRef = null
+        }
+    }
+
+    fun performSeek(targetMs: Long) {
+        val boundedMs = targetMs.coerceIn(0L, totalDurationMs.coerceAtLeast(1L))
+        currentPositionMs = boundedMs
+        if (isVideoPrepared && !videoError && mediaPlayerRef != null) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    mediaPlayerRef?.seekTo(boundedMs, android.media.MediaPlayer.SEEK_CLOSEST)
+                } else {
+                    mediaPlayerRef?.seekTo(boundedMs.toInt())
+                }
+            } catch (e: Exception) {
+                try {
+                    mediaPlayerRef?.seekTo(boundedMs.toInt())
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -2076,7 +2092,9 @@ fun VideoPlayerContent(
                                 setOnClickListener { onToggleControls() }
                                 surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
                                     override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
-                                        mediaPlayerRef?.setSurface(android.view.Surface(surface))
+                                        val newSurface = android.view.Surface(surface)
+                                        surfaceRef = newSurface
+                                        mediaPlayerRef?.setSurface(newSurface)
                                         updateTextureViewTransform(this@apply, videoWidth, videoHeight, scaleModeIndex)
                                     }
                                     override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
@@ -2084,6 +2102,8 @@ fun VideoPlayerContent(
                                     }
                                     override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
                                         mediaPlayerRef?.setSurface(null)
+                                        surfaceRef?.release()
+                                        surfaceRef = null
                                         return true
                                     }
                                     override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) {}
@@ -2227,7 +2247,9 @@ fun VideoPlayerContent(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                val currentProgress = (currentPositionMs.toFloat() / totalDurationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
+                val currentProgress = if (totalDurationMs > 0L) {
+                    (currentPositionMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
+                } else 0f
                 val currentSeconds = (currentPositionMs / 1000L).toInt()
                 val totalSeconds = (totalDurationMs / 1000L).toInt()
                 
@@ -2241,12 +2263,13 @@ fun VideoPlayerContent(
                     Slider(
                         value = currentProgress,
                         onValueChange = { newProgress ->
+                            isDraggingSlider = true
                             currentPositionMs = (newProgress * totalDurationMs).toLong()
-                            if (isVideoPrepared && !videoError && mediaPlayerRef != null) {
-                                try {
-                                    mediaPlayerRef?.seekTo(currentPositionMs.toInt())
-                                } catch (_: Exception) {}
-                            }
+                            onResetControlsTimer()
+                        },
+                        onValueChangeFinished = {
+                            isDraggingSlider = false
+                            performSeek(currentPositionMs)
                             onResetControlsTimer()
                         },
                         colors = SliderDefaults.colors(
@@ -2265,13 +2288,22 @@ fun VideoPlayerContent(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Rewind 10s Button
+                    IconButton(onClick = {
+                        performSeek(currentPositionMs - 10000L)
+                        onResetControlsTimer()
+                    }) {
+                        Icon(
+                            Icons.Default.Replay10,
+                            contentDescription = "Voltar 10 segundos",
+                            tint = Color.White
+                        )
+                    }
+
                     // Play/Pause Button
                     IconButton(onClick = {
-                        if (!isPlaying && currentPositionMs >= totalDurationMs) {
-                            currentPositionMs = 0L
-                            if (isVideoPrepared && !videoError) {
-                                try { mediaPlayerRef?.seekTo(0) } catch (_: Exception) {}
-                            }
+                        if (!isPlaying && totalDurationMs > 0L && currentPositionMs >= totalDurationMs) {
+                            performSeek(0L)
                         }
                         isPlaying = !isPlaying
                         onResetControlsTimer()
@@ -2279,6 +2311,18 @@ fun VideoPlayerContent(
                         Icon(
                             if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = "Play/Pause",
+                            tint = Color.White
+                        )
+                    }
+
+                    // Forward 10s Button
+                    IconButton(onClick = {
+                        performSeek(currentPositionMs + 10000L)
+                        onResetControlsTimer()
+                    }) {
+                        Icon(
+                            Icons.Default.Forward10,
+                            contentDescription = "Avançar 10 segundos",
                             tint = Color.White
                         )
                     }
