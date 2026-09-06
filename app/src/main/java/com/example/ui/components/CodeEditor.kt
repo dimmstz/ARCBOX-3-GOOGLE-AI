@@ -44,12 +44,7 @@ fun ArcboxCodeEditorModal(
 
     val isSaved = textContent == lastSavedContent
     val lines = remember(textContent) { textContent.split('\n') }
-    val lineCountCap = lines.size.coerceAtMost(2000)
     val scrollState = rememberScrollState()
-
-    val lineNumbersText = remember(lineCountCap) {
-        (1..lineCountCap.coerceAtLeast(1)).joinToString("\n")
-    }
 
     Dialog(
         onDismissRequest = onClose,
@@ -155,41 +150,19 @@ fun ArcboxCodeEditorModal(
                         }
                     }
                 } else {
-                    Row(
+                    Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
                             .verticalScroll(scrollState)
                     ) {
-                        // Line numbers sidebar
-                        Box(
-                            modifier = Modifier
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.TopEnd
-                        ) {
-                            Text(
-                                text = lineNumbersText,
-                                style = TextStyle(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                ),
-                                lineHeight = 20.sp,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.End
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
                         // Text Editor Area
                         BasicTextField(
                             value = textContent,
                             onValueChange = { textContent = it },
                             modifier = Modifier
-                                .weight(1f)
-                                .padding(12.dp)
-                                .fillMaxHeight(),
+                                .fillMaxWidth()
+                                .padding(16.dp),
                             textStyle = TextStyle(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 13.sp,
