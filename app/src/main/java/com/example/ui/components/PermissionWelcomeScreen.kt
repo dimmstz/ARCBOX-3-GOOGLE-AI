@@ -528,19 +528,7 @@ fun PermissionWelcomeScreen(
                 }
             }
 
-            if (!hasStoragePermission) {
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Explorar Arquivos (Modo Básico)",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            // Modo Básico button removed as requested
         }
     }
 }
