@@ -88,6 +88,13 @@ fun ArcboxApp(
             uiState.selectedItems.isNotEmpty() ||
             uiState.tempZipSourcePath != null
 
+    val isUpdateModalActive = when (val s = uiState.updateStatus) {
+        is UpdateStatus.UpdateAvailable -> dismissedUpdateTag != s.releaseInfo.tagName
+        is UpdateStatus.Downloading -> true
+        is UpdateStatus.DownloadCompleted -> true
+        else -> false
+    }
+
     val hasOtherModalOrOverlay = uiState.activeApkInfo != null ||
             uiState.activeZipFile != null ||
             uiState.activePdfFile != null ||
@@ -103,7 +110,8 @@ fun ArcboxApp(
             showNewFileDialog ||
             showRenameDialog ||
             showCompressDialog ||
-            showDeleteConfirmationDialog
+            showDeleteConfirmationDialog ||
+            isUpdateModalActive
 
     val hasActiveModalOrOverlay = drawerState.isOpen || hasOtherModalOrOverlay
 
@@ -139,6 +147,12 @@ fun ArcboxApp(
 
     BackHandler(enabled = hasActiveModalOrOverlay || canGoBackInFiles) {
         when {
+            isUpdateModalActive -> {
+                if (uiState.updateStatus is UpdateStatus.UpdateAvailable) {
+                    dismissedUpdateTag = (uiState.updateStatus as UpdateStatus.UpdateAvailable).releaseInfo.tagName
+                }
+                viewModel.dismissUpdateDialog()
+            }
             drawerState.isOpen -> scope.launch { drawerState.close() }
             showNewFolderDialog -> showNewFolderDialog = false
             showNewFileDialog -> showNewFileDialog = false
@@ -1148,17 +1162,9 @@ fun ArcboxApp(
         }
 
         // Modal de Atualização de Versão (GitHub Releases)
-        val currentUpdateStatus = uiState.updateStatus
-        val shouldShowUpdateDialog = when (currentUpdateStatus) {
-            is UpdateStatus.UpdateAvailable -> dismissedUpdateTag != currentUpdateStatus.releaseInfo.tagName
-            is UpdateStatus.Downloading -> true
-            is UpdateStatus.DownloadCompleted -> true
-            else -> false
-        }
-
-        if (shouldShowUpdateDialog) {
+        if (isUpdateModalActive) {
             UpdateNotificationModal(
-                updateStatus = currentUpdateStatus,
+                updateStatus = uiState.updateStatus,
                 onDownloadAndInstall = { releaseInfo ->
                     viewModel.downloadAndInstallUpdate(releaseInfo)
                 },
@@ -1169,9 +1175,10 @@ fun ArcboxApp(
                     viewModel.cancelUpdateDownload()
                 },
                 onDismiss = {
-                    if (currentUpdateStatus is UpdateStatus.UpdateAvailable) {
-                        dismissedUpdateTag = currentUpdateStatus.releaseInfo.tagName
+                    if (uiState.updateStatus is UpdateStatus.UpdateAvailable) {
+                        dismissedUpdateTag = (uiState.updateStatus as UpdateStatus.UpdateAvailable).releaseInfo.tagName
                     }
+                    viewModel.dismissUpdateDialog()
                 }
             )
         }

@@ -2511,6 +2511,12 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun dismissUpdateDialog() {
+        _uiState.update {
+            it.copy(updateStatus = UpdateStatus.Idle)
+        }
+    }
+
     fun cancelUpdateDownload() {
         downloadUpdateJob?.cancel()
         downloadUpdateJob = null

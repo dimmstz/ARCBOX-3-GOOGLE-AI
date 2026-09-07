@@ -44,14 +44,10 @@ fun UpdateNotificationModal(
     var showFullChangelog by remember { mutableStateOf(false) }
 
     Dialog(
-        onDismissRequest = {
-            if (!isMandatory && updateStatus !is UpdateStatus.Downloading) {
-                onDismiss()
-            }
-        },
+        onDismissRequest = onDismiss,
         properties = DialogProperties(
-            dismissOnBackPress = !isMandatory,
-            dismissOnClickOutside = !isMandatory,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
             usePlatformDefaultWidth = false
         )
     ) {
@@ -70,7 +66,7 @@ fun UpdateNotificationModal(
                     .fillMaxWidth()
                     .padding(20.dp)
             ) {
-                // Header Icon & Title
+                // Header Icon, Title & Close Button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
@@ -109,6 +105,17 @@ fun UpdateNotificationModal(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Fechar modal",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -279,18 +286,33 @@ fun UpdateNotificationModal(
                 // Action Buttons
                 when (updateStatus) {
                     is UpdateStatus.DownloadCompleted -> {
-                        Button(
-                            onClick = onInstallDownloadedApk,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .defaultMinSize(minHeight = 48.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.InstallMobile, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Instalar Atualização Agora", fontWeight = FontWeight.Bold)
+                            Button(
+                                onClick = onInstallDownloadedApk,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 48.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Icon(Icons.Default.InstallMobile, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Instalar Atualização Agora", fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = onDismiss,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 44.dp)
+                            ) {
+                                Text("Lembrar Mais Tarde / Voltar")
+                            }
                         }
                     }
                     is UpdateStatus.Downloading -> {
