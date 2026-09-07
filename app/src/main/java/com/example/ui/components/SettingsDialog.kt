@@ -1033,7 +1033,7 @@ fun ArcboxSettingsModal(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Versão 2.8.5",
+                                    text = "Versão ${com.example.BuildConfig.VERSION_NAME}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
