@@ -37,6 +37,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.models.FolderTransitionType
 import com.example.data.models.ThemeMode
+import com.example.data.update.UpdateReleaseInfo
+import com.example.data.update.UpdateStatus
 import com.example.ui.theme.AccentColorOption
 import com.example.ui.theme.PredefinedCustomColors
 import com.example.ui.theme.CustomColorPreset
@@ -100,6 +102,20 @@ fun ArcboxSettingsModal(
     onRemountSystemRw: () -> Unit = {},
     onOpenCloudManager: () -> Unit = {},
     onOpenWelcomeOnboarding: () -> Unit = {},
+    updateStatus: UpdateStatus = UpdateStatus.Idle,
+    autoCheckUpdates: Boolean = true,
+    wifiOnlyUpdates: Boolean = false,
+    lastUpdateCheckedTime: Long = 0L,
+    updateRepoOwner: String = "douglas-br",
+    updateRepoName: String = "arcbox",
+    onCheckForUpdates: () -> Unit = {},
+    onDownloadAndInstallUpdate: (UpdateReleaseInfo) -> Unit = {},
+    onCancelUpdateDownload: () -> Unit = {},
+    onInstallDownloadedUpdate: () -> Unit = {},
+    onToggleAutoCheckUpdates: (Boolean) -> Unit = {},
+    onToggleWifiOnlyUpdates: (Boolean) -> Unit = {},
+    onSaveCustomUpdateRepo: (String, String) -> Unit = { _, _ -> },
+    onRequestInstallPermission: () -> Unit = {},
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
@@ -978,7 +994,25 @@ fun ArcboxSettingsModal(
                         }
                     }
 
-                    // CATEGORY 8: SOBRE O APP
+                    // CATEGORY 8: ATUALIZAÇÕES DO ARCBOX
+                    AppUpdateSection(
+                        updateStatus = updateStatus,
+                        autoCheckEnabled = autoCheckUpdates,
+                        wifiOnlyEnabled = wifiOnlyUpdates,
+                        lastCheckedTime = lastUpdateCheckedTime,
+                        repoOwner = updateRepoOwner,
+                        repoName = updateRepoName,
+                        onCheckForUpdates = onCheckForUpdates,
+                        onDownloadAndInstall = onDownloadAndInstallUpdate,
+                        onCancelDownload = onCancelUpdateDownload,
+                        onInstallDownloadedApk = onInstallDownloadedUpdate,
+                        onToggleAutoCheck = onToggleAutoCheckUpdates,
+                        onToggleWifiOnly = onToggleWifiOnlyUpdates,
+                        onSaveCustomRepo = onSaveCustomUpdateRepo,
+                        onRequestInstallPermission = onRequestInstallPermission
+                    )
+
+                    // CATEGORY 9: SOBRE O APP
                     SettingsSectionCard(
                         title = "Sobre o Arcbox Storage",
                         icon = Icons.Default.Info

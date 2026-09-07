@@ -13,8 +13,10 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
@@ -127,6 +129,10 @@ fun ArcboxFileGridList(
     onOpenAppSettings: ((String) -> Unit)? = null
 ) {
     val folderCache = remember { mutableStateMapOf<String, List<FileItem>>() }
+    // Persistent scroll position memory per folder path (index, offset)
+    val gridScrollMemory = remember { mutableMapOf<String, Pair<Int, Int>>() }
+    val listScrollMemory = remember { mutableMapOf<String, Pair<Int, Int>>() }
+
     LaunchedEffect(currentPath, files) {
         if (files.isNotEmpty() || !folderCache.containsKey(currentPath)) {
             folderCache[currentPath] = files
@@ -503,7 +509,21 @@ fun ArcboxFileGridList(
                         modifier = Modifier.fillMaxSize()
                     ) { mode ->
                         if (mode == ViewMode.GRID) {
-                            val folderGridState = rememberLazyGridState()
+                            val initialPos = gridScrollMemory[displayedPath] ?: (0 to 0)
+                            val folderGridState = rememberLazyGridState(
+                                initialFirstVisibleItemIndex = initialPos.first,
+                                initialFirstVisibleItemScrollOffset = initialPos.second
+                            )
+
+                            // Track and record scroll position changes for this folder
+                            LaunchedEffect(folderGridState) {
+                                snapshotFlow {
+                                    folderGridState.firstVisibleItemIndex to folderGridState.firstVisibleItemScrollOffset
+                                }.collect { pos ->
+                                    gridScrollMemory[displayedPath] = pos
+                                }
+                            }
+
                             LazyVerticalGrid(
                                 state = folderGridState,
                                 columns = GridCells.Fixed(3),
@@ -534,7 +554,21 @@ fun ArcboxFileGridList(
                                 }
                             }
                         } else {
-                            val folderListState = rememberLazyListState()
+                            val initialPos = listScrollMemory[displayedPath] ?: (0 to 0)
+                            val folderListState = rememberLazyListState(
+                                initialFirstVisibleItemIndex = initialPos.first,
+                                initialFirstVisibleItemScrollOffset = initialPos.second
+                            )
+
+                            // Track and record scroll position changes for this folder
+                            LaunchedEffect(folderListState) {
+                                snapshotFlow {
+                                    folderListState.firstVisibleItemIndex to folderListState.firstVisibleItemScrollOffset
+                                }.collect { pos ->
+                                    listScrollMemory[displayedPath] = pos
+                                }
+                            }
+
                             LazyColumn(
                                 state = folderListState,
                                 contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp),

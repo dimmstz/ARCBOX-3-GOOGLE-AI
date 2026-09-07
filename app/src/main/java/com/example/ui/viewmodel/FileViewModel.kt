@@ -13,6 +13,7 @@ import com.example.data.db.FavoriteEntity
 import com.example.data.db.TrashEntity
 import com.example.data.models.*
 import com.example.data.repository.FileRepository
+import com.example.data.update.*
 import com.example.ui.theme.AccentColorOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -126,13 +127,22 @@ data class FileUiState(
     val isWelcomeOnboardingOpen: Boolean = false,
     val isRootAvailable: Boolean = false,
     val isRootGranted: Boolean = false,
-    val rootStatusDetails: String = ""
+    val rootStatusDetails: String = "",
+    val updateStatus: UpdateStatus = UpdateStatus.Idle,
+    val updateAutoCheck: Boolean = true,
+    val updateWifiOnly: Boolean = false,
+    val updateLastCheckedTime: Long = 0L,
+    val updateRepoOwner: String = UpdateConfig.DEFAULT_GITHUB_OWNER,
+    val updateRepoName: String = UpdateConfig.DEFAULT_GITHUB_REPO
 )
 
 class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = FileRepository(application.applicationContext)
     private val prefs = application.getSharedPreferences("arcbox_prefs", android.content.Context.MODE_PRIVATE)
+    private val updateManager = GitHubUpdateManager(application.applicationContext)
+    private var downloadUpdateJob: Job? = null
+    private var downloadedApkFile: File? = null
     private val _uiState = MutableStateFlow(buildInitialUiState(application, prefs))
     val uiState: StateFlow<FileUiState> = _uiState.asStateFlow()
     private var searchJob: Job? = null
@@ -179,6 +189,13 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             val webdavEmail = prefs.getString("cloud_email_webdav", "usuario@meuservidor.com") ?: "usuario@meuservidor.com"
             val webdavUrl = prefs.getString("cloud_url_webdav", "https://cloud.nextcloud.com") ?: "https://cloud.nextcloud.com"
 
+            val updatePrefs = app.getSharedPreferences("arcbox_update_prefs", android.content.Context.MODE_PRIVATE)
+            val updateAutoCheck = updatePrefs.getBoolean(UpdateConfig.PREF_AUTO_CHECK_UPDATES, true)
+            val updateWifiOnly = updatePrefs.getBoolean(UpdateConfig.PREF_UPDATE_WIFI_ONLY, false)
+            val updateLastChecked = updatePrefs.getLong(UpdateConfig.PREF_LAST_UPDATE_CHECK, 0L)
+            val updateRepoOwner = updatePrefs.getString(UpdateConfig.PREF_CUSTOM_REPO_OWNER, UpdateConfig.DEFAULT_GITHUB_OWNER) ?: UpdateConfig.DEFAULT_GITHUB_OWNER
+            val updateRepoName = updatePrefs.getString(UpdateConfig.PREF_CUSTOM_REPO_NAME, UpdateConfig.DEFAULT_GITHUB_REPO) ?: UpdateConfig.DEFAULT_GITHUB_REPO
+
             return FileUiState(
                 isWelcomeOnboardingOpen = shouldShowOnboarding,
                 themeMode = loadedThemeMode,
@@ -210,6 +227,11 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 dropboxAccountEmail = dropboxEmail,
                 webdavAccountEmail = webdavEmail,
                 webdavServerUrl = webdavUrl,
+                updateAutoCheck = updateAutoCheck,
+                updateWifiOnly = updateWifiOnly,
+                updateLastCheckedTime = updateLastChecked,
+                updateRepoOwner = updateRepoOwner,
+                updateRepoName = updateRepoName,
                 isLoading = true
             )
         }
@@ -275,6 +297,12 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             fetchFilesInternal()
+
+            // Verificação automática de atualizações em background
+            launch(Dispatchers.IO) {
+                delay(3500)
+                checkUpdatesSilentlyOnStartup()
+            }
         }
     }
 
@@ -2360,6 +2388,185 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             ext in listOf("mp3", "wav", "ogg", "m4a", "flac") || mime.startsWith("audio/") -> FileType.AUDIO
             ext == "apk" || mime.contains("vnd.android.package-archive") -> FileType.APK
             else -> FileType.DOCUMENT
+        }
+    }
+
+    // ==========================================
+    // SISTEMA DE ATUALIZAÇÕES DO ARCBOX (GITHUB RELEASES)
+    // ==========================================
+
+    private suspend fun checkUpdatesSilentlyOnStartup() {
+        if (!updateManager.isAutoCheckEnabled()) return
+        val lastChecked = updateManager.getLastCheckedTime()
+        val now = System.currentTimeMillis()
+        if (now - lastChecked < UpdateConfig.MIN_AUTO_CHECK_INTERVAL_MS) return
+
+        if (!updateManager.isNetworkAllowed()) return
+
+        val result = updateManager.checkLatestRelease()
+        result.onSuccess { info ->
+            val updatedLastCheck = updateManager.getLastCheckedTime()
+            if (info != null) {
+                _uiState.update {
+                    it.copy(
+                        updateStatus = UpdateStatus.UpdateAvailable(info),
+                        updateLastCheckedTime = updatedLastCheck,
+                        snackbarMessage = "Nova versão do ArcBox disponível (v${info.targetVersionName})!"
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        updateStatus = UpdateStatus.NoUpdateAvailable(UpdateConfig.CURRENT_VERSION_NAME, updatedLastCheck),
+                        updateLastCheckedTime = updatedLastCheck
+                    )
+                }
+            }
+        }.onFailure {
+            // Silencioso na inicialização para não incomodar o usuário se estiver offline
+        }
+    }
+
+    fun checkForUpdatesManual() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updateStatus = UpdateStatus.Checking) }
+            val result = updateManager.checkLatestRelease()
+            val updatedLastCheck = updateManager.getLastCheckedTime()
+            result.onSuccess { info ->
+                if (info != null) {
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = UpdateStatus.UpdateAvailable(info),
+                            updateLastCheckedTime = updatedLastCheck
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = UpdateStatus.NoUpdateAvailable(UpdateConfig.CURRENT_VERSION_NAME, updatedLastCheck),
+                            updateLastCheckedTime = updatedLastCheck,
+                            snackbarMessage = "Você já está utilizando a versão mais recente do ArcBox."
+                        )
+                    }
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        updateStatus = UpdateStatus.Error(err.message ?: "Erro ao consultar o GitHub Releases"),
+                        updateLastCheckedTime = updatedLastCheck
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadAndInstallUpdate(releaseInfo: UpdateReleaseInfo) {
+        downloadUpdateJob?.cancel()
+        downloadUpdateJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    updateStatus = UpdateStatus.Downloading(
+                        releaseInfo = releaseInfo,
+                        progressPercent = 0,
+                        downloadedBytes = 0L,
+                        totalBytes = releaseInfo.apkSizeBytes
+                    )
+                )
+            }
+
+            val result = updateManager.downloadApk(releaseInfo) { percent, downloaded, total ->
+                _uiState.update {
+                    it.copy(
+                        updateStatus = UpdateStatus.Downloading(
+                            releaseInfo = releaseInfo,
+                            progressPercent = percent,
+                            downloadedBytes = downloaded,
+                            totalBytes = total
+                        )
+                    )
+                }
+            }
+
+            result.onSuccess { file ->
+                downloadedApkFile = file
+                _uiState.update {
+                    it.copy(
+                        updateStatus = UpdateStatus.DownloadCompleted(releaseInfo, file),
+                        snackbarMessage = "Download concluído e validado! Pronto para instalar."
+                    )
+                }
+                // Tenta acionar a instalação se a permissão já estiver concedida
+                installDownloadedUpdate()
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        updateStatus = UpdateStatus.Error(err.message ?: "Falha ao baixar atualização do ArcBox")
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelUpdateDownload() {
+        downloadUpdateJob?.cancel()
+        downloadUpdateJob = null
+        updateManager.cleanOldUpdates()
+        _uiState.update {
+            it.copy(
+                updateStatus = UpdateStatus.Idle,
+                snackbarMessage = "Download da atualização cancelado."
+            )
+        }
+    }
+
+    fun installDownloadedUpdate() {
+        val file = downloadedApkFile ?: return
+        val context = getApplication<Application>().applicationContext
+
+        if (!ApkInstallerHelper.canRequestPackageInstalls(context)) {
+            _uiState.update {
+                it.copy(
+                    snackbarMessage = "Permita ao ArcBox instalar apps desconhecidos nas configurações para concluir a atualização."
+                )
+            }
+            ApkInstallerHelper.openUnknownSourcesSettings(context)
+            return
+        }
+
+        val success = ApkInstallerHelper.startApkInstallation(context, file)
+        if (!success) {
+            _uiState.update {
+                it.copy(
+                    snackbarMessage = "Não foi possível abrir o instalador do pacote Android."
+                )
+            }
+        }
+    }
+
+    fun requestInstallUnknownAppsPermission() {
+        val context = getApplication<Application>().applicationContext
+        ApkInstallerHelper.openUnknownSourcesSettings(context)
+    }
+
+    fun setUpdateAutoCheck(enabled: Boolean) {
+        updateManager.setAutoCheckEnabled(enabled)
+        _uiState.update { it.copy(updateAutoCheck = enabled) }
+    }
+
+    fun setUpdateWifiOnly(enabled: Boolean) {
+        updateManager.setWifiOnlyEnabled(enabled)
+        _uiState.update { it.copy(updateWifiOnly = enabled) }
+    }
+
+    fun setCustomUpdateRepo(owner: String, repo: String) {
+        updateManager.setCustomRepo(owner, repo)
+        _uiState.update {
+            it.copy(
+                updateRepoOwner = owner,
+                updateRepoName = repo,
+                updateStatus = UpdateStatus.Idle,
+                snackbarMessage = "Servidor de atualizações definido para: $owner/$repo"
+            )
         }
     }
 

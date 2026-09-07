@@ -29,6 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.models.FileType
 import com.example.data.models.FileItem
 import com.example.data.models.ThemeMode
+import com.example.data.update.*
 import androidx.compose.ui.window.DialogProperties
 import com.example.ui.components.*
 import com.example.ui.theme.ArcboxTheme
@@ -55,6 +56,7 @@ fun ArcboxApp(
 
     var inputName by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<com.example.data.models.FileItem?>(null) }
+    var dismissedUpdateTag by remember { mutableStateOf<String?>(null) }
 
     val isDark = when (uiState.themeMode) {
         ThemeMode.DARK -> true
@@ -864,6 +866,20 @@ fun ArcboxApp(
                 onRemountSystemRw = { viewModel.remountSystemRw() },
                 onOpenCloudManager = { viewModel.openCloudManager() },
                 onOpenWelcomeOnboarding = { viewModel.openWelcomeOnboarding() },
+                updateStatus = uiState.updateStatus,
+                autoCheckUpdates = uiState.updateAutoCheck,
+                wifiOnlyUpdates = uiState.updateWifiOnly,
+                lastUpdateCheckedTime = uiState.updateLastCheckedTime,
+                updateRepoOwner = uiState.updateRepoOwner,
+                updateRepoName = uiState.updateRepoName,
+                onCheckForUpdates = { viewModel.checkForUpdatesManual() },
+                onDownloadAndInstallUpdate = { releaseInfo -> viewModel.downloadAndInstallUpdate(releaseInfo) },
+                onCancelUpdateDownload = { viewModel.cancelUpdateDownload() },
+                onInstallDownloadedUpdate = { viewModel.installDownloadedUpdate() },
+                onToggleAutoCheckUpdates = { viewModel.setUpdateAutoCheck(it) },
+                onToggleWifiOnlyUpdates = { viewModel.setUpdateWifiOnly(it) },
+                onSaveCustomUpdateRepo = { owner, repo -> viewModel.setCustomUpdateRepo(owner, repo) },
+                onRequestInstallPermission = { viewModel.requestInstallUnknownAppsPermission() },
                 onClose = { viewModel.closeSettings() }
             )
         }
@@ -1123,6 +1139,35 @@ fun ArcboxApp(
                 dismissButton = {
                     TextButton(onClick = { filesToDeleteDirectly = null }) {
                         Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+        // Modal de Atualização de Versão (GitHub Releases)
+        val currentUpdateStatus = uiState.updateStatus
+        val shouldShowUpdateDialog = when (currentUpdateStatus) {
+            is UpdateStatus.UpdateAvailable -> dismissedUpdateTag != currentUpdateStatus.releaseInfo.tagName
+            is UpdateStatus.Downloading -> true
+            is UpdateStatus.DownloadCompleted -> true
+            else -> false
+        }
+
+        if (shouldShowUpdateDialog) {
+            UpdateNotificationModal(
+                updateStatus = currentUpdateStatus,
+                onDownloadAndInstall = { releaseInfo ->
+                    viewModel.downloadAndInstallUpdate(releaseInfo)
+                },
+                onInstallDownloadedApk = {
+                    viewModel.installDownloadedUpdate()
+                },
+                onCancelDownload = {
+                    viewModel.cancelUpdateDownload()
+                },
+                onDismiss = {
+                    if (currentUpdateStatus is UpdateStatus.UpdateAvailable) {
+                        dismissedUpdateTag = currentUpdateStatus.releaseInfo.tagName
                     }
                 }
             )
