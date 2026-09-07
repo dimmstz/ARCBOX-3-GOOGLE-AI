@@ -38,6 +38,7 @@ fun ArcboxNavigationDrawerContent(
     trashCount: Int,
     favoritesCount: Int = 0,
     isFavoritesOnly: Boolean = false,
+    isRecentsOnly: Boolean = false,
     isAppManagerOpen: Boolean = false,
     currentThemeMode: ThemeMode,
     isMegaConnected: Boolean = false,
@@ -55,6 +56,7 @@ fun ArcboxNavigationDrawerContent(
     onSelectVolume: (StorageVolume) -> Unit,
     onStartOAuthFlow: (CloudProvider) -> Unit = {},
     onSelectFavorites: () -> Unit = {},
+    onSelectRecents: () -> Unit = {},
     onSelectCategory: (FileType?) -> Unit,
     onOpenAppManager: () -> Unit = {},
     onOpenStorageDashboard: () -> Unit,
@@ -207,6 +209,66 @@ fun ArcboxNavigationDrawerContent(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Navigation Item: MEGA Cloud
+            val megaVolume = storageVolumes.find { it.id == "cloud_mega" || it.path == "/cloud/mega" }
+            NavigationDrawerItem(
+                label = {
+                    Column {
+                        Text("MEGA", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = if (isMegaConnected) (if (megaEmail.isNotBlank()) megaEmail else "Conectado • 50 GB") else "Toque para conectar (50 GB)",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
+                            color = if (isMegaConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                selected = selectedVolume?.path == "/cloud/mega",
+                onClick = {
+                    if (isMegaConnected && megaVolume != null) {
+                        onSelectVolume(megaVolume)
+                    } else if (isMegaConnected) {
+                        onSelectVolume(
+                            StorageVolume(
+                                id = "cloud_mega",
+                                name = "MEGA",
+                                path = "/cloud/mega",
+                                totalBytes = 50L * 1024 * 1024 * 1024L,
+                                freeBytes = 50L * 1024 * 1024 * 1024L,
+                                typeKey = "CLOUD"
+                            )
+                        )
+                    } else {
+                        onStartOAuthFlow(CloudProvider.MEGA)
+                    }
+                    onCloseDrawer()
+                },
+                icon = {
+                    Icon(
+                        Icons.Default.Cloud,
+                        contentDescription = "MEGA Cloud",
+                        tint = if (isMegaConnected) Color(0xFFD9272E) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                badge = {
+                    if (isMegaConnected) {
+                        Surface(
+                            color = Color(0xFFD9272E).copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                "Ativo",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFD9272E),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
             // Navigation Item: Favoritos
             NavigationDrawerItem(
                 label = { Text("Favoritos", fontWeight = FontWeight.SemiBold) },
@@ -220,6 +282,42 @@ fun ArcboxNavigationDrawerContent(
                     if (favoritesCount > 0) {
                         Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
                             Text("$favoritesCount", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            // Navigation Item: Recentes
+            NavigationDrawerItem(
+                label = { Text("Recentes", fontWeight = FontWeight.SemiBold) },
+                selected = isRecentsOnly,
+                onClick = {
+                    onSelectRecents()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            // Navigation Item: Lixeira
+            NavigationDrawerItem(
+                label = { Text("Lixeira", fontWeight = FontWeight.SemiBold) },
+                selected = false,
+                onClick = {
+                    onOpenTrashBin()
+                    onCloseDrawer()
+                },
+                icon = {
+                    ModernTrashCanCanvas(
+                        modifier = Modifier.size(20.dp),
+                        accentColor = MaterialTheme.colorScheme.error
+                    )
+                },
+                badge = {
+                    if (trashCount > 0) {
+                        Badge(containerColor = MaterialTheme.colorScheme.error) {
+                            Text("$trashCount", color = Color.White)
                         }
                     }
                 },

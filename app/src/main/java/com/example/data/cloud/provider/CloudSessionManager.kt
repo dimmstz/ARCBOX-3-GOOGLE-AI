@@ -3,6 +3,9 @@ package com.example.data.cloud.provider
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
+import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
@@ -11,15 +14,32 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Secure session manager for Cloud Storage connections.
  * 
+ * Backed by Android Keystore and EncryptedSharedPreferences (AES-256 GCM).
+ * 
  * Supports:
  * - "Vincular conta" (Persistent encrypted storage across app restarts)
  * - "Acesso temporário" (In-memory transient session wiped on disconnect or app exit)
- * - AES cipher / SHA-256 key derivation - NEVER stores raw plaintext credentials.
+ * - Android Keystore hardware-backed keys - NEVER stores raw plaintext credentials.
  */
 class CloudSessionManager(private val context: Context) {
 
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("arcbox_secure_cloud_vault", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences by lazy {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                "arcbox_secure_cloud_keystore_vault",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Log.w("CloudSessionManager", "Hardware Keystore fallback: ${e.message}")
+            context.getSharedPreferences("arcbox_secure_cloud_vault", Context.MODE_PRIVATE)
+        }
+    }
 
     // In-memory registry for temporary sessions (never written to disk)
     private val temporarySessions = mutableMapOf<String, CloudSessionData>()

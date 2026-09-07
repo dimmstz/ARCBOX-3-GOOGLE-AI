@@ -4,19 +4,13 @@ import android.content.Context
 import android.util.Log
 import com.example.data.cloud.CloudAuthResult
 import com.example.data.cloud.RemoteCloudFile
+import com.example.data.cloud.provider.mega.MegaApiClient
+import com.example.data.cloud.provider.mega.MegaNode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.asRequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.*
 
 class MegaProvider(
     private val context: Context,
@@ -28,6 +22,21 @@ class MegaProvider(
     override val displayName: String = "MEGA"
     override val defaultPath: String = "/cloud/mega"
 
+    private val apiClient: MegaApiClient = MegaApiClient(client)
+
+    // Cached node mapping: handle -> MegaNode
+    private val nodeCache = mutableMapOf<String, MegaNode>()
+    private var rootHandle: String = "root"
+
+    init {
+        // Restore existing Keystore session if present
+        sessionManager.getSession(providerId)?.let { session ->
+            if (session.tokenOrPass.isNotBlank()) {
+                apiClient.setSession(session.tokenOrPass)
+            }
+        }
+    }
+
     override val isConnected: Boolean
         get() = sessionManager.isConnected(providerId)
 
@@ -35,7 +44,7 @@ class MegaProvider(
         get() = sessionManager.getSession(providerId)?.email
 
     override val totalSpace: Long
-        get() = sessionManager.getSession(providerId)?.totalSpace ?: (50L * 1024 * 1024 * 1024)
+        get() = sessionManager.getSession(providerId)?.totalSpace ?: (50L * 1024 * 1024 * 1024L)
 
     override val usedSpace: Long
         get() = sessionManager.getSession(providerId)?.usedSpace ?: (getCacheDir().let { if (it.exists()) getFolderSize(it) else 0L })
@@ -52,93 +61,129 @@ class MegaProvider(
         isTemporary: Boolean
     ): CloudAuthResult = withContext(Dispatchers.IO) {
         val cleanEmail = email.trim()
-        val megaApiUrl = "https://g.api.mega.co.nz/cs"
-        val requestBody = """[{"a":"us","user":"$cleanEmail"}]""".toRequestBody("application/json".toMediaTypeOrNull())
-        val request = Request.Builder()
-            .url(megaApiUrl)
-            .post(requestBody)
-            .header("User-Agent", "Arcbox-FileManager/2.4 (Android)")
-            .build()
 
-        try {
-            client.newCall(request).execute().use { response ->
-                val bodyStr = response.body?.string()?.trim() ?: ""
-                val cloudDir = getCacheDir()
-                ensureInitialWorkspace(cloudDir, "MEGA", cleanEmail)
-
-                val quotaTotal = 50L * 1024 * 1024 * 1024
-                val quotaUsed = getFolderSize(cloudDir)
-
-                sessionManager.saveSession(
-                    providerId = providerId,
-                    email = cleanEmail,
-                    serverUrl = megaApiUrl,
-                    tokenOrPass = tokenOrPass,
-                    isTemporary = isTemporary,
-                    totalSpace = quotaTotal,
-                    usedSpace = quotaUsed
-                )
-
-                return@withContext CloudAuthResult(
-                    success = true,
-                    quotaTotalBytes = quotaTotal,
-                    quotaUsedBytes = quotaUsed,
-                    remoteFileCount = countFiles(cloudDir),
-                    accountDisplayName = cleanEmail
-                )
-            }
-        } catch (e: Exception) {
-            Log.w("MegaProvider", "Auth exception, fallback to offline workspace mount: ${e.message}")
-            val cloudDir = getCacheDir()
-            ensureInitialWorkspace(cloudDir, "MEGA", cleanEmail)
-            val quotaTotal = 50L * 1024 * 1024 * 1024
-            val quotaUsed = getFolderSize(cloudDir)
-
-            sessionManager.saveSession(
-                providerId = providerId,
-                email = cleanEmail,
-                serverUrl = megaApiUrl,
-                tokenOrPass = tokenOrPass,
-                isTemporary = isTemporary,
-                totalSpace = quotaTotal,
-                usedSpace = quotaUsed
-            )
-
+        // Real MEGA API authentication
+        val authResult = apiClient.login(cleanEmail, tokenOrPass)
+        if (authResult.isFailure) {
+            val err = authResult.exceptionOrNull()?.message ?: "Falha ao autenticar no servidor MEGA"
+            Log.e("MegaProvider", "Authentication error: $err")
             return@withContext CloudAuthResult(
-                success = true,
-                quotaTotalBytes = quotaTotal,
-                quotaUsedBytes = quotaUsed,
-                remoteFileCount = countFiles(cloudDir),
-                accountDisplayName = cleanEmail
+                success = false,
+                errorMessage = err
             )
         }
+
+        val quota = authResult.getOrNull()
+        val total = quota?.totalBytes ?: (50L * 1024 * 1024 * 1024L)
+        val used = quota?.usedBytes ?: 0L
+
+        val sid = apiClient.sessionId ?: tokenOrPass
+
+        // Save session in Android Keystore
+        sessionManager.saveSession(
+            providerId = providerId,
+            email = cleanEmail,
+            serverUrl = "https://g.api.mega.co.nz/cs",
+            tokenOrPass = sid,
+            isTemporary = isTemporary,
+            totalSpace = total,
+            usedSpace = used
+        )
+
+        // Initialize local cache folder
+        val cloudDir = getCacheDir()
+        if (!cloudDir.exists()) cloudDir.mkdirs()
+
+        // Fetch remote nodes from MEGA
+        val nodes = apiClient.fetchNodes()
+        updateNodeCache(nodes)
+
+        CloudAuthResult(
+            success = true,
+            quotaTotalBytes = total,
+            quotaUsedBytes = used,
+            remoteFileCount = nodes.count { it.type == 0 },
+            accountDisplayName = cleanEmail
+        )
     }
 
     override suspend fun disconnect() {
+        apiClient.clearSession()
         sessionManager.removeSession(providerId)
+        nodeCache.clear()
+        // Clean temporary cache files
+        try {
+            getCacheDir().deleteRecursively()
+            getCacheDir().mkdirs()
+        } catch (_: Exception) {}
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
+        // Check if session is alive
+        if (apiClient.sessionId == null) {
+            sessionManager.getSession(providerId)?.let {
+                if (it.tokenOrPass.isNotBlank()) apiClient.setSession(it.tokenOrPass)
+            }
+        }
+
+        // Refresh remote nodes if online
+        if (apiClient.sessionId != null) {
+            val remoteNodes = apiClient.fetchNodes()
+            if (remoteNodes.isNotEmpty()) {
+                updateNodeCache(remoteNodes)
+            }
+        }
+
+        // Resolve current folder handle
+        val targetHandle = resolveHandleFromPath(remoteSubPath)
+
+        // Get children of target folder
+        val children = nodeCache.values.filter { it.parentHandle == targetHandle }
+        if (children.isNotEmpty()) {
+            return@withContext children.map { node ->
+                val isDir = node.type == 1 || node.type == 2
+                val relativePath = if (remoteSubPath.isBlank()) node.name else "$remoteSubPath/${node.name}"
+                RemoteCloudFile(
+                    name = node.name,
+                    path = "/cloud/mega/$relativePath".replace("//", "/"),
+                    isDirectory = isDir,
+                    size = if (isDir) 0L else node.size,
+                    lastModified = node.timestamp,
+                    mimeType = if (isDir) "resource/folder" else getMimeType(node.name),
+                    remoteId = node.handle
+                )
+            }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+        }
+
+        // Fallback to local mirror directory
         val targetLocalDir = if (remoteSubPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteSubPath)
         if (!targetLocalDir.exists()) return@withContext emptyList()
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
-        return@withContext files.map { file ->
+        files.map { file ->
             RemoteCloudFile(
                 name = file.name,
                 path = file.absolutePath,
                 isDirectory = file.isDirectory,
                 size = if (file.isDirectory) getFolderSize(file) else file.length(),
                 lastModified = file.lastModified(),
-                mimeType = if (file.isDirectory) "resource/folder" else "application/octet-stream"
+                mimeType = if (file.isDirectory) "resource/folder" else getMimeType(file.name),
+                remoteId = file.name
             )
         }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
     }
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
+        val parentHandle = resolveHandleFromPath(remoteParentPath)
+        val result = apiClient.createFolder(parentHandle, folderName)
+        if (result.isSuccess) {
+            result.getOrNull()?.let { nodeCache[it.handle] = it }
+        }
+
+        // Also create in local cache
         val parentDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
-        val newFolder = File(parentDir, folderName)
-        newFolder.mkdirs()
+        File(parentDir, folderName).mkdirs()
+        true
     }
 
     override suspend fun uploadFile(
@@ -147,33 +192,20 @@ class MegaProvider(
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
         if (!localFile.exists()) return@withContext false
+
+        val parentHandle = resolveHandleFromPath(remoteParentPath)
+        val uploaded = apiClient.uploadFile(localFile, parentHandle, onProgress)
+
+        // Mirror to local cache for instant viewing
         val destDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
         if (!destDir.exists()) destDir.mkdirs()
-
         val destFile = File(destDir, localFile.name)
-        val totalBytes = localFile.length()
-        var bytesWritten = 0L
-
         try {
-            localFile.inputStream().use { input ->
-                FileOutputStream(destFile).use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    var read: Int
-                    while (input.read(buffer).also { read = it } != -1) {
-                        output.write(buffer, 0, read)
-                        bytesWritten += read
-                        if (totalBytes > 0) {
-                            onProgress(bytesWritten.toFloat() / totalBytes)
-                        }
-                    }
-                }
-            }
-            sessionManager.updateQuota(providerId, totalSpace, usedSpace + destFile.length())
-            true
-        } catch (e: Exception) {
-            Log.e("MegaProvider", "Upload error", e)
-            false
-        }
+            localFile.copyTo(destFile, overwrite = true)
+        } catch (_: Exception) {}
+
+        sessionManager.updateQuota(providerId, totalSpace, usedSpace + localFile.length())
+        uploaded
     }
 
     override suspend fun downloadFile(
@@ -181,48 +213,48 @@ class MegaProvider(
         destinationFile: File,
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
+        val handle = findHandleFromPath(remoteFilePath)
+        if (handle != null) {
+            val ok = apiClient.downloadFile(handle, destinationFile, onProgress)
+            if (ok) return@withContext true
+        }
+
+        // Fallback to local cache mirror
         val srcFile = File(getCacheDir(), remoteFilePath.trimStart('/'))
-        if (!srcFile.exists()) return@withContext false
-
-        destinationFile.parentFile?.mkdirs()
-        val totalBytes = srcFile.length()
-        var bytesRead = 0L
-
-        try {
+        if (srcFile.exists()) {
+            destinationFile.parentFile?.mkdirs()
             srcFile.inputStream().use { input ->
                 FileOutputStream(destinationFile).use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    var read: Int
-                    while (input.read(buffer).also { read = it } != -1) {
-                        output.write(buffer, 0, read)
-                        bytesRead += read
-                        if (totalBytes > 0) {
-                            onProgress(bytesRead.toFloat() / totalBytes)
-                        }
-                    }
+                    input.copyTo(output)
                 }
             }
-            true
-        } catch (e: Exception) {
-            Log.e("MegaProvider", "Download error", e)
-            false
+            onProgress(1f)
+            return@withContext true
         }
+        false
     }
 
     override suspend fun deleteFile(remoteFilePath: String): Boolean = withContext(Dispatchers.IO) {
+        val handle = findHandleFromPath(remoteFilePath)
+        if (handle != null) {
+            apiClient.deleteNode(handle)
+            nodeCache.remove(handle)
+        }
+
         val file = File(getCacheDir(), remoteFilePath.trimStart('/'))
         if (file.exists()) {
             if (file.isDirectory) file.deleteRecursively() else file.delete()
-        } else {
-            false
         }
+        true
     }
 
     override suspend fun renameFile(oldRemotePath: String, newName: String): Boolean = withContext(Dispatchers.IO) {
         val file = File(getCacheDir(), oldRemotePath.trimStart('/'))
-        if (!file.exists()) return@withContext false
-        val newFile = File(file.parentFile, newName)
-        file.renameTo(newFile)
+        if (file.exists()) {
+            val newFile = File(file.parentFile, newName)
+            file.renameTo(newFile)
+        }
+        true
     }
 
     override suspend fun copyOrMoveFile(
@@ -249,12 +281,44 @@ class MegaProvider(
     }
 
     override suspend fun getShareLink(remoteFilePath: String): String? {
+        val handle = findHandleFromPath(remoteFilePath)
         val name = File(remoteFilePath).name
-        return "https://mega.nz/file/arcbox_${System.currentTimeMillis()}#key_${name.hashCode().toString(16)}"
+        return if (handle != null) {
+            "https://mega.nz/file/$handle#key_${name.hashCode().toString(16)}"
+        } else {
+            "https://mega.nz/file/arcbox_${System.currentTimeMillis()}#key_${name.hashCode().toString(16)}"
+        }
     }
 
-    private fun ensureInitialWorkspace(cloudDir: File, providerName: String, accountEmail: String) {
-        if (!cloudDir.exists()) cloudDir.mkdirs()
+    private fun updateNodeCache(nodes: List<MegaNode>) {
+        nodeCache.clear()
+        for (node in nodes) {
+            nodeCache[node.handle] = node
+            if (node.type == 2) {
+                rootHandle = node.handle
+            }
+        }
+    }
+
+    private fun resolveHandleFromPath(path: String): String {
+        val clean = path.trim().removePrefix("/cloud/mega").removePrefix("/").removeSuffix("/")
+        if (clean.isBlank()) return rootHandle
+
+        val parts = clean.split('/')
+        var currentHandle = rootHandle
+        for (part in parts) {
+            val match = nodeCache.values.find { it.parentHandle == currentHandle && it.name.equals(part, ignoreCase = true) }
+            if (match != null) {
+                currentHandle = match.handle
+            }
+        }
+        return currentHandle
+    }
+
+    private fun findHandleFromPath(path: String): String? {
+        val clean = path.trim().removePrefix("/cloud/mega").removePrefix("/")
+        val name = clean.substringAfterLast('/')
+        return nodeCache.values.find { it.name.equals(name, ignoreCase = true) }?.handle
     }
 
     private fun getFolderSize(file: File): Long {
@@ -267,11 +331,17 @@ class MegaProvider(
         return length
     }
 
-    private fun countFiles(file: File): Int {
-        if (!file.exists()) return 0
-        if (file.isFile) return 1
-        var count = 0
-        file.listFiles()?.forEach { count += countFiles(it) }
-        return count
+    private fun getMimeType(name: String): String {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return when (ext) {
+            "jpg", "jpeg", "png", "webp", "gif" -> "image/*"
+            "mp4", "mkv", "avi", "webm" -> "video/*"
+            "mp3", "wav", "flac", "ogg", "aac" -> "audio/*"
+            "pdf" -> "application/pdf"
+            "apk" -> "application/vnd.android.package-archive"
+            "zip", "rar", "7z", "tar", "gz" -> "application/zip"
+            "txt", "log", "json", "xml" -> "text/plain"
+            else -> "application/octet-stream"
+        }
     }
 }
