@@ -19,7 +19,8 @@ data class RemoteCloudFile(
     val lastModified: Long,
     val mimeType: String,
     val downloadUrl: String? = null,
-    val remoteId: String? = null
+    val remoteId: String? = null,
+    val childCount: Int = 0
 )
 
 data class CloudAuthResult(
@@ -31,13 +32,24 @@ data class CloudAuthResult(
     val accountDisplayName: String = ""
 )
 
-class CloudStorageService(private val context: Context) {
+class CloudStorageService private constructor(private val context: Context) {
+
+    companion object {
+        @Volatile
+        private var INSTANCE: CloudStorageService? = null
+
+        fun getInstance(context: Context): CloudStorageService {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: CloudStorageService(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+    }
 
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()

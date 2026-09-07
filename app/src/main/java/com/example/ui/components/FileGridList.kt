@@ -126,7 +126,8 @@ fun ArcboxFileGridList(
     tempZipSourcePath: String? = null,
     onExtractIndividual: ((FileItem) -> Unit)? = null,
     onUninstallApp: ((String) -> Unit)? = null,
-    onOpenAppSettings: ((String) -> Unit)? = null
+    onOpenAppSettings: ((String) -> Unit)? = null,
+    onDownloadCloudItem: ((FileItem) -> Unit)? = null
 ) {
     val folderCache = remember { mutableStateMapOf<String, List<FileItem>>() }
     // Persistent scroll position memory per folder path (index, offset)
@@ -546,10 +547,11 @@ fun ArcboxFileGridList(
                                         onClick = onItemClicked,
                                         onLongClick = onItemLongClick,
                                         onToggleFavorite = onToggleFavorite,
-                                        tempZipSourcePath = tempZipSourcePath,
+                                         tempZipSourcePath = tempZipSourcePath,
                                         onExtractIndividual = onExtractIndividual,
                                         onUninstallApp = onUninstallApp,
-                                        onOpenAppSettings = onOpenAppSettings
+                                        onOpenAppSettings = onOpenAppSettings,
+                                        onDownloadCloudItem = onDownloadCloudItem
                                     )
                                 }
                             }
@@ -593,7 +595,8 @@ fun ArcboxFileGridList(
                                         tempZipSourcePath = tempZipSourcePath,
                                         onExtractIndividual = onExtractIndividual,
                                         onUninstallApp = onUninstallApp,
-                                        onOpenAppSettings = onOpenAppSettings
+                                        onOpenAppSettings = onOpenAppSettings,
+                                        onDownloadCloudItem = onDownloadCloudItem
                                     )
                                 }
                             }
@@ -1053,7 +1056,8 @@ fun FileGridCard(
     tempZipSourcePath: String? = null,
     onExtractIndividual: ((FileItem) -> Unit)? = null,
     onUninstallApp: ((String) -> Unit)? = null,
-    onOpenAppSettings: ((String) -> Unit)? = null
+    onOpenAppSettings: ((String) -> Unit)? = null,
+    onDownloadCloudItem: ((FileItem) -> Unit)? = null
 ) {
     val haptic = LocalHapticFeedback.current
     val categoryColor = item.fileType.getCategoryColor()
@@ -1251,19 +1255,37 @@ fun FileGridCard(
                     )
                 }
             } else if (item.appCategory != "USER" && item.appCategory != "SYSTEM") {
-                IconButton(
-                    onClick = { onToggleFavorite(item) },
+                Row(
                     modifier = Modifier
-                        .padding(4.dp)
-                        .size(24.dp)
-                        .align(Alignment.TopEnd)
+                        .padding(2.dp)
+                        .align(Alignment.TopEnd),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        if (item.isFavorite) Icons.Default.Star else Icons.Outlined.StarBorder,
-                        contentDescription = "Favorito",
-                        tint = if (item.isFavorite) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-                        modifier = Modifier.size(15.dp)
-                    )
+                    if (item.path.startsWith("/cloud/") && onDownloadCloudItem != null) {
+                        IconButton(
+                            onClick = { onDownloadCloudItem(item) },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Download,
+                                contentDescription = "Baixar da Nuvem",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { onToggleFavorite(item) },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            if (item.isFavorite) Icons.Default.Star else Icons.Outlined.StarBorder,
+                            contentDescription = "Favorito",
+                            tint = if (item.isFavorite) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1286,7 +1308,8 @@ fun FileListItem(
     tempZipSourcePath: String? = null,
     onExtractIndividual: ((FileItem) -> Unit)? = null,
     onUninstallApp: ((String) -> Unit)? = null,
-    onOpenAppSettings: ((String) -> Unit)? = null
+    onOpenAppSettings: ((String) -> Unit)? = null,
+    onDownloadCloudItem: ((FileItem) -> Unit)? = null
 ) {
     val haptic = LocalHapticFeedback.current
     val categoryColor = item.fileType.getCategoryColor()
@@ -1446,13 +1469,25 @@ fun FileListItem(
                             )
                         }
                     } else if (item.appCategory != "SYSTEM") {
-                        IconButton(onClick = { onToggleFavorite(item) }) {
-                            Icon(
-                                if (item.isFavorite) Icons.Default.Star else Icons.Outlined.StarBorder,
-                                contentDescription = "Favorito",
-                                tint = if (item.isFavorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-                                modifier = Modifier.size(22.dp)
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (item.path.startsWith("/cloud/") && onDownloadCloudItem != null) {
+                                IconButton(onClick = { onDownloadCloudItem(item) }) {
+                                    Icon(
+                                        Icons.Default.Download,
+                                        contentDescription = "Baixar da Nuvem",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { onToggleFavorite(item) }) {
+                                Icon(
+                                    if (item.isFavorite) Icons.Default.Star else Icons.Outlined.StarBorder,
+                                    contentDescription = "Favorito",
+                                    tint = if (item.isFavorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -1685,19 +1720,34 @@ fun FileThumbnailImage(
             )
         }
         FileType.IMAGE -> {
-            val cacheKey = remember(item.path, item.lastModified) {
-                "${item.path}_${item.lastModified}"
+            val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
+            var isFileReady by remember(item.path) { mutableStateOf(resolvedFile.exists() && resolvedFile.length() > 0) }
+
+            if (item.path.startsWith("/cloud/") && !isFileReady) {
+                LaunchedEffect(item.path) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val repository = com.example.data.repository.FileRepository(context)
+                        val ok = repository.downloadCloudFile(item.path)
+                        if (ok) {
+                            isFileReady = true
+                        }
+                    }
+                }
             }
-            val imageRequest = remember(cacheKey) {
+
+            val cacheKey = remember(item.path, item.lastModified, isFileReady) {
+                "${item.path}_${item.lastModified}_$isFileReady"
+            }
+            val imageRequest = remember(cacheKey, isFileReady) {
                 ImageRequest.Builder(context)
-                    .data(java.io.File(item.path))
+                    .data(if (isFileReady) resolvedFile else java.io.File(item.path))
                     .size(160, 160)
                     .precision(coil.size.Precision.INEXACT)
                     .allowRgb565(true)
                     .allowHardware(true)
                     .memoryCacheKey(cacheKey)
                     .diskCacheKey(cacheKey)
-                    .crossfade(false)
+                    .crossfade(true)
                     .build()
             }
 
@@ -1725,12 +1775,27 @@ fun FileThumbnailImage(
             }
         }
         FileType.VIDEO -> {
-            val cacheKey = remember(item.path, item.lastModified) {
-                "video_${item.path}_${item.lastModified}"
+            val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
+            var isFileReady by remember(item.path) { mutableStateOf(resolvedFile.exists() && resolvedFile.length() > 0) }
+
+            if (item.path.startsWith("/cloud/") && !isFileReady) {
+                LaunchedEffect(item.path) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val repository = com.example.data.repository.FileRepository(context)
+                        val ok = repository.downloadCloudFile(item.path)
+                        if (ok) {
+                            isFileReady = true
+                        }
+                    }
+                }
             }
-            val imageRequest = remember(cacheKey) {
+
+            val cacheKey = remember(item.path, item.lastModified, isFileReady) {
+                "video_${item.path}_${item.lastModified}_$isFileReady"
+            }
+            val imageRequest = remember(cacheKey, isFileReady) {
                 ImageRequest.Builder(context)
-                    .data(java.io.File(item.path))
+                    .data(if (isFileReady) resolvedFile else java.io.File(item.path))
                     .size(160, 160)
                     .precision(coil.size.Precision.INEXACT)
                     .allowRgb565(true)
@@ -1738,7 +1803,7 @@ fun FileThumbnailImage(
                     .videoFrameMillis(1000)
                     .memoryCacheKey(cacheKey)
                     .diskCacheKey(cacheKey)
-                    .crossfade(false)
+                    .crossfade(true)
                     .build()
             }
 

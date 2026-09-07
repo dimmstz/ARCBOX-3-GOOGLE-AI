@@ -23,6 +23,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -60,6 +65,8 @@ fun ArcboxTopBar(
     onToggleGlobalSearch: () -> Unit = {},
     searchHistory: List<String> = emptyList()
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     var isSearchActive by remember(searchQuery) { mutableStateOf(searchQuery.isNotEmpty()) }
     var showVolumeDropdown by remember { mutableStateOf(false) }
     var showSortDropdown by remember { mutableStateOf(false) }
@@ -80,6 +87,8 @@ fun ArcboxTopBar(
         ) {
             if (isSearchActive) {
                 IconButton(onClick = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus(force = true)
                     isSearchActive = false
                     onSearchQueryChange("")
                 }) {
@@ -90,11 +99,20 @@ fun ArcboxTopBar(
                     onValueChange = onSearchQueryChange,
                     placeholder = { Text("Buscar arquivos...") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus(force = true)
+                        }
+                    ),
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(24.dp),
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { onSearchQueryChange("") }) {
+                            IconButton(onClick = { 
+                                onSearchQueryChange("") 
+                            }) {
                                 Icon(Icons.Default.Clear, contentDescription = "Limpar")
                             }
                         }

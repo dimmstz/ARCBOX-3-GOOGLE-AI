@@ -118,88 +118,105 @@ fun ArcboxNavigationDrawerContent(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Storage Capacity Summary Card
-                    selectedVolume?.let { volume ->
-                        Surface(
-                            onClick = {
-                                onSelectVolume(volume)
-                                onCloseDrawer()
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                    // Storage Capacity Summary Cards (Internal Storage + SD Card / OTG if available)
+                    val localUnits = storageVolumes.filter { it.typeKey != "CLOUD" }.ifEmpty {
+                        listOfNotNull(selectedVolume)
+                    }
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        localUnits.forEach { volume ->
+                            val isSelected = selectedVolume?.id == volume.id && !isFavoritesOnly && !isRecentsOnly && currentFilterCategory == null
+
+                            Surface(
+                                onClick = {
+                                    onSelectVolume(volume)
+                                    onCloseDrawer()
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    if (isSelected) 1.5.dp else 1.dp,
+                                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
                                     Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f, fill = false)
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        ) {
+                                            Icon(
+                                                when (volume.typeKey) {
+                                                    "SDCARD" -> Icons.Default.SdCard
+                                                    "OTG", "USB" -> Icons.Default.Usb
+                                                    "ROOT" -> Icons.Default.Security
+                                                    else -> Icons.Default.Storage
+                                                },
+                                                contentDescription = null,
+                                                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = volume.name,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Icon(
-                                            when (volume.typeKey) {
-                                                "SDCARD" -> Icons.Default.SdCard
-                                                "CLOUD" -> Icons.Default.Cloud
-                                                else -> Icons.Default.Storage
-                                            },
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
+                                            Icons.Default.ChevronRight,
+                                            contentDescription = "Abrir diretório",
+                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(18.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = volume.name,
-                                            style = MaterialTheme.typography.labelLarge,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                        )
                                     }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Icon(
-                                        Icons.Default.ChevronRight,
-                                        contentDescription = "Abrir diretório",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(18.dp)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    LinearProgressIndicator(
+                                        progress = { volume.usedRatio },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(CircleShape),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                        strokeCap = StrokeCap.Round,
+                                        gapSize = 0.dp,
+                                        drawStopIndicator = {}
                                     )
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                LinearProgressIndicator(
-                                    progress = { volume.usedRatio },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(CircleShape),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                    strokeCap = StrokeCap.Round,
-                                    gapSize = 0.dp,
-                                    drawStopIndicator = {}
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${formatFileSize(volume.usedBytes)} de ${formatFileSize(volume.totalBytes)} usados",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
-                                    Text(
-                                        text = "${(volume.usedRatio * 100).toInt()}%",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (volume.totalBytes > 0) "${formatFileSize(volume.usedBytes)} de ${formatFileSize(volume.totalBytes)} usados" else "Armazenamento",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        if (volume.totalBytes > 0) {
+                                            Text(
+                                                text = "${(volume.usedRatio * 100).toInt()}%",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -300,30 +317,6 @@ fun ArcboxNavigationDrawerContent(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
             )
 
-            // Navigation Item: Lixeira
-            NavigationDrawerItem(
-                label = { Text("Lixeira", fontWeight = FontWeight.SemiBold) },
-                selected = false,
-                onClick = {
-                    onOpenTrashBin()
-                    onCloseDrawer()
-                },
-                icon = {
-                    ModernTrashCanCanvas(
-                        modifier = Modifier.size(20.dp),
-                        accentColor = MaterialTheme.colorScheme.error
-                    )
-                },
-                badge = {
-                    if (trashCount > 0) {
-                        Badge(containerColor = MaterialTheme.colorScheme.error) {
-                            Text("$trashCount", color = Color.White)
-                        }
-                    }
-                },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-            )
-
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
 
             val headerColor = MaterialTheme.colorScheme.primary
@@ -417,62 +410,6 @@ fun ArcboxNavigationDrawerContent(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
 
-            // Section 1: Discos Locais / Dispositivo
-            val localVolumes = storageVolumes.filter { it.typeKey != "CLOUD" }
-            Text(
-                text = "DISPOSITIVO & DISCOS LOCAIS",
-                style = MaterialTheme.typography.labelSmall,
-                color = headerColor,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
-            )
-
-            localVolumes.forEach { volume ->
-                val isSelected = selectedVolume?.id == volume.id && !isFavoritesOnly && currentFilterCategory == null
-
-                NavigationDrawerItem(
-                    label = {
-                        Column {
-                            Text(
-                                text = volume.name,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
-                            if (volume.totalBytes > 0) {
-                                Text(
-                                    text = "${formatFileSize(volume.usedBytes)} / ${formatFileSize(volume.totalBytes)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-                    },
-                    selected = isSelected,
-                    onClick = {
-                        onSelectVolume(volume)
-                        onCloseDrawer()
-                    },
-                    icon = {
-                        Icon(
-                            when (volume.typeKey) {
-                                "SDCARD" -> Icons.Default.SdCard
-                                "OTG", "USB" -> Icons.Default.Usb
-                                "ROOT" -> Icons.Default.Security
-                                else -> Icons.Default.Storage
-                            },
-                            contentDescription = null,
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                )
-            }
-
-
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
-
             // Section Header: Ferramentas & Armazenamento
             Text(
                 text = "FERRAMENTAS DE DISCO",
@@ -504,29 +441,6 @@ fun ArcboxNavigationDrawerContent(
                     onCloseDrawer()
                 },
                 icon = { Icon(Icons.Outlined.PieChart, contentDescription = null, tint = toolIconTint) },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-            )
-
-            NavigationDrawerItem(
-                label = { Text("Lixeira") },
-                selected = false,
-                onClick = {
-                    onOpenTrashBin()
-                    onCloseDrawer()
-                },
-                icon = {
-                    ModernTrashCanCanvas(
-                        modifier = Modifier.size(20.dp),
-                        accentColor = toolIconTint
-                    )
-                },
-                badge = {
-                    if (trashCount > 0) {
-                        Badge(containerColor = MaterialTheme.colorScheme.error) {
-                            Text("$trashCount", color = Color.White)
-                        }
-                    }
-                },
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
             )
 

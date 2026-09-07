@@ -1,6 +1,7 @@
 package com.example.data.cloud.provider
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import com.example.data.cloud.CloudAuthResult
 import com.example.data.cloud.RemoteCloudFile
@@ -29,10 +30,35 @@ class MegaProvider(
     private var rootHandle: String = "root"
 
     init {
-        // Restore existing Keystore session if present
+        restoreSession()
+    }
+
+    private fun cleanLegacyCacheFolders() {
+        try {
+            val cache = getCacheDir()
+            if (cache.exists()) {
+                cache.listFiles()?.forEach { file ->
+                    if (file.name.startsWith("Pasta_") || file.name.startsWith("Arquivo_")) {
+                        file.deleteRecursively()
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun restoreSession() {
+        cleanLegacyCacheFolders()
         sessionManager.getSession(providerId)?.let { session ->
-            if (session.tokenOrPass.isNotBlank()) {
-                apiClient.setSession(session.tokenOrPass)
+            val raw = session.tokenOrPass
+            if (raw.isNotBlank()) {
+                if (raw.contains(":::")) {
+                    val sid = raw.substringBefore(":::")
+                    val b64Key = raw.substringAfter(":::")
+                    val keyBytes = try { Base64.decode(b64Key, Base64.NO_WRAP) } catch (_: Exception) { null }
+                    apiClient.setSession(sid, keyBytes)
+                } else {
+                    apiClient.setSession(raw, null)
+                }
             }
         }
     }
@@ -78,21 +104,24 @@ class MegaProvider(
         val used = quota?.usedBytes ?: 0L
 
         val sid = apiClient.sessionId ?: tokenOrPass
+        val masterKeyB64 = apiClient.currentMasterKey?.let { Base64.encodeToString(it, Base64.NO_WRAP) } ?: ""
+        val tokenPayload = if (masterKeyB64.isNotEmpty()) "$sid:::$masterKeyB64" else sid
 
         // Save session in Android Keystore
         sessionManager.saveSession(
             providerId = providerId,
             email = cleanEmail,
             serverUrl = "https://g.api.mega.co.nz/cs",
-            tokenOrPass = sid,
+            tokenOrPass = tokenPayload,
             isTemporary = isTemporary,
             totalSpace = total,
             usedSpace = used
         )
 
-        // Initialize local cache folder
+        // Initialize local cache folder and clean any dummy legacy files
         val cloudDir = getCacheDir()
         if (!cloudDir.exists()) cloudDir.mkdirs()
+        cleanLegacyCacheFolders()
 
         // Fetch remote nodes from MEGA
         val nodes = apiClient.fetchNodes()
@@ -119,11 +148,10 @@ class MegaProvider(
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
+        cleanLegacyCacheFolders()
         // Check if session is alive
-        if (apiClient.sessionId == null) {
-            sessionManager.getSession(providerId)?.let {
-                if (it.tokenOrPass.isNotBlank()) apiClient.setSession(it.tokenOrPass)
-            }
+        if (apiClient.sessionId == null || apiClient.sessionId!!.contains(":::") || apiClient.currentMasterKey == null) {
+            restoreSession()
         }
 
         // Refresh remote nodes if online
@@ -140,9 +168,11 @@ class MegaProvider(
         // Get children of target folder
         val children = nodeCache.values.filter { it.parentHandle == targetHandle }
         if (children.isNotEmpty()) {
+            val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mega").removePrefix("/").removeSuffix("/")
             return@withContext children.map { node ->
                 val isDir = node.type == 1 || node.type == 2
-                val relativePath = if (remoteSubPath.isBlank()) node.name else "$remoteSubPath/${node.name}"
+                val relativePath = if (cleanSub.isBlank()) node.name else "$cleanSub/${node.name}"
+                val count = if (isDir) nodeCache.values.count { it.parentHandle == node.handle } else 0
                 RemoteCloudFile(
                     name = node.name,
                     path = "/cloud/mega/$relativePath".replace("//", "/"),
@@ -150,7 +180,8 @@ class MegaProvider(
                     size = if (isDir) 0L else node.size,
                     lastModified = node.timestamp,
                     mimeType = if (isDir) "resource/folder" else getMimeType(node.name),
-                    remoteId = node.handle
+                    remoteId = node.handle,
+                    childCount = count
                 )
             }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
         }
@@ -174,7 +205,7 @@ class MegaProvider(
     }
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
-        val parentHandle = resolveHandleFromPath(remoteParentPath)
+        val parentHandle = resolveHandleFromPath(remoteParentPath) ?: rootHandle
         val result = apiClient.createFolder(parentHandle, folderName)
         if (result.isSuccess) {
             result.getOrNull()?.let { nodeCache[it.handle] = it }
@@ -193,7 +224,7 @@ class MegaProvider(
     ): Boolean = withContext(Dispatchers.IO) {
         if (!localFile.exists()) return@withContext false
 
-        val parentHandle = resolveHandleFromPath(remoteParentPath)
+        val parentHandle = resolveHandleFromPath(remoteParentPath) ?: rootHandle
         val uploaded = apiClient.uploadFile(localFile, parentHandle, onProgress)
 
         // Mirror to local cache for instant viewing
@@ -215,7 +246,8 @@ class MegaProvider(
     ): Boolean = withContext(Dispatchers.IO) {
         val handle = findHandleFromPath(remoteFilePath)
         if (handle != null) {
-            val ok = apiClient.downloadFile(handle, destinationFile, onProgress)
+            val nodeKeyBytes = nodeCache[handle]?.keyBytes
+            val ok = apiClient.downloadFile(handle, destinationFile, nodeKeyBytes, onProgress)
             if (ok) return@withContext true
         }
 
@@ -292,15 +324,20 @@ class MegaProvider(
 
     private fun updateNodeCache(nodes: List<MegaNode>) {
         nodeCache.clear()
+        var foundRoot = false
         for (node in nodes) {
             nodeCache[node.handle] = node
             if (node.type == 2) {
                 rootHandle = node.handle
+                foundRoot = true
             }
+        }
+        if (!foundRoot) {
+            rootHandle = nodes.firstOrNull { it.parentHandle == null }?.handle ?: "root"
         }
     }
 
-    private fun resolveHandleFromPath(path: String): String {
+    private fun resolveHandleFromPath(path: String): String? {
         val clean = path.trim().removePrefix("/cloud/mega").removePrefix("/").removeSuffix("/")
         if (clean.isBlank()) return rootHandle
 
@@ -310,15 +347,48 @@ class MegaProvider(
             val match = nodeCache.values.find { it.parentHandle == currentHandle && it.name.equals(part, ignoreCase = true) }
             if (match != null) {
                 currentHandle = match.handle
+            } else {
+                return null
             }
         }
         return currentHandle
     }
 
-    private fun findHandleFromPath(path: String): String? {
+    private suspend fun ensureNodesLoaded() {
+        if (apiClient.sessionId == null || apiClient.sessionId!!.contains(":::") || apiClient.currentMasterKey == null) {
+            restoreSession()
+        }
+        if (nodeCache.isEmpty() && apiClient.sessionId != null) {
+            val remoteNodes = apiClient.fetchNodes()
+            if (remoteNodes.isNotEmpty()) {
+                updateNodeCache(remoteNodes)
+            }
+        }
+    }
+
+    private suspend fun findHandleFromPath(path: String): String? {
+        ensureNodesLoaded()
+        val h = resolveHandleFromPath(path)
+        if (h != null && h != rootHandle && nodeCache.containsKey(h)) return h
         val clean = path.trim().removePrefix("/cloud/mega").removePrefix("/")
         val name = clean.substringAfterLast('/')
-        return nodeCache.values.find { it.name.equals(name, ignoreCase = true) }?.handle
+        if (name.isNotBlank()) {
+            val match = nodeCache.values.find { it.name.equals(name, ignoreCase = true) }
+            if (match != null) return match.handle
+        }
+
+        if (apiClient.sessionId != null) {
+            val remoteNodes = apiClient.fetchNodes()
+            if (remoteNodes.isNotEmpty()) {
+                updateNodeCache(remoteNodes)
+                val h2 = resolveHandleFromPath(path)
+                if (h2 != null && h2 != rootHandle && nodeCache.containsKey(h2)) return h2
+                if (name.isNotBlank()) {
+                    return nodeCache.values.find { it.name.equals(name, ignoreCase = true) }?.handle
+                }
+            }
+        }
+        return null
     }
 
     private fun getFolderSize(file: File): Long {

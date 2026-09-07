@@ -1321,6 +1321,18 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun createFile(name: String) {
+        viewModelScope.launch {
+            val success = repository.createFile(_uiState.value.currentPath, name)
+            if (success) {
+                showToast("Arquivo \"$name\" criado com sucesso!")
+                refreshFiles()
+            } else {
+                showToast("Não foi possível criar o arquivo.")
+            }
+        }
+    }
+
     fun renameItem(item: FileItem, newName: String) {
         viewModelScope.launch {
             val success = repository.renameFile(item.path, newName)
@@ -1585,6 +1597,20 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         currentOperationJob?.cancel()
         currentOperationJob = viewModelScope.launch {
             checkAndSimulateLargeFileLoading(item)
+            if (item.path.startsWith("/cloud/")) {
+                val resolved = repository.resolveFile(item.path)
+                if (!resolved.exists() || resolved.length() == 0L) {
+                    _uiState.update { it.copy(operationStatusText = "Baixando ${item.name} da nuvem...", operationProgress = 0f) }
+                    val ok = repository.downloadCloudFile(item.path) { progress ->
+                        _uiState.update { it.copy(operationProgress = progress) }
+                    }
+                    _uiState.update { it.copy(operationStatusText = null, operationProgress = null) }
+                    if (!ok) {
+                        showToast("Falha ao baixar ${item.name} da nuvem")
+                        return@launch
+                    }
+                }
+            }
             val ext = item.extension.lowercase()
             when {
                 item.fileType == FileType.APK -> {
@@ -1607,6 +1633,27 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 else -> {
                     showToast("Abrindo ${item.name}...")
                 }
+            }
+        }
+    }
+
+    fun downloadCloudItem(item: FileItem) {
+        viewModelScope.launch {
+            showToast("Iniciando download de ${item.name}...")
+            _uiState.update { it.copy(operationStatusText = "Baixando ${item.name}...", operationProgress = 0f) }
+            val ok = repository.downloadCloudItemToDownloads(item) { currentFile, progress ->
+                _uiState.update {
+                    it.copy(
+                        operationStatusText = "Baixando $currentFile (${(progress * 100).toInt()}%)...",
+                        operationProgress = progress
+                    )
+                }
+            }
+            _uiState.update { it.copy(operationStatusText = null, operationProgress = null) }
+            if (ok) {
+                showToast("${if (item.isDirectory) "Pasta" else "Arquivo"} ${item.name} baixado em Downloads!")
+            } else {
+                showToast("Erro ao baixar ${item.name} da nuvem")
             }
         }
     }
@@ -1732,7 +1779,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     fun extractZipArchive(item: FileItem, targetDirectory: String = _uiState.value.currentPath) {
         viewModelScope.launch {
-            val zipFile = File(item.path)
+            val zipFile = repository.resolveFile(item.path)
             val parentFolder = zipFile.parentFile ?: File(targetDirectory)
             val folderName = zipFile.nameWithoutExtension.ifEmpty { "Extraido" }
             val destDir = File(parentFolder, folderName)
@@ -1764,7 +1811,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     fun openAndExtractZipArchive(item: FileItem, targetDirectory: String = _uiState.value.currentPath) {
         viewModelScope.launch {
             val context = getApplication<Application>().applicationContext
-            val zipFile = File(item.path)
+            val zipFile = repository.resolveFile(item.path)
             
             // Clean up old temp zip views to save space
             try {

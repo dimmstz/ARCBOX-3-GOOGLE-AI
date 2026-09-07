@@ -107,6 +107,20 @@ fun ArcboxMediaViewerModal(
     val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
     var showInfo by remember { mutableStateOf(false) }
 
+    var isDownloadingCloudFile by remember(item.path) { mutableStateOf(item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() == 0L)) }
+    var downloadProgress by remember(item.path) { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(item.path) {
+        if (item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() == 0L)) {
+            isDownloadingCloudFile = true
+            val repository = com.example.data.repository.FileRepository(context)
+            repository.downloadCloudFile(item.path) { p ->
+                downloadProgress = p
+            }
+            isDownloadingCloudFile = false
+        }
+    }
+
     BackHandler(enabled = true) {
         onClose()
     }
@@ -114,7 +128,30 @@ fun ArcboxMediaViewerModal(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        if (item.fileType == FileType.AUDIO) {
+        if (isDownloadingCloudFile) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        progress = { downloadProgress },
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Text(
+                        text = "Baixando mídia da nuvem... ${(downloadProgress * 100).toInt()}%",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            }
+        } else if (item.fileType == FileType.AUDIO) {
             AudioPlayerContent(
                 file = resolvedFile,
                 onNext = onNext,
@@ -419,11 +456,28 @@ fun ArcboxImageViewerScreen(
     var imageVersion by remember(item.path, item.safUriString) { mutableLongStateOf(file.lastModified()) }
     val coroutineScope = rememberCoroutineScope()
 
+    var isDownloadingCloudFile by remember(item.path) { mutableStateOf(item.path.startsWith("/cloud/") && (!file.exists() || file.length() == 0L)) }
+    var downloadProgress by remember(item.path) { mutableFloatStateOf(0f) }
+
     HideSystemBarsEffect(showControls, isLightBackground = backgroundModeIndex == 2)
 
     LaunchedEffect(item.path, item.safUriString) {
         showControls = true
         lastTouchTime = System.currentTimeMillis()
+        if (item.path.startsWith("/cloud/") && (!file.exists() || file.length() == 0L)) {
+            isDownloadingCloudFile = true
+            val repository = com.example.data.repository.FileRepository(context)
+            val ok = repository.downloadCloudFile(item.path) { p ->
+                downloadProgress = p
+            }
+            if (ok) {
+                imageVersion = System.currentTimeMillis()
+                isDownloadingCloudFile = false
+            } else {
+                toastFeedback = "Falha ao baixar imagem da nuvem"
+                isDownloadingCloudFile = false
+            }
+        }
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             dominantColors = extractDominantColors(context, item, file)
             dimensions = getImageDimensions(context, item, file)
@@ -1046,6 +1100,28 @@ fun ArcboxImageViewerScreen(
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
+                }
+            }
+
+            if (isDownloadingCloudFile) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.88f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(
+                            progress = { downloadProgress },
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "Baixando e descriptografando imagem...",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
 

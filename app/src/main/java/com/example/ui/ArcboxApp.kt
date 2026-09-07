@@ -57,6 +57,8 @@ fun ArcboxApp(
     var inputName by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<com.example.data.models.FileItem?>(null) }
     var dismissedUpdateTag by remember { mutableStateOf<String?>(null) }
+    val localFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val localKeyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
     val isDark = when (uiState.themeMode) {
         ThemeMode.DARK -> true
@@ -596,6 +598,7 @@ fun ArcboxApp(
                         onOpenMedia = { viewModel.openMediaViewer(it) },
                         onShareItem = { viewModel.shareFile(context, it) },
                         onShareSelected = { viewModel.shareSelectedFiles(context) },
+                        onDownloadCloudItem = { viewModel.downloadCloudItem(it) },
                         searchQuery = uiState.searchQuery,
                         isGlobalSearch = uiState.isGlobalSearch,
                         onClearSearch = { viewModel.setSearchQuery("") },
@@ -946,11 +949,21 @@ fun ArcboxApp(
         // Dialogs
         if (showNewFolderDialog) {
             AlertDialog(
-                onDismissRequest = { showNewFolderDialog = false },
+                onDismissRequest = { 
+                    localFocusManager.clearFocus(force = true)
+                    localKeyboardController?.hide()
+                    showNewFolderDialog = false 
+                },
                 properties = DialogProperties(usePlatformDefaultWidth = false),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 title = { Text("Criar Nova Pasta") },
                 text = {
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            localFocusManager.clearFocus(force = true)
+                            localKeyboardController?.hide()
+                        }
+                    }
                     OutlinedTextField(
                         value = inputName,
                         onValueChange = { inputName = it },
@@ -962,6 +975,8 @@ fun ArcboxApp(
                 },
                 confirmButton = {
                     Button(onClick = {
+                        localFocusManager.clearFocus(force = true)
+                        localKeyboardController?.hide()
                         if (inputName.isNotBlank()) {
                             viewModel.createFolder(inputName.trim())
                         }
@@ -971,18 +986,32 @@ fun ArcboxApp(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showNewFolderDialog = false }) { Text("Cancelar") }
+                    TextButton(onClick = { 
+                        localFocusManager.clearFocus(force = true)
+                        localKeyboardController?.hide()
+                        showNewFolderDialog = false 
+                    }) { Text("Cancelar") }
                 }
             )
         }
 
         if (showNewFileDialog) {
             AlertDialog(
-                onDismissRequest = { showNewFileDialog = false },
+                onDismissRequest = { 
+                    localFocusManager.clearFocus(force = true)
+                    localKeyboardController?.hide()
+                    showNewFileDialog = false 
+                },
                 properties = DialogProperties(usePlatformDefaultWidth = false),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 title = { Text("Criar Novo Arquivo") },
                 text = {
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            localFocusManager.clearFocus(force = true)
+                            localKeyboardController?.hide()
+                        }
+                    }
                     OutlinedTextField(
                         value = inputName,
                         onValueChange = { inputName = it },
@@ -994,8 +1023,10 @@ fun ArcboxApp(
                 },
                 confirmButton = {
                     Button(onClick = {
+                        localFocusManager.clearFocus(force = true)
+                        localKeyboardController?.hide()
                         if (inputName.isNotBlank()) {
-                            viewModel.createFolder(inputName.trim()) // or createFile
+                            viewModel.createFile(inputName.trim())
                         }
                         showNewFileDialog = false
                     }) {
@@ -1003,18 +1034,32 @@ fun ArcboxApp(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showNewFileDialog = false }) { Text("Cancelar") }
+                    TextButton(onClick = { 
+                        localFocusManager.clearFocus(force = true)
+                        localKeyboardController?.hide()
+                        showNewFileDialog = false 
+                    }) { Text("Cancelar") }
                 }
             )
         }
 
         if (showRenameDialog && renameTarget != null) {
             AlertDialog(
-                onDismissRequest = { showRenameDialog = false },
+                onDismissRequest = { 
+                    localFocusManager.clearFocus(force = true)
+                    localKeyboardController?.hide()
+                    showRenameDialog = false 
+                },
                 properties = DialogProperties(usePlatformDefaultWidth = false),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 title = { Text("Renomear Item") },
                 text = {
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            localFocusManager.clearFocus(force = true)
+                            localKeyboardController?.hide()
+                        }
+                    }
                     OutlinedTextField(
                         value = inputName,
                         onValueChange = { inputName = it },
@@ -1026,6 +1071,8 @@ fun ArcboxApp(
                 },
                 confirmButton = {
                     Button(onClick = {
+                        localFocusManager.clearFocus(force = true)
+                        localKeyboardController?.hide()
                         renameTarget?.let { target ->
                             if (inputName.isNotBlank()) {
                                 viewModel.renameItem(target, inputName.trim())
@@ -1037,18 +1084,32 @@ fun ArcboxApp(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showRenameDialog = false }) { Text("Cancelar") }
+                    TextButton(onClick = { 
+                        localFocusManager.clearFocus(force = true)
+                        localKeyboardController?.hide()
+                        showRenameDialog = false 
+                    }) { Text("Cancelar") }
                 }
             )
         }
 
         if (showCompressDialog) {
             AlertDialog(
-                onDismissRequest = { showCompressDialog = false },
+                onDismissRequest = { 
+                    localFocusManager.clearFocus(force = true)
+                    localKeyboardController?.hide()
+                    showCompressDialog = false 
+                },
                 properties = DialogProperties(usePlatformDefaultWidth = false),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 title = { Text("Compactar em ZIP") },
                 text = {
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            localFocusManager.clearFocus(force = true)
+                            localKeyboardController?.hide()
+                        }
+                    }
                     OutlinedTextField(
                         value = inputName,
                         onValueChange = { inputName = it },
@@ -1060,6 +1121,8 @@ fun ArcboxApp(
                 },
                 confirmButton = {
                     Button(onClick = {
+                        localFocusManager.clearFocus(force = true)
+                        localKeyboardController?.hide()
                         if (inputName.isNotBlank()) {
                             viewModel.compressSelectedToZip(inputName.trim())
                         }
@@ -1069,7 +1132,11 @@ fun ArcboxApp(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showCompressDialog = false }) { Text("Cancelar") }
+                    TextButton(onClick = { 
+                        localFocusManager.clearFocus(force = true)
+                        localKeyboardController?.hide()
+                        showCompressDialog = false 
+                    }) { Text("Cancelar") }
                 }
             )
         }

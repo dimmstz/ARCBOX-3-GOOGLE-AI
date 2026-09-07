@@ -35,7 +35,7 @@ class FileRepository(private val context: Context) {
     private val trashDao = db.trashDao()
     private val favoriteDao = db.favoriteDao()
     private val prefs = context.getSharedPreferences("arcbox_prefs", Context.MODE_PRIVATE)
-    private val cloudStorageService = com.example.data.cloud.CloudStorageService(context)
+    private val cloudStorageService = com.example.data.cloud.CloudStorageService.getInstance(context)
     val safCloudManager = com.example.data.cloud.SafCloudManager(context)
     private val dirCountCache = ConcurrentHashMap<String, Pair<Long, Int>>()
     private var cachedVolumes: List<StorageVolume>? = null
@@ -72,6 +72,79 @@ class FileRepository(private val context: Context) {
         } else {
             File(path)
         }
+    }
+
+    suspend fun downloadCloudFile(
+        virtualPath: String,
+        onProgress: (Float) -> Unit = {}
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!virtualPath.startsWith("/cloud/")) return@withContext false
+        val providerSegment = virtualPath.removePrefix("/cloud/").substringBefore("/")
+        val subPath = virtualPath.removePrefix("/cloud/$providerSegment").removePrefix("/")
+        val targetFile = resolveFile(virtualPath)
+        targetFile.parentFile?.mkdirs()
+        cloudStorageService.downloadRemoteFile(providerSegment, subPath, targetFile, onProgress)
+    }
+
+    suspend fun downloadCloudItemToDownloads(
+        item: FileItem,
+        onProgress: (String, Float) -> Unit = { _, _ -> }
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!item.path.startsWith("/cloud/")) return@withContext false
+        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            ?: File(android.os.Environment.getExternalStorageDirectory(), "Download")
+        downloadsDir.mkdirs()
+
+        val providerSegment = item.path.removePrefix("/cloud/").substringBefore("/")
+        val subPath = item.path.removePrefix("/cloud/$providerSegment").removePrefix("/")
+
+        if (!item.isDirectory) {
+            val destFile = File(downloadsDir, item.name)
+            val ok = cloudStorageService.downloadRemoteFile(providerSegment, subPath, destFile) { p ->
+                onProgress(item.name, p)
+            }
+            if (ok) {
+                try {
+                    android.media.MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), null, null)
+                } catch (_: Exception) {}
+            }
+            return@withContext ok
+        } else {
+            val targetFolder = File(downloadsDir, item.name)
+            targetFolder.mkdirs()
+            return@withContext downloadRemoteFolderRecursively(providerSegment, subPath, targetFolder, onProgress)
+        }
+    }
+
+    private suspend fun downloadRemoteFolderRecursively(
+        providerSegment: String,
+        remoteSubPath: String,
+        localTargetDir: File,
+        onProgress: (String, Float) -> Unit
+    ): Boolean {
+        val files = cloudStorageService.fetchRemoteDirectory(providerSegment, remoteSubPath)
+        var allSuccess = true
+        for (f in files) {
+            val localChild = File(localTargetDir, f.name)
+            val childSubPath = if (remoteSubPath.isBlank()) f.name else "$remoteSubPath/${f.name}"
+            if (f.isDirectory) {
+                localChild.mkdirs()
+                val ok = downloadRemoteFolderRecursively(providerSegment, childSubPath, localChild, onProgress)
+                if (!ok) allSuccess = false
+            } else {
+                val ok = cloudStorageService.downloadRemoteFile(providerSegment, childSubPath, localChild) { p ->
+                    onProgress(f.name, p)
+                }
+                if (ok) {
+                    try {
+                        android.media.MediaScannerConnection.scanFile(context, arrayOf(localChild.absolutePath), null, null)
+                    } catch (_: Exception) {}
+                } else {
+                    allSuccess = false
+                }
+            }
+        }
+        return allSuccess
     }
 
     private fun getFolderSize(file: File): Long {
@@ -124,21 +197,24 @@ class FileRepository(private val context: Context) {
                     } else {
                         dir.absolutePath
                     }
-                    val stat = try { StatFs(rootPath) } catch (e: Exception) { null }
-                    val total = stat?.totalBytes ?: 0L
-                    val free = stat?.availableBytes ?: 0L
-                    if (list.none { it.path == rootPath }) {
-                        val volumeLabel = if (externalDirs.size > 2) "Cartão SD $i" else "Cartão SD"
-                        list.add(
-                            StorageVolume(
-                                id = "sdcard_$i",
-                                name = volumeLabel,
-                                path = rootPath,
-                                totalBytes = total,
-                                freeBytes = free,
-                                typeKey = "SDCARD"
+                    val rootFile = File(rootPath)
+                    if (rootFile.exists() && rootFile.canRead()) {
+                        val stat = try { StatFs(rootPath) } catch (e: Exception) { null }
+                        val total = stat?.totalBytes ?: 0L
+                        val free = stat?.availableBytes ?: 0L
+                        if (total > 0L && list.none { it.path == rootPath }) {
+                            val volumeLabel = if (externalDirs.size > 2) "Cartão SD $i" else "Cartão SD"
+                            list.add(
+                                StorageVolume(
+                                    id = "sdcard_$i",
+                                    name = volumeLabel,
+                                    path = rootPath,
+                                    totalBytes = total,
+                                    freeBytes = free,
+                                    typeKey = "SDCARD"
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -154,22 +230,24 @@ class FileRepository(private val context: Context) {
                         val name = file.name
                         if (file.isDirectory && name != "emulated" && name != "self" && name != "knox" && !name.startsWith(".")) {
                             val path = file.absolutePath
-                            if (list.none { it.path == path }) {
+                            if (file.canRead() && list.none { it.path == path }) {
                                 val stat = try { StatFs(path) } catch (e: Exception) { null }
                                 val total = stat?.totalBytes ?: 0L
                                 val free = stat?.availableBytes ?: 0L
-                                val isOtg = name.lowercase().contains("otg") || name.lowercase().contains("usb")
-                                val volumeName = if (isOtg) "Armazenamento OTG" else "Cartão SD"
-                                list.add(
-                                    StorageVolume(
-                                        id = "ext_${name.lowercase()}",
-                                        name = volumeName,
-                                        path = path,
-                                        totalBytes = total,
-                                        freeBytes = free,
-                                        typeKey = if (isOtg) "OTG" else "SDCARD"
+                                if (total > 0L) {
+                                    val isOtg = name.lowercase().contains("otg") || name.lowercase().contains("usb")
+                                    val volumeName = if (isOtg) "Armazenamento OTG" else "Cartão SD"
+                                    list.add(
+                                        StorageVolume(
+                                            id = "ext_${name.lowercase()}",
+                                            name = volumeName,
+                                            path = path,
+                                            totalBytes = total,
+                                            freeBytes = free,
+                                            typeKey = if (isOtg) "OTG" else "SDCARD"
+                                        )
                                     )
-                                )
+                                }
                             }
                         }
                     }
@@ -186,22 +264,24 @@ class FileRepository(private val context: Context) {
                     val files = mntDir.listFiles()
                     if (files != null) {
                         for (file in files) {
-                            if (file.isDirectory && !file.name.startsWith(".")) {
+                            if (file.isDirectory && !file.name.startsWith(".") && file.canRead()) {
                                 val path = file.absolutePath
                                 if (list.none { it.path == path }) {
                                     val stat = try { StatFs(path) } catch (e: Exception) { null }
                                     val total = stat?.totalBytes ?: 0L
                                     val free = stat?.availableBytes ?: 0L
-                                    list.add(
-                                        StorageVolume(
-                                            id = "mnt_${file.name.lowercase()}",
-                                            name = "USB/OTG (${file.name})",
-                                            path = path,
-                                            totalBytes = total,
-                                            freeBytes = free,
-                                            typeKey = "OTG"
+                                    if (total > 0L) {
+                                        list.add(
+                                            StorageVolume(
+                                                id = "mnt_${file.name.lowercase()}",
+                                                name = "USB/OTG (${file.name})",
+                                                path = path,
+                                                totalBytes = total,
+                                                freeBytes = free,
+                                                typeKey = "OTG"
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                             }
                         }
@@ -586,73 +666,100 @@ class FileRepository(private val context: Context) {
                         val providerSegment = directoryPath.removePrefix("/cloud/").substringBefore("/")
                         val subPath = directoryPath.removePrefix("/cloud/$providerSegment").removePrefix("/")
 
-                        // Trigger live sync with remote server if online and connected
-                        if (prefs.getBoolean("cloud_connected_$providerSegment", false) && cloudStorageService.isOnline()) {
+                        val isConnected = prefs.getBoolean("cloud_connected_$providerSegment", false) ||
+                                (cloudStorageService.getProvider(providerSegment)?.isConnected == true)
+
+                        if (isConnected) {
                             try {
-                                cloudStorageService.syncDirectory(providerSegment, subPath, targetDir)
+                                val remoteFiles = cloudStorageService.fetchRemoteDirectory(providerSegment, subPath)
+                                if (remoteFiles.isNotEmpty()) {
+                                    val filteredRemote = if (!showHiddenFiles) remoteFiles.filter { !it.name.startsWith(".") } else remoteFiles
+                                    val mappedRemote = filteredRemote.map { rf ->
+                                        val isDir = rf.isDirectory
+                                        val name = rf.name
+                                        val ext = name.substringAfterLast('.', "").lowercase()
+                                        val mime = rf.mimeType ?: getMimeTypeFromExtension(ext)
+                                        val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                                        val cleanSub = subPath.trim('/')
+                                        val itemPath = if (cleanSub.isBlank()) {
+                                            "/cloud/$providerSegment/$name"
+                                        } else {
+                                            "/cloud/$providerSegment/$cleanSub/$name"
+                                        }
+
+                                        FileItem(
+                                            id = itemPath,
+                                            name = name,
+                                            path = itemPath,
+                                            size = if (isDir) 0L else rf.size,
+                                            lastModified = rf.lastModified,
+                                            isDirectory = isDir,
+                                            fileType = type,
+                                            extension = ext,
+                                            isFavorite = favoritePaths.contains(itemPath),
+                                            childCount = if (isDir) rf.childCount else 0,
+                                            mimeType = mime
+                                        )
+                                    }
+                                    items.addAll(mappedRemote)
+                                }
                             } catch (e: Exception) {
-                                android.util.Log.w("FileRepository", "Cloud live sync exception: ${e.message}")
+                                android.util.Log.w("FileRepository", "Cloud remote fetch error: ${e.message}")
                             }
                         }
 
-                        val existing = targetDir.listFiles()
-                        if (existing == null || existing.isEmpty()) {
-                            val providerName = when (providerSegment.lowercase()) {
-                                "mega" -> "Nuvem Mega"
-                                "drive" -> "Google Drive"
-                                "webdav" -> "WebDAV"
-                                "onedrive" -> "OneDrive"
-                                "dropbox" -> "Dropbox"
-                                "mediafire" -> "MediaFire"
-                                else -> providerSegment.replaceFirstChar { it.uppercase() }
+                        if (items.isEmpty() && !isConnected) {
+                            // If provider is not connected, clean any old dummy files
+                            targetDir.listFiles()?.forEach { f ->
+                                if (f.name.startsWith("Pasta_") || f.name.startsWith("Arquivo_")) {
+                                    f.deleteRecursively()
+                                }
                             }
-                            cloudStorageService.ensureInitialCloudWorkspace(
-                                targetDir,
-                                providerName,
-                                prefs.getString("cloud_email_$providerSegment", "usuario@$providerSegment.com") ?: "usuario@cloud.com"
-                            )
                         }
                     }
-                    val files = if (targetDir.exists() && targetDir.isDirectory) {
-                        targetDir.listFiles()
-                    } else null
 
-                    if (files != null) {
-                        val filteredFiles = if (!showHiddenFiles) files.filter { !it.name.startsWith(".") } else files.toList()
-                        val mapped = filteredFiles.map { file ->
-                            val isDir = file.isDirectory
-                            val name = file.name
-                            val ext = file.extension.lowercase()
-                            val mime = getMimeTypeFromExtension(ext)
-                            val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
-                            val size = if (isDir) 0L else file.length()
-                            val count = if (isDir) getDirectoryChildCount(file) else 0
+                    if (items.isEmpty() && !directoryPath.startsWith("/cloud/")) {
+                        val files = if (targetDir.exists() && targetDir.isDirectory) {
+                            targetDir.listFiles()
+                        } else null
 
-                            val itemPath = if (directoryPath.startsWith("/cloud/")) {
-                                directoryPath.removeSuffix("/") + "/" + name
-                            } else {
-                                file.absolutePath
+                        if (files != null) {
+                            val filteredFiles = if (!showHiddenFiles) files.filter { !it.name.startsWith(".") } else files.toList()
+                            val mapped = filteredFiles.map { file ->
+                                val isDir = file.isDirectory
+                                val name = file.name
+                                val ext = file.extension.lowercase()
+                                val mime = getMimeTypeFromExtension(ext)
+                                val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                                val size = if (isDir) 0L else file.length()
+                                val count = if (isDir) getDirectoryChildCount(file) else 0
+
+                                val itemPath = if (directoryPath.startsWith("/cloud/")) {
+                                    directoryPath.removeSuffix("/") + "/" + name
+                                } else {
+                                    file.absolutePath
+                                }
+
+                                FileItem(
+                                    id = itemPath,
+                                    name = name,
+                                    path = itemPath,
+                                    size = size,
+                                    lastModified = file.lastModified(),
+                                    isDirectory = isDir,
+                                    fileType = type,
+                                    extension = ext,
+                                    isFavorite = favoritePaths.contains(itemPath),
+                                    childCount = count,
+                                    mimeType = mime
+                                )
                             }
-
-                            FileItem(
-                                id = itemPath,
-                                name = name,
-                                path = itemPath,
-                                size = size,
-                                lastModified = file.lastModified(),
-                                isDirectory = isDir,
-                                fileType = type,
-                                extension = ext,
-                                isFavorite = favoritePaths.contains(itemPath),
-                                childCount = count,
-                                mimeType = mime
-                            )
+                            items.addAll(mapped)
+                        } else if (com.example.util.RootHelper.isRootAvailable() && !directoryPath.startsWith("/cloud/")) {
+                            // Fallback to superuser root listing for protected system directories
+                            val rootItems = com.example.util.RootHelper.listDirectory(directoryPath, favoritePaths)
+                            items.addAll(rootItems)
                         }
-                        items.addAll(mapped)
-                    } else if (com.example.util.RootHelper.isRootAvailable() && !directoryPath.startsWith("/cloud/")) {
-                        // Fallback to superuser root listing for protected system directories
-                        val rootItems = com.example.util.RootHelper.listDirectory(directoryPath, favoritePaths)
-                        items.addAll(rootItems)
                     }
                 }
             }
@@ -1261,7 +1368,13 @@ class FileRepository(private val context: Context) {
     // -------------------------------------------------------------
     suspend fun listZipContents(zipFilePath: String): List<ZipEntryItem> = withContext(Dispatchers.IO) {
         val entries = mutableListOf<ZipEntryItem>()
-        val zipFile = File(zipFilePath)
+        if (zipFilePath.startsWith("/cloud/")) {
+            val resolved = resolveFile(zipFilePath)
+            if (!resolved.exists() || resolved.length() == 0L) {
+                downloadCloudFile(zipFilePath)
+            }
+        }
+        val zipFile = resolveFile(zipFilePath)
         if (!zipFile.exists()) return@withContext entries
 
         try {
@@ -1352,8 +1465,14 @@ class FileRepository(private val context: Context) {
         targetDirectory: String,
         onProgress: (Float, String) -> Unit = { _, _ -> }
     ): Boolean = withContext(Dispatchers.IO) {
-        val zipFile = File(zipFilePath)
-        val targetDir = File(targetDirectory)
+        if (zipFilePath.startsWith("/cloud/")) {
+            val resolved = resolveFile(zipFilePath)
+            if (!resolved.exists() || resolved.length() == 0L) {
+                downloadCloudFile(zipFilePath)
+            }
+        }
+        val zipFile = resolveFile(zipFilePath)
+        val targetDir = resolveFile(targetDirectory)
         if (!zipFile.exists()) return@withContext false
         targetDir.mkdirs()
 
@@ -1397,8 +1516,14 @@ class FileRepository(private val context: Context) {
     // APK INSPECTOR & ANALYZER
     // -------------------------------------------------------------
     suspend fun inspectApk(apkFilePath: String): ApkInfo? = withContext(Dispatchers.IO) {
-        val apkFile = File(apkFilePath)
-        val isCloudOrVirtual = apkFilePath.startsWith("/cloud/") || !apkFile.exists()
+        if (apkFilePath.startsWith("/cloud/")) {
+            val resolved = resolveFile(apkFilePath)
+            if (!resolved.exists() || resolved.length() == 0L) {
+                downloadCloudFile(apkFilePath)
+            }
+        }
+        val apkFile = resolveFile(apkFilePath)
+        val isCloudOrVirtual = !apkFile.exists()
 
         if (isCloudOrVirtual) {
             val name = apkFile.nameWithoutExtension.ifEmpty { "App Prototype" }
@@ -1426,15 +1551,15 @@ class FileRepository(private val context: Context) {
             val pm = context.packageManager
             // Use flag 0 for instant metadata reading without slow manifest/permission parsing
             val packageInfo: PackageInfo? = try {
-                pm.getPackageArchiveInfo(apkFilePath, 0)
+                pm.getPackageArchiveInfo(apkFile.absolutePath, 0)
             } catch (_: Exception) {
                 null
             }
 
             if (packageInfo != null) {
                 val appInfo = packageInfo.applicationInfo ?: return@withContext null
-                appInfo.sourceDir = apkFilePath
-                appInfo.publicSourceDir = apkFilePath
+                appInfo.sourceDir = apkFile.absolutePath
+                appInfo.publicSourceDir = apkFile.absolutePath
 
                 val appName = try { pm.getApplicationLabel(appInfo).toString() } catch (e: Exception) { apkFile.nameWithoutExtension }
                 val pkgName = packageInfo.packageName
@@ -1602,6 +1727,12 @@ class FileRepository(private val context: Context) {
     // CODE & TEXT FILE EDITOR
     // -------------------------------------------------------------
     suspend fun readTextFile(filePath: String): String = withContext(Dispatchers.IO) {
+        if (filePath.startsWith("/cloud/")) {
+            val resolved = resolveFile(filePath)
+            if (!resolved.exists() || resolved.length() == 0L) {
+                downloadCloudFile(filePath)
+            }
+        }
         if (filePath.startsWith("content://")) {
             return@withContext try {
                 val uri = Uri.parse(filePath)
@@ -1613,7 +1744,7 @@ class FileRepository(private val context: Context) {
             }
         }
         try {
-            val file = File(filePath)
+            val file = resolveFile(filePath)
             if (file.exists() && file.canRead()) {
                 file.readText(Charsets.UTF_8)
             } else if (com.example.util.RootHelper.isRootAvailable()) {
@@ -1644,7 +1775,7 @@ class FileRepository(private val context: Context) {
             }
         }
         try {
-            val file = File(filePath)
+            val file = resolveFile(filePath)
             file.writeText(content, Charsets.UTF_8)
             true
         } catch (e: Exception) {

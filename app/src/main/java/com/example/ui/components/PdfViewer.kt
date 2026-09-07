@@ -57,6 +57,13 @@ fun ArcboxPdfViewerModal(
         isLoading = true
         errorMessage = null
         withContext(Dispatchers.IO) {
+            val repository = com.example.data.repository.FileRepository(context)
+            if (fileItem.path.startsWith("/cloud/")) {
+                val resolved = repository.resolveFile(fileItem.path)
+                if (!resolved.exists() || resolved.length() == 0L) {
+                    repository.downloadCloudFile(fileItem.path)
+                }
+            }
             var pfd: ParcelFileDescriptor? = null
             var renderer: PdfRenderer? = null
             try {
@@ -343,6 +350,12 @@ private fun openPfdForPdf(context: Context, item: FileItem): ParcelFileDescripto
         if (item.path.startsWith("content://") || item.safUriString != null) {
             val uri = Uri.parse(item.safUriString ?: item.path)
             context.contentResolver.openFileDescriptor(uri, "r")
+        } else if (item.path.startsWith("/cloud/")) {
+            val repository = com.example.data.repository.FileRepository(context)
+            val file = repository.resolveFile(item.path)
+            if (file.exists() && file.canRead()) {
+                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            } else null
         } else {
             val file = File(item.path)
             if (file.exists() && file.canRead()) {
