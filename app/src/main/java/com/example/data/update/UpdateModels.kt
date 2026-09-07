@@ -12,6 +12,7 @@ data class UpdateReleaseInfo(
     val apkDownloadUrl: String,        // URL direta para baixar o arquivo .apk
     val apkFileName: String,           // ex: "Arcbox-v2.0.0.apk"
     val apkSizeBytes: Long,            // Tamanho em bytes do APK
+    val assetApiUrl: String? = null,   // URL da API de assets (ex: https://api.github.com/repos/.../releases/assets/...)
     val expectedSha256: String? = null,// Hash SHA-256 publicado (em .sha256 ou no changelog)
     val publishedAt: String = "",      // Data ISO ou formatada
     val isMandatory: Boolean = false   // Se a atualização foi sinalizada como obrigatória

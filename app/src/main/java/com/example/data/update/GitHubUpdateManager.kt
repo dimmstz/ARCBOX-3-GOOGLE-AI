@@ -75,6 +75,17 @@ class GitHubUpdateManager(private val context: Context) {
             .apply()
     }
 
+    fun getGithubToken(): String {
+        val saved = prefs.getString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, "")
+        return if (!saved.isNullOrBlank()) saved else UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
+    }
+
+    fun setGithubToken(token: String) {
+        prefs.edit()
+            .putString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, token.trim())
+            .apply()
+    }
+
     /**
      * Verifica o estado de conectividade atual (se está conectado, e se é Wi-Fi quando exigido).
      */
@@ -105,11 +116,17 @@ class GitHubUpdateManager(private val context: Context) {
 
             Log.d(TAG, "Consultando atualizações em: $apiUrl")
 
-            val request = Request.Builder()
+            val token = getGithubToken()
+            val requestBuilder = Request.Builder()
                 .url(apiUrl)
                 .header("Accept", "application/vnd.github.v3+json")
                 .header("User-Agent", "Arcbox-Android/${UpdateConfig.CURRENT_VERSION_NAME}")
-                .build()
+
+            if (token.isNotBlank()) {
+                requestBuilder.header("Authorization", "Bearer $token")
+            }
+
+            val request = requestBuilder.build()
 
             val response = httpClient.newCall(request).execute()
             recordLastCheckedTime()
@@ -118,9 +135,19 @@ class GitHubUpdateManager(private val context: Context) {
                 val code = response.code
                 response.close()
                 if (code == 404) {
-                    return@withContext Result.failure(Exception("Nenhuma release pública encontrada no repositório $owner/$repo."))
-                } else if (code == 403) {
-                    return@withContext Result.failure(Exception("Limite de requisições do GitHub atingido. Tente novamente mais tarde."))
+                    val msg = if (token.isBlank()) {
+                        "Nenhuma release encontrada em $owner/$repo. Se o repositório for privado, configure um Personal Access Token."
+                    } else {
+                        "Nenhuma release encontrada em $owner/$repo com o token informado."
+                    }
+                    return@withContext Result.failure(Exception(msg))
+                } else if (code == 401 || code == 403) {
+                    val msg = if (code == 401) {
+                        "Token do GitHub não autorizado ou expirado. Verifique o token nas configurações."
+                    } else {
+                        "Limite de requisições do GitHub atingido ou permissão negada."
+                    }
+                    return@withContext Result.failure(Exception(msg))
                 }
                 return@withContext Result.failure(Exception("Servidor GitHub retornou erro HTTP $code."))
             }
@@ -141,6 +168,7 @@ class GitHubUpdateManager(private val context: Context) {
             // Parse assets for APK
             val assetsArray = releaseJson.optJSONArray("assets") ?: JSONArray()
             var apkDownloadUrl: String? = null
+            var apiAssetUrl: String? = null
             var apkFileName = "Arcbox.apk"
             var apkSizeBytes: Long = 0L
             var expectedSha256: String? = null
@@ -151,6 +179,7 @@ class GitHubUpdateManager(private val context: Context) {
                 val assetName = asset.optString("name", "")
                 if (assetName.endsWith(".apk", ignoreCase = true)) {
                     apkDownloadUrl = asset.optString("browser_download_url", "")
+                    apiAssetUrl = asset.optString("url", "")
                     apkFileName = assetName
                     apkSizeBytes = asset.optLong("size", 0L)
                     break
@@ -216,6 +245,7 @@ class GitHubUpdateManager(private val context: Context) {
                 apkDownloadUrl = apkDownloadUrl,
                 apkFileName = apkFileName,
                 apkSizeBytes = apkSizeBytes,
+                assetApiUrl = apiAssetUrl,
                 expectedSha256 = expectedSha256,
                 publishedAt = publishedAt,
                 isMandatory = isMandatory
@@ -247,12 +277,24 @@ class GitHubUpdateManager(private val context: Context) {
             val safeName = releaseInfo.apkFileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
             tempFile = File(updateDir, "Arcbox_update_${releaseInfo.targetVersionName}_$safeName")
 
-            Log.d(TAG, "Iniciando download seguro HTTPS de: ${releaseInfo.apkDownloadUrl}")
+            val token = getGithubToken()
+            val isPrivateAsset = token.isNotBlank() && !releaseInfo.assetApiUrl.isNullOrBlank()
+            val downloadUrl = if (isPrivateAsset) releaseInfo.assetApiUrl!! else releaseInfo.apkDownloadUrl
 
-            val request = Request.Builder()
-                .url(releaseInfo.apkDownloadUrl)
+            Log.d(TAG, "Iniciando download seguro HTTPS de: $downloadUrl")
+
+            val requestBuilder = Request.Builder()
+                .url(downloadUrl)
                 .header("User-Agent", "Arcbox-Android/${UpdateConfig.CURRENT_VERSION_NAME}")
-                .build()
+
+            if (token.isNotBlank()) {
+                requestBuilder.header("Authorization", "Bearer $token")
+                if (isPrivateAsset) {
+                    requestBuilder.header("Accept", "application/octet-stream")
+                }
+            }
+
+            val request = requestBuilder.build()
 
             val response = httpClient.newCall(request).execute()
             if (!response.isSuccessful) {

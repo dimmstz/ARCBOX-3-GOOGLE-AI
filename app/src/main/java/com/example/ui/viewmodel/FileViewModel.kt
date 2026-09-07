@@ -133,7 +133,8 @@ data class FileUiState(
     val updateWifiOnly: Boolean = false,
     val updateLastCheckedTime: Long = 0L,
     val updateRepoOwner: String = UpdateConfig.DEFAULT_GITHUB_OWNER,
-    val updateRepoName: String = UpdateConfig.DEFAULT_GITHUB_REPO
+    val updateRepoName: String = UpdateConfig.DEFAULT_GITHUB_REPO,
+    val updateGithubPatToken: String = ""
 )
 
 class FileViewModel(application: Application) : AndroidViewModel(application) {
@@ -195,6 +196,8 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             val updateLastChecked = updatePrefs.getLong(UpdateConfig.PREF_LAST_UPDATE_CHECK, 0L)
             val updateRepoOwner = updatePrefs.getString(UpdateConfig.PREF_CUSTOM_REPO_OWNER, UpdateConfig.DEFAULT_GITHUB_OWNER) ?: UpdateConfig.DEFAULT_GITHUB_OWNER
             val updateRepoName = updatePrefs.getString(UpdateConfig.PREF_CUSTOM_REPO_NAME, UpdateConfig.DEFAULT_GITHUB_REPO) ?: UpdateConfig.DEFAULT_GITHUB_REPO
+            val updateGithubPat = updatePrefs.getString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN)
+                ?: UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
 
             return FileUiState(
                 isWelcomeOnboardingOpen = shouldShowOnboarding,
@@ -232,6 +235,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 updateLastCheckedTime = updateLastChecked,
                 updateRepoOwner = updateRepoOwner,
                 updateRepoName = updateRepoName,
+                updateGithubPatToken = updateGithubPat,
                 isLoading = true
             )
         }
@@ -2558,14 +2562,16 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(updateWifiOnly = enabled) }
     }
 
-    fun setCustomUpdateRepo(owner: String, repo: String) {
+    fun setCustomUpdateRepo(owner: String, repo: String, token: String = "") {
         updateManager.setCustomRepo(owner, repo)
+        updateManager.setGithubToken(token)
         _uiState.update {
             it.copy(
                 updateRepoOwner = owner,
                 updateRepoName = repo,
+                updateGithubPatToken = token,
                 updateStatus = UpdateStatus.Idle,
-                snackbarMessage = "Servidor de atualizações definido para: $owner/$repo"
+                snackbarMessage = "Servidor de atualizações configurado com sucesso!"
             )
         }
     }

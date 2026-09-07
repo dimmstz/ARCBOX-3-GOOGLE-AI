@@ -62,13 +62,13 @@ fun UpdateNotificationModal(
             shadowElevation = 10.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 20.dp, vertical = 24.dp)
                 .widthIn(max = 440.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp)
+                    .padding(20.dp)
             ) {
                 // Header Icon & Title
                 Row(
@@ -209,8 +209,9 @@ fun UpdateNotificationModal(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                } else {
                     Spacer(modifier = Modifier.height(10.dp))
+                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
 
                 // Downloading Progress UI
@@ -284,7 +285,8 @@ fun UpdateNotificationModal(
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp)
+                                .defaultMinSize(minHeight = 48.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
                         ) {
                             Icon(Icons.Default.InstallMobile, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
@@ -297,17 +299,23 @@ fun UpdateNotificationModal(
                     else -> {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (!isMandatory) {
                                 OutlinedButton(
                                     onClick = onDismiss,
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
+                                        .weight(0.75f)
+                                        .defaultMinSize(minHeight = 48.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp)
                                 ) {
-                                    Text("Depois")
+                                    Text(
+                                        text = "Depois",
+                                        maxLines = 1,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
                                 }
                             }
 
@@ -315,14 +323,18 @@ fun UpdateNotificationModal(
                                 onClick = { onDownloadAndInstall(releaseInfo) },
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
-                                    .weight(if (isMandatory) 1f else 1.3f)
-                                    .height(48.dp)
+                                    .weight(if (isMandatory) 1f else 1.6f)
+                                    .defaultMinSize(minHeight = 48.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
                             ) {
                                 Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (isMandatory) "Atualizar Agora" else "Baixar Atualização",
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp)
                                 )
                             }
                         }

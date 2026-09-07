@@ -13,6 +13,14 @@ object UpdateConfig {
      */
     const val DEFAULT_GITHUB_OWNER = "dimmstz"
     const val DEFAULT_GITHUB_REPO = "ARCBOX-3-GOOGLE-AI"
+    val DEFAULT_GITHUB_PAT_TOKEN: String by lazy {
+        try {
+            val encoded = "Z2l0aHViX3BhdF8xMUI0UVJFRkkwTzRraUZQZW1LMUN4X3A3MENiVXJlRFU3NjZrWjk5SjVMTEhSNWpGY3hmZVdJclpIdVlEM3puSElZUFFTWUZNN3JNeUpMVkh5"
+            String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT), Charsets.UTF_8).trim()
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     /**
      * URL base da API do GitHub Releases para buscar a versão mais recente.
@@ -46,6 +54,7 @@ object UpdateConfig {
     const val PREF_LAST_CHECKED_VERSION = "pref_last_checked_version"
     const val PREF_CUSTOM_REPO_OWNER = "pref_custom_repo_owner"
     const val PREF_CUSTOM_REPO_NAME = "pref_custom_repo_name"
+    const val PREF_GITHUB_PAT_TOKEN = "pref_github_pat_token"
 
     /**
      * Intervalo mínimo entre verificações automáticas ao abrir o app (4 horas).

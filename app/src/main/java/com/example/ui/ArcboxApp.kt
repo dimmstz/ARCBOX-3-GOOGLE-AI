@@ -872,13 +872,14 @@ fun ArcboxApp(
                 lastUpdateCheckedTime = uiState.updateLastCheckedTime,
                 updateRepoOwner = uiState.updateRepoOwner,
                 updateRepoName = uiState.updateRepoName,
+                updateGithubPatToken = uiState.updateGithubPatToken,
                 onCheckForUpdates = { viewModel.checkForUpdatesManual() },
                 onDownloadAndInstallUpdate = { releaseInfo -> viewModel.downloadAndInstallUpdate(releaseInfo) },
                 onCancelUpdateDownload = { viewModel.cancelUpdateDownload() },
                 onInstallDownloadedUpdate = { viewModel.installDownloadedUpdate() },
                 onToggleAutoCheckUpdates = { viewModel.setUpdateAutoCheck(it) },
                 onToggleWifiOnlyUpdates = { viewModel.setUpdateWifiOnly(it) },
-                onSaveCustomUpdateRepo = { owner, repo -> viewModel.setCustomUpdateRepo(owner, repo) },
+                onSaveCustomUpdateRepo = { owner, repo, token -> viewModel.setCustomUpdateRepo(owner, repo, token) },
                 onRequestInstallPermission = { viewModel.requestInstallUnknownAppsPermission() },
                 onClose = { viewModel.closeSettings() }
             )

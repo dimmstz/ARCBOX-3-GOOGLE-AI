@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import com.example.data.update.UpdateConfig
 import com.example.data.update.UpdateReleaseInfo
 import com.example.data.update.UpdateStatus
@@ -36,18 +38,18 @@ fun AppUpdateSection(
     lastCheckedTime: Long,
     repoOwner: String,
     repoName: String,
+    githubPatToken: String = "",
     onCheckForUpdates: () -> Unit,
     onDownloadAndInstall: (UpdateReleaseInfo) -> Unit,
     onCancelDownload: () -> Unit,
     onInstallDownloadedApk: () -> Unit,
     onToggleAutoCheck: (Boolean) -> Unit,
     onToggleWifiOnly: (Boolean) -> Unit,
-    onSaveCustomRepo: (String, String) -> Unit,
+    onSaveCustomRepo: (String, String, String) -> Unit,
     onRequestInstallPermission: () -> Unit
 ) {
     val context = LocalContext.current
     var showChangelogModal by remember { mutableStateOf(false) }
-    var showRepoConfigDialog by remember { mutableStateOf(false) }
 
     SettingsSectionCard(
         title = "Atualizações do ArcBox",
@@ -388,34 +390,21 @@ fun AppUpdateSection(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Main Check Button and Options
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // Main Check Button
+        Button(
+            onClick = onCheckForUpdates,
+            enabled = updateStatus !is UpdateStatus.Checking && updateStatus !is UpdateStatus.Downloading,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Button(
-                onClick = onCheckForUpdates,
-                enabled = updateStatus !is UpdateStatus.Checking && updateStatus !is UpdateStatus.Downloading,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                if (updateStatus is UpdateStatus.Checking) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Verificando...", fontSize = 12.sp)
-                } else {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Verificar Atualizações", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            OutlinedButton(
-                onClick = { showRepoConfigDialog = true },
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp)
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = "Configurar Repositório", modifier = Modifier.size(18.dp))
+            if (updateStatus is UpdateStatus.Checking) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Verificando...", fontSize = 12.sp)
+            } else {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Verificar Atualizações", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -523,69 +512,6 @@ fun AppUpdateSection(
             dismissButton = {
                 TextButton(onClick = { showChangelogModal = false }) {
                     Text("Fechar")
-                }
-            }
-        )
-    }
-
-    // Dialog de Configuração de Repositório GitHub
-    if (showRepoConfigDialog) {
-        var ownerInput by remember { mutableStateOf(repoOwner) }
-        var repoInput by remember { mutableStateOf(repoName) }
-
-        AlertDialog(
-            onDismissRequest = { showRepoConfigDialog = false },
-            title = {
-                Text("Servidor de Atualizações")
-            },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Defina o repositório público do GitHub de onde o ArcBox busca novas releases e APKs assinados.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    OutlinedTextField(
-                        value = ownerInput,
-                        onValueChange = { ownerInput = it },
-                        label = { Text("Organização / Usuário (Owner)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = repoInput,
-                        onValueChange = { repoInput = it },
-                        label = { Text("Repositório (Repo)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Padrão: ${UpdateConfig.DEFAULT_GITHUB_OWNER}/${UpdateConfig.DEFAULT_GITHUB_REPO}",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (ownerInput.isNotBlank() && repoInput.isNotBlank()) {
-                            onSaveCustomRepo(ownerInput.trim(), repoInput.trim())
-                        }
-                        showRepoConfigDialog = false
-                    }
-                ) {
-                    Text("Salvar")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRepoConfigDialog = false }) {
-                    Text("Cancelar")
                 }
             }
         )

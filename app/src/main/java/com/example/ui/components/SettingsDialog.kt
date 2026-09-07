@@ -37,6 +37,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.models.FolderTransitionType
 import com.example.data.models.ThemeMode
+import com.example.data.update.UpdateConfig
 import com.example.data.update.UpdateReleaseInfo
 import com.example.data.update.UpdateStatus
 import com.example.ui.theme.AccentColorOption
@@ -106,15 +107,16 @@ fun ArcboxSettingsModal(
     autoCheckUpdates: Boolean = true,
     wifiOnlyUpdates: Boolean = false,
     lastUpdateCheckedTime: Long = 0L,
-    updateRepoOwner: String = "douglas-br",
-    updateRepoName: String = "arcbox",
+    updateRepoOwner: String = UpdateConfig.DEFAULT_GITHUB_OWNER,
+    updateRepoName: String = UpdateConfig.DEFAULT_GITHUB_REPO,
+    updateGithubPatToken: String = "",
     onCheckForUpdates: () -> Unit = {},
     onDownloadAndInstallUpdate: (UpdateReleaseInfo) -> Unit = {},
     onCancelUpdateDownload: () -> Unit = {},
     onInstallDownloadedUpdate: () -> Unit = {},
     onToggleAutoCheckUpdates: (Boolean) -> Unit = {},
     onToggleWifiOnlyUpdates: (Boolean) -> Unit = {},
-    onSaveCustomUpdateRepo: (String, String) -> Unit = { _, _ -> },
+    onSaveCustomUpdateRepo: (String, String, String) -> Unit = { _, _, _ -> },
     onRequestInstallPermission: () -> Unit = {},
     onClose: () -> Unit
 ) {
@@ -1002,6 +1004,7 @@ fun ArcboxSettingsModal(
                         lastCheckedTime = lastUpdateCheckedTime,
                         repoOwner = updateRepoOwner,
                         repoName = updateRepoName,
+                        githubPatToken = updateGithubPatToken,
                         onCheckForUpdates = onCheckForUpdates,
                         onDownloadAndInstall = onDownloadAndInstallUpdate,
                         onCancelDownload = onCancelUpdateDownload,
