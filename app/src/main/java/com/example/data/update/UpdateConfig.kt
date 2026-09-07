@@ -11,8 +11,8 @@ object UpdateConfig {
      * Formato: "owner/repo"
      * Usuário pode publicar em: https://github.com/douglas-br/arcbox/releases
      */
-    const val DEFAULT_GITHUB_OWNER = "douglas-br"
-    const val DEFAULT_GITHUB_REPO = "arcbox"
+    const val DEFAULT_GITHUB_OWNER = "dimmstz"
+    const val DEFAULT_GITHUB_REPO = "ARCBOX-3-GOOGLE-AI"
 
     /**
      * URL base da API do GitHub Releases para buscar a versão mais recente.
