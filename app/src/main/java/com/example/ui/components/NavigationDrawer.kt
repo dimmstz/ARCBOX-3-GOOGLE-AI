@@ -445,17 +445,6 @@ fun ArcboxNavigationDrawerContent(
             )
 
             NavigationDrawerItem(
-                label = { Text("Configurações do App") },
-                selected = false,
-                onClick = {
-                    onOpenSettings()
-                    onCloseDrawer()
-                },
-                icon = { Icon(Icons.Outlined.Settings, contentDescription = null, tint = toolIconTint) },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-            )
-
-            NavigationDrawerItem(
                 label = { Text("Recursos & Permissões") },
                 selected = false,
                 onClick = {
@@ -463,6 +452,17 @@ fun ArcboxNavigationDrawerContent(
                     onCloseDrawer()
                 },
                 icon = { Icon(Icons.Default.Info, contentDescription = null, tint = toolIconTint) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            NavigationDrawerItem(
+                label = { Text("Configurações do App") },
+                selected = false,
+                onClick = {
+                    onOpenSettings()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Outlined.Settings, contentDescription = null, tint = toolIconTint) },
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
             )
 
