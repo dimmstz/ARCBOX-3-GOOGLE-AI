@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.arcbox.filemgr"
     minSdk = 24
     targetSdk = 36
-    versionCode = 2
-    versionName = "1.0.1"
+    versionCode = 3
+    versionName = "1.0.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -32,7 +32,22 @@ android {
       keyPassword = System.getenv("KEY_PASSWORD")
     }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
+      val localKs = file("${rootDir}/debug.keystore")
+      val homeKs = file("${System.getProperty("user.home")}/.android/debug.keystore")
+      if (!localKs.exists() && !homeKs.exists()) {
+        try {
+          homeKs.parentFile?.mkdirs()
+          ProcessBuilder(
+            "keytool", "-genkeypair", "-v",
+            "-keystore", homeKs.absolutePath,
+            "-storetype", "PKCS12",
+            "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000",
+            "-alias", "androiddebugkey", "-keypass", "android", "-storepass", "android",
+            "-dname", "CN=Android Debug,O=Android,C=US"
+          ).start().waitFor()
+        } catch (_: Exception) {}
+      }
+      storeFile = if (localKs.exists()) localKs else homeKs
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
