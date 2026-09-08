@@ -661,7 +661,7 @@ class MegaApiClient(
 
         try {
             var keyBytes = passedKeyBytes ?: nodeCacheMap[nodeHandle]?.keyBytes
-            if (keyBytes == null || keyBytes.size < 32) {
+            if (keyBytes == null || keyBytes.isEmpty()) {
                 fetchNodes()
                 keyBytes = passedKeyBytes ?: nodeCacheMap[nodeHandle]?.keyBytes
             }

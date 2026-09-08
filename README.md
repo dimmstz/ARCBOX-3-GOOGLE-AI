@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.11-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.11"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.12-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.12"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,23 +18,25 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.11
+## 🚀 Novidades da Versão v1.0.12
 
-- ☁️ **Exibição Dinâmica de Armazenamento em Nuvem**:
-  - Os discos de nuvem (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV, etc.) agora são exibidos dinamicamente apenas quando a conta correspondente estiver **conectada e ativa**.
-  - Nuvens desconectadas são automaticamente ocultadas dos seletores para manter a interface limpa e organizada.
-- ➕ **Opção "Adicionar Nuvem" Sempre Acessível**:
-  - Adicionado o botão fixo **"+ Adicionar Nuvem"** no menu lateral (*Navigation Drawer*).
-  - Adicionado atalho **"Adicionar Nuvem..."** no menu suspenso de unidades da barra de topo (*TopBar*).
-  - Atualizado o botão no painel principal para **"Adicionar / Gerenciar Nuvens"**, facilitando o vínculo de novas contas.
-- ⚡ **Desempenho & Corrotinas de Download**:
-  - Correção do tratamento da exceção `LeftCompositionCancellationException`, permitindo cancelamento suave de transferências de nuvem ao fechar mídias ou navegar entre telas.
-  - Estrangulamento de progresso (*throttling* a cada 100ms / 1%) durante downloads e uploads, eliminando gargalos de animação e travamentos de renderização de interface (`FrameTracker timeout`).
-  - Fallback aprimorado para arquivos locais e sincronização em segundo plano.
+- ⚡ **Abertura e Streaming Instantâneo no MEGA Cloud**:
+  - Correção na validação de chaves AES individuais de 16 bytes que forçavam chamadas redundantes da árvore de nós completa ao abrir arquivos.
+  - O streaming e a visualização de mídias, PDFs e documentos do MEGA agora iniciam instantaneamente.
+- ☁️ **Exibição Dinâmica de Discos em Nuvem**:
+  - Os serviços em nuvem (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV) aparecem no menu lateral e nos seletores somente quando estiverem conectados e ativos.
+- ➕ **Opção "Adicionar Nuvem" Unificada**:
+  - Botão fixo **"+ Adicionar Nuvem"** no menu lateral (*Navigation Drawer*), atalho na barra superior (*TopBar*) e painel do dashboard.
+- 🚀 **Desempenho & Otimizações**:
+  - Tratamento suave da exceção `LeftCompositionCancellationException` e regulação do progresso de downloads e uploads para manter a UI fluida.
 
 ---
 
 ## 📋 Histórico de Versões
+
+### v1.0.11
+- ☁️ **Exibição Dinâmica de Armazenamento em Nuvem**: Discos de nuvem aparecem apenas quando conectados.
+- ➕ **Atalho "+ Adicionar Nuvem"**: Acesso rápido em toda a interface para vincular novas contas.
 
 ### v1.0.10
 - ☁️ **Estabilidade no Provedor de Nuvem**: Correção na revalidação de sessões de nuvem e fallbacks de cache offline.
