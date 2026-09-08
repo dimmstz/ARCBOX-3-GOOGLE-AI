@@ -904,11 +904,10 @@ class MegaApiClient(
         if (type == 3) return Pair("Caixa de Entrada", null)
         if (type == 4) return Pair("Lixeira", null)
 
-        if (attrStr.isBlank()) {
-            return Pair(if (type == 1) "Pasta_$handle" else "Arquivo_$handle", null)
-        }
-
         val currentMasterKey = masterKey
+        var extractedKeyBytes: ByteArray? = null
+        var extractedName: String? = null
+
         if (currentMasterKey != null && kStr.isNotBlank()) {
             try {
                 // kStr format can be "user_handle:enc_key", "enc_key", or "h1:k1/h2:k2"
@@ -916,19 +915,29 @@ class MegaApiClient(
                     ?: (if (kStr.contains(":")) kStr.substringAfter(":") else kStr)
 
                 val encKeyBytes = base64UrlDecode(encKeyStr)
-                if (encKeyBytes.isEmpty()) return Pair(parseNodeName(attrStr, type, handle), null)
+                if (encKeyBytes.isNotEmpty()) {
+                    val paddedLen = ((encKeyBytes.size + 15) / 16) * 16
+                    val paddedKeyBytes = if (encKeyBytes.size != paddedLen) encKeyBytes.copyOf(paddedLen) else encKeyBytes
 
-                val paddedLen = ((encKeyBytes.size + 15) / 16) * 16
-                val paddedKeyBytes = if (encKeyBytes.size != paddedLen) encKeyBytes.copyOf(paddedLen) else encKeyBytes
+                    val cipherKey = Cipher.getInstance("AES/ECB/NoPadding")
+                    cipherKey.init(Cipher.DECRYPT_MODE, SecretKeySpec(currentMasterKey, "AES"))
+                    extractedKeyBytes = cipherKey.doFinal(paddedKeyBytes)
+                }
+            } catch (e: Exception) {
+                Log.d("MegaApiClient", "Key decryption fallback for $handle: ${e.message}")
+            }
+        }
 
-                val cipherKey = Cipher.getInstance("AES/ECB/NoPadding")
-                cipherKey.init(Cipher.DECRYPT_MODE, SecretKeySpec(currentMasterKey, "AES"))
-                val decKeyBytes = cipherKey.doFinal(paddedKeyBytes)
+        if (attrStr.isBlank()) {
+            return Pair(if (type == 1) "Pasta_$handle" else "Arquivo_$handle", extractedKeyBytes)
+        }
 
-                val nodeAesKey = if (decKeyBytes.size >= 32) {
-                    ByteArray(16) { i -> (decKeyBytes[i].toInt() xor decKeyBytes[i + 16].toInt()).toByte() }
-                } else if (decKeyBytes.size >= 16) {
-                    decKeyBytes.copyOfRange(0, 16)
+        if (extractedKeyBytes != null) {
+            try {
+                val nodeAesKey = if (extractedKeyBytes.size >= 32) {
+                    ByteArray(16) { i -> (extractedKeyBytes[i].toInt() xor extractedKeyBytes[i + 16].toInt()).toByte() }
+                } else if (extractedKeyBytes.size >= 16) {
+                    extractedKeyBytes.copyOfRange(0, 16)
                 } else {
                     currentMasterKey
                 }
@@ -939,7 +948,6 @@ class MegaApiClient(
                 val decAttrBytes = cipherAttr.doFinal(encAttrBytes)
                 val decStr = String(decAttrBytes, Charsets.UTF_8).trimEnd { it == '\u0000' || it == ' ' }
 
-                var extractedName: String? = null
                 val start = decStr.indexOf('{')
                 val end = decStr.lastIndexOf('}')
                 if (start >= 0 && end > start) {
@@ -961,16 +969,13 @@ class MegaApiClient(
                         if (name.isNotBlank()) extractedName = name
                     } catch (_: Exception) {}
                 }
-
-                if (extractedName != null) {
-                    return Pair(extractedName, decKeyBytes)
-                }
             } catch (e: Exception) {
-                Log.d("MegaApiClient", "Decryption fallback for $handle: ${e.message}")
+                Log.d("MegaApiClient", "Attr decryption fallback for $handle: ${e.message}")
             }
         }
 
-        return Pair(parseNodeName(attrStr, type, handle), null)
+        val finalName = extractedName ?: parseNodeName(attrStr, type, handle)
+        return Pair(finalName, extractedKeyBytes)
     }
 
     private fun parseNodeName(attrStr: String, type: Int, handle: String): String {

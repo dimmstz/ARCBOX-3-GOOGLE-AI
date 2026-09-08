@@ -3,7 +3,7 @@
     <style name="Theme.MyApplication" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowBackground">#0B132B</item>
+        <item name="android:windowBackground">@android:color/white</item>
     </style>
 </resources>
 
