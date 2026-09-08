@@ -47,7 +47,7 @@ class MediaFireProvider(
     )
 
     private val directoryCache = java.util.concurrent.ConcurrentHashMap<String, CachedFolder>()
-    private val CACHE_TTL_MS = 60_000L
+    private val CACHE_TTL_MS = 600_000L
 
     private fun getCacheDir(): File = File(context.filesDir, "cloud_storage/mediafire")
 

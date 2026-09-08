@@ -29,7 +29,7 @@ class MegaProvider(
     private val nodeCache = mutableMapOf<String, MegaNode>()
     private var rootHandle: String = "root"
     private var lastFetchTimestamp: Long = 0L
-    private val CACHE_TTL_MS = 60_000L // 1 minute in-memory cache TTL
+    private val CACHE_TTL_MS = 600_000L // 10 minutes in-memory cache TTL
 
     init {
         restoreSession()

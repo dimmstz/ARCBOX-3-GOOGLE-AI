@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.13-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.13"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.14-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.14"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,21 +18,22 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.13
+## 🚀 Novidades da Versão v1.0.14
 
-- 🚀 **Abertura Ultrarrápida de Vídeos e Imagens no MEGA**:
-  - Removido o download em segundo plano automático e simultâneo de vídeos inteiros para renderização de miniaturas no grid de arquivos.
-  - Implementado semáforo de concorrência controlada para miniaturas de fotos/imagens em nuvem, eliminando congestionamento de rede e gargalos de CPU/I/O.
-  - Os vídeos e mídias no MEGA agora abrem e iniciam o streaming na velocidade máxima da sua conexão sem filas de espera.
-- ⚡ **Otimização de Buffers I/O de Leitura/Decriptação**:
-  - Expansão dos buffers de stream de download e cifra AES-CTR do MEGA de 64KB para 256KB (`256KB BufferedInputStream/OutputStream`).
-  - Redução massiva de chamadas de sistema I/O e processamento contínuo mais fluido durante a recepção de dados.
-- ☁️ **Exibição Dinâmica & Atalho de Nuvem**:
-  - Apenas serviços em nuvem conectados aparecem no menu lateral e seletores.
+- ⚡ **Navegação Instantânea de Pastas na Nuvem (Cache de 10 min)**:
+  - O TTL de cache das listagens de diretórios de todos os provedores em nuvem (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV) foi expandido de 1 para **10 minutos**.
+  - A navegação entre pastas, voltar e avançar agora é totalmente local e instantânea, eliminando as chamadas repetitivas de rede. Operações de modificação (criar pasta, deletar, renomear, mover, upload) continuam invalidando o cache imediatamente e com precisão.
+- 🖼️ **Otimização de Resolução e Tamanho de Miniaturas**:
+  - Ajustado o limite de download automático de arquivos em nuvem para miniaturas de fotos de 12MB para **5MB**, poupando dados e acelerando o grid de imagens.
+  - Corrigido o envio de caminhos de arquivos virtuais para a engine do Coil (`dataObj == null` se não baixado), prevenindo verificações inúteis de disco e erros de I/O em segundo plano.
 
 ---
 
 ## 📋 Histórico de Versões
+
+### v1.0.13
+- 🚀 **Abertura Ultrarrápida de Vídeos e Imagens no MEGA**: Removido download de vídeos em segundo plano para miniaturas e incluído semáforo de concorrência controlada para fotos.
+- ⚡ **Otimização de Buffers I/O de Leitura/Decriptação**: Buffers expandidos de 64KB para 256KB para reduzir chamadas de sistema I/O.
 
 ### v1.0.12
 - ⚡ **Abertura e Streaming Instantâneo no MEGA Cloud**: Validação e decodificação otimizada de nós e mídias.

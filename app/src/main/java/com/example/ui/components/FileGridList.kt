@@ -1521,7 +1521,7 @@ fun FileThumbnailImage(
             val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
             var isFileReady by remember(item.path) { mutableStateOf(resolvedFile.exists() && resolvedFile.length() > 0) }
 
-            if (item.path.startsWith("/cloud/") && !isFileReady && (item.size <= 12 * 1024 * 1024L || item.size <= 0L)) {
+            if (item.path.startsWith("/cloud/") && !isFileReady && (item.size <= 5 * 1024 * 1024L || item.size <= 0L)) {
                 LaunchedEffect(item.path) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         thumbnailDownloadSemaphore.acquire()
@@ -1542,8 +1542,9 @@ fun FileThumbnailImage(
                 "${item.path}_${item.lastModified}_$isFileReady"
             }
             val imageRequest = remember(cacheKey, isFileReady) {
+                val dataObj = if (isFileReady) resolvedFile else if (item.path.startsWith("/cloud/")) null else java.io.File(item.path)
                 ImageRequest.Builder(context)
-                    .data(if (isFileReady) resolvedFile else java.io.File(item.path))
+                    .data(dataObj)
                     .size(160, 160)
                     .precision(coil.size.Precision.INEXACT)
                     .allowRgb565(true)
@@ -1569,12 +1570,14 @@ fun FileThumbnailImage(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(iconSize)
                 )
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = item.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (isFileReady || !item.path.startsWith("/cloud/")) {
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = item.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
         FileType.VIDEO -> {
