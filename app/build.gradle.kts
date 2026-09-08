@@ -1,4 +1,5 @@
 // import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Base64
 
 plugins {
   alias(libs.plugins.android.application)
@@ -17,8 +18,8 @@ android {
     applicationId = "com.aistudio.arcbox.filemgr"
     minSdk = 24
     targetSdk = 36
-    versionCode = 5
-    versionName = "1.0.4"
+    versionCode = 6
+    versionName = "1.0.5"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -33,6 +34,14 @@ android {
     }
     create("debugConfig") {
       val localKs = file("${rootDir}/debug.keystore")
+      val base64File = file("${rootDir}/debug.keystore.base64")
+      if (!localKs.exists() && base64File.exists()) {
+        try {
+          val encoded = base64File.readText().trim()
+          val decoded = Base64.getDecoder().decode(encoded)
+          localKs.writeBytes(decoded)
+        } catch (_: Exception) {}
+      }
       val homeKs = file("${System.getProperty("user.home")}/.android/debug.keystore")
       if (!localKs.exists() && !homeKs.exists()) {
         try {
