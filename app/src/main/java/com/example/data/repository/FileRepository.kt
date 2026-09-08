@@ -1,0 +1,2173 @@
+package com.example.data.repository
+
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.os.StatFs
+import android.util.Log
+import android.webkit.MimeTypeMap
+import androidx.documentfile.provider.DocumentFile
+import com.example.data.db.AppDatabase
+import com.example.data.db.FavoriteEntity
+import com.example.data.db.TrashEntity
+import com.example.data.models.*
+import com.example.util.FileSearchMatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import java.io.*
+import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+
+class FileRepository(private val context: Context) {
+
+    private val db = AppDatabase.getDatabase(context)
+    private val trashDao = db.trashDao()
+    private val favoriteDao = db.favoriteDao()
+    private val prefs = context.getSharedPreferences("arcbox_prefs", Context.MODE_PRIVATE)
+    private val cloudStorageService = com.example.data.cloud.CloudStorageService.getInstance(context)
+    val safCloudManager = com.example.data.cloud.SafCloudManager(context)
+    private val dirCountCache = ConcurrentHashMap<String, Pair<Long, Int>>()
+    private var cachedVolumes: List<StorageVolume>? = null
+    private var lastVolumesCheckTime: Long = 0L
+
+    private fun getDirectoryChildCount(file: File): Int {
+        val name = file.name
+        if (name == "Android" || name.startsWith(".") || name == "data" || name == "obb") {
+            return 0
+        }
+        val path = file.absolutePath
+        val lastMod = try { file.lastModified() } catch (_: Exception) { 0L }
+        val cached = dirCountCache[path]
+        if (cached != null && cached.first == lastMod) {
+            return cached.second
+        }
+        val count = try {
+            file.list()?.size ?: 0
+        } catch (_: Exception) {
+            0
+        }
+        dirCountCache[path] = Pair(lastMod, count)
+        return count
+    }
+
+    val allTrashItems: Flow<List<TrashEntity>> = trashDao.getAllTrashItems()
+    val allFavorites: Flow<List<FavoriteEntity>> = favoriteDao.getAllFavorites()
+
+    fun resolveFile(path: String): File {
+        return if (path.startsWith("/cloud/")) {
+            val relative = path.removePrefix("/cloud/").removePrefix("/")
+            val cloudDir = File(context.filesDir, "cloud_storage")
+            File(cloudDir, relative)
+        } else {
+            File(path)
+        }
+    }
+
+    suspend fun downloadCloudFile(
+        virtualPath: String,
+        onProgress: (Float) -> Unit = {}
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!virtualPath.startsWith("/cloud/")) return@withContext false
+        val providerSegment = virtualPath.removePrefix("/cloud/").substringBefore("/")
+        val subPath = virtualPath.removePrefix("/cloud/$providerSegment").removePrefix("/")
+        val targetFile = resolveFile(virtualPath)
+        targetFile.parentFile?.mkdirs()
+        cloudStorageService.downloadRemoteFile(providerSegment, subPath, targetFile, onProgress)
+    }
+
+    suspend fun downloadCloudItemToDownloads(
+        item: FileItem,
+        onProgress: (String, Float) -> Unit = { _, _ -> }
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!item.path.startsWith("/cloud/")) return@withContext false
+        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            ?: File(android.os.Environment.getExternalStorageDirectory(), "Download")
+        downloadsDir.mkdirs()
+
+        val providerSegment = item.path.removePrefix("/cloud/").substringBefore("/")
+        val subPath = item.path.removePrefix("/cloud/$providerSegment").removePrefix("/")
+
+        if (!item.isDirectory) {
+            val destFile = File(downloadsDir, item.name)
+            val ok = cloudStorageService.downloadRemoteFile(providerSegment, subPath, destFile) { p ->
+                onProgress(item.name, p)
+            }
+            if (ok) {
+                try {
+                    android.media.MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), null, null)
+                } catch (_: Exception) {}
+            }
+            return@withContext ok
+        } else {
+            val targetFolder = File(downloadsDir, item.name)
+            targetFolder.mkdirs()
+            return@withContext downloadRemoteFolderRecursively(providerSegment, subPath, targetFolder, onProgress)
+        }
+    }
+
+    private suspend fun downloadRemoteFolderRecursively(
+        providerSegment: String,
+        remoteSubPath: String,
+        localTargetDir: File,
+        onProgress: (String, Float) -> Unit
+    ): Boolean {
+        val files = cloudStorageService.fetchRemoteDirectory(providerSegment, remoteSubPath)
+        var allSuccess = true
+        for (f in files) {
+            val localChild = File(localTargetDir, f.name)
+            val childSubPath = if (remoteSubPath.isBlank()) f.name else "$remoteSubPath/${f.name}"
+            if (f.isDirectory) {
+                localChild.mkdirs()
+                val ok = downloadRemoteFolderRecursively(providerSegment, childSubPath, localChild, onProgress)
+                if (!ok) allSuccess = false
+            } else {
+                val ok = cloudStorageService.downloadRemoteFile(providerSegment, childSubPath, localChild) { p ->
+                    onProgress(f.name, p)
+                }
+                if (ok) {
+                    try {
+                        android.media.MediaScannerConnection.scanFile(context, arrayOf(localChild.absolutePath), null, null)
+                    } catch (_: Exception) {}
+                } else {
+                    allSuccess = false
+                }
+            }
+        }
+        return allSuccess
+    }
+
+    private fun getFolderSize(file: File): Long {
+        if (!file.exists()) return 0L
+        if (file.isFile) return file.length()
+        var size = 0L
+        val children = file.listFiles() ?: return 0L
+        for (child in children) {
+            size += if (child.isDirectory) getFolderSize(child) else child.length()
+        }
+        return size
+    }
+
+    // -------------------------------------------------------------
+    // STORAGE VOLUMES & ROOTS
+    // -------------------------------------------------------------
+    suspend fun getStorageVolumes(forceRefresh: Boolean = false): List<StorageVolume> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        if (!forceRefresh && cachedVolumes != null && (now - lastVolumesCheckTime) < 30_000L) {
+            return@withContext cachedVolumes ?: emptyList()
+        }
+        val list = mutableListOf<StorageVolume>()
+
+        // Primary Internal Storage
+        val primaryInternal = Environment.getExternalStorageDirectory()
+        val primaryPath = primaryInternal?.absolutePath ?: "/storage/emulated/0"
+        val primaryStat = try { StatFs(primaryPath) } catch (e: Exception) { null }
+        val totalInternal = primaryStat?.totalBytes ?: 0L
+        val freeInternal = primaryStat?.availableBytes ?: 0L
+
+        list.add(
+            StorageVolume(
+                id = "internal",
+                name = "Armazenamento Interno",
+                path = primaryPath,
+                totalBytes = totalInternal,
+                freeBytes = freeInternal,
+                typeKey = "INTERNAL"
+            )
+        )
+
+        // Detect secondary SD Cards or USB OTG mounted drives
+        try {
+            val externalDirs = context.getExternalFilesDirs(null)
+            for (i in 1 until externalDirs.size) {
+                val dir = externalDirs[i]
+                if (dir != null) {
+                    val rootPath = if (dir.absolutePath.contains("/Android/")) {
+                        dir.absolutePath.substringBefore("/Android/")
+                    } else {
+                        dir.absolutePath
+                    }
+                    val rootFile = File(rootPath)
+                    if (rootFile.exists() && rootFile.canRead()) {
+                        val stat = try { StatFs(rootPath) } catch (e: Exception) { null }
+                        val total = stat?.totalBytes ?: 0L
+                        val free = stat?.availableBytes ?: 0L
+                        if (total > 0L && list.none { it.path == rootPath }) {
+                            val volumeLabel = if (externalDirs.size > 2) "Cartão SD $i" else "Cartão SD"
+                            list.add(
+                                StorageVolume(
+                                    id = "sdcard_$i",
+                                    name = volumeLabel,
+                                    path = rootPath,
+                                    totalBytes = total,
+                                    freeBytes = free,
+                                    typeKey = "SDCARD"
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Scan /storage/ for mounted SD Cards and USB OTG drives
+        try {
+            val storageDir = File("/storage")
+            if (storageDir.exists() && storageDir.isDirectory) {
+                val files = storageDir.listFiles()
+                if (files != null) {
+                    for (file in files) {
+                        val name = file.name
+                        if (file.isDirectory && name != "emulated" && name != "self" && name != "knox" && !name.startsWith(".")) {
+                            val path = file.absolutePath
+                            if (file.canRead() && list.none { it.path == path }) {
+                                val stat = try { StatFs(path) } catch (e: Exception) { null }
+                                val total = stat?.totalBytes ?: 0L
+                                val free = stat?.availableBytes ?: 0L
+                                if (total > 0L) {
+                                    val isOtg = name.lowercase().contains("otg") || name.lowercase().contains("usb")
+                                    val volumeName = if (isOtg) "Armazenamento OTG" else "Cartão SD"
+                                    list.add(
+                                        StorageVolume(
+                                            id = "ext_${name.lowercase()}",
+                                            name = volumeName,
+                                            path = path,
+                                            totalBytes = total,
+                                            freeBytes = free,
+                                            typeKey = if (isOtg) "OTG" else "SDCARD"
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Scan typical /mnt/ mount paths for USB/OTG
+        try {
+            val mntPaths = listOf("/mnt/media_rw", "/mnt/usb", "/mnt/otg")
+            for (mntPath in mntPaths) {
+                val mntDir = File(mntPath)
+                if (mntDir.exists() && mntDir.isDirectory) {
+                    val files = mntDir.listFiles()
+                    if (files != null) {
+                        for (file in files) {
+                            if (file.isDirectory && !file.name.startsWith(".") && file.canRead()) {
+                                val path = file.absolutePath
+                                if (list.none { it.path == path }) {
+                                    val stat = try { StatFs(path) } catch (e: Exception) { null }
+                                    val total = stat?.totalBytes ?: 0L
+                                    val free = stat?.availableBytes ?: 0L
+                                    if (total > 0L) {
+                                        list.add(
+                                            StorageVolume(
+                                                id = "mnt_${file.name.lowercase()}",
+                                                name = "USB/OTG (${file.name})",
+                                                path = path,
+                                                totalBytes = total,
+                                                freeBytes = free,
+                                                typeKey = "OTG"
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Append connected Cloud volumes
+        val prefs = context.getSharedPreferences("arcbox_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("cloud_connected_mega", false)) {
+            val megaDir = resolveFile("/cloud/mega")
+            megaDir.mkdirs()
+            val total = 50 * 1024 * 1024 * 1024L
+            val used = getFolderSize(megaDir)
+            list.add(
+                StorageVolume(
+                    id = "cloud_mega",
+                    name = "MEGA",
+                    path = "/cloud/mega",
+                    totalBytes = total,
+                    freeBytes = (total - used).coerceAtLeast(0L),
+                    typeKey = "CLOUD"
+                )
+            )
+        }
+        if (prefs.getBoolean("cloud_connected_drive", false)) {
+            val driveDir = resolveFile("/cloud/drive")
+            driveDir.mkdirs()
+            val total = 15 * 1024 * 1024 * 1024L
+            val used = getFolderSize(driveDir)
+            list.add(
+                StorageVolume(
+                    id = "cloud_drive",
+                    name = "Google Drive",
+                    path = "/cloud/drive",
+                    totalBytes = total,
+                    freeBytes = (total - used).coerceAtLeast(0L),
+                    typeKey = "CLOUD"
+                )
+            )
+        }
+        if (prefs.getBoolean("cloud_connected_onedrive", false)) {
+            val odDir = resolveFile("/cloud/onedrive")
+            odDir.mkdirs()
+            val total = 5 * 1024 * 1024 * 1024L
+            val used = getFolderSize(odDir)
+            list.add(
+                StorageVolume(
+                    id = "cloud_onedrive",
+                    name = "Microsoft OneDrive",
+                    path = "/cloud/onedrive",
+                    totalBytes = total,
+                    freeBytes = (total - used).coerceAtLeast(0L),
+                    typeKey = "CLOUD"
+                )
+            )
+        }
+        if (prefs.getBoolean("cloud_connected_dropbox", false)) {
+            val dbxDir = resolveFile("/cloud/dropbox")
+            dbxDir.mkdirs()
+            val total = 2 * 1024 * 1024 * 1024L
+            val used = getFolderSize(dbxDir)
+            list.add(
+                StorageVolume(
+                    id = "cloud_dropbox",
+                    name = "Dropbox",
+                    path = "/cloud/dropbox",
+                    totalBytes = total,
+                    freeBytes = (total - used).coerceAtLeast(0L),
+                    typeKey = "CLOUD"
+                )
+            )
+        }
+        if (prefs.getBoolean("cloud_connected_mediafire", false)) {
+            val mfDir = resolveFile("/cloud/mediafire")
+            mfDir.mkdirs()
+            val total = 10 * 1024 * 1024 * 1024L
+            val used = getFolderSize(mfDir)
+            list.add(
+                StorageVolume(
+                    id = "cloud_mediafire",
+                    name = "MediaFire",
+                    path = "/cloud/mediafire",
+                    totalBytes = total,
+                    freeBytes = (total - used).coerceAtLeast(0L),
+                    typeKey = "CLOUD"
+                )
+            )
+        }
+        if (prefs.getBoolean("cloud_connected_webdav", false)) {
+            val webdavDir = resolveFile("/cloud/webdav")
+            webdavDir.mkdirs()
+            val total = 100 * 1024 * 1024 * 1024L
+            val used = getFolderSize(webdavDir)
+            list.add(
+                StorageVolume(
+                    id = "cloud_webdav",
+                    name = "WebDAV / Servidor",
+                    path = "/cloud/webdav",
+                    totalBytes = total,
+                    freeBytes = (total - used).coerceAtLeast(0L),
+                    typeKey = "CLOUD"
+                )
+            )
+        }
+
+        // Native Android Cloud Drives (Storage Access Framework / DocumentsProvider)
+        val safCloudDrives = safCloudManager.getRegisteredDrives()
+        for (safDrive in safCloudDrives) {
+            list.add(
+                StorageVolume(
+                    id = safDrive.id,
+                    name = safDrive.name,
+                    path = safDrive.uriString,
+                    isSaf = true,
+                    safUriString = safDrive.uriString,
+                    totalBytes = safDrive.totalBytes,
+                    freeBytes = safDrive.freeBytes,
+                    typeKey = "CLOUD"
+                )
+            )
+        }
+
+        // Superuser / Root storage volume (Only available when Root is present on the device)
+        if (com.example.util.RootHelper.isRootAvailable()) {
+            val rootStat = try { StatFs("/") } catch (e: Exception) { null }
+            val totalRoot = rootStat?.totalBytes ?: 0L
+            val freeRoot = rootStat?.availableBytes ?: 0L
+            list.add(
+                StorageVolume(
+                    id = "root_fs",
+                    name = "Raiz (Superusuário)",
+                    path = "/",
+                    totalBytes = totalRoot,
+                    freeBytes = freeRoot,
+                    typeKey = "ROOT"
+                )
+            )
+        }
+
+        cachedVolumes = list
+        lastVolumesCheckTime = now
+        list
+    }
+    suspend fun listFiles(
+        directoryPath: String,
+        safUriString: String? = null,
+        sortOption: SortOption = SortOption.NAME,
+        sortOrder: SortOrder = SortOrder.ASCENDING,
+        searchQuery: String = "",
+        filterCategory: FileType? = null,
+        appSubFilter: String = "ALL",
+        isGlobalSearch: Boolean = false,
+        isAppManagerMode: Boolean = false,
+        showHiddenFiles: Boolean = false,
+        parallelDirectoryReading: Boolean = true
+    ): List<FileItem> = withContext(com.example.ui.components.ArcboxScheduler.metadataAndThumbnailDispatcher) {
+        if (isAppManagerMode) {
+            val installedAndStorageApps = getInstalledApps(appSubFilter)
+            val filtered = if (searchQuery.isNotEmpty()) {
+                installedAndStorageApps.filter {
+                    FileSearchMatcher.matches(it.name, searchQuery) ||
+                    (it.packageName?.let { pkg -> FileSearchMatcher.matches(pkg, searchQuery) } == true)
+                }
+            } else {
+                installedAndStorageApps
+            }
+            val sorted = when (sortOption) {
+                SortOption.NAME -> if (sortOrder == SortOrder.ASCENDING) filtered.sortedBy { it.name.lowercase() } else filtered.sortedByDescending { it.name.lowercase() }
+                SortOption.DATE -> if (sortOrder == SortOrder.ASCENDING) filtered.sortedBy { it.lastModified } else filtered.sortedByDescending { it.lastModified }
+                SortOption.SIZE -> if (sortOrder == SortOrder.ASCENDING) filtered.sortedBy { it.size } else filtered.sortedByDescending { it.size }
+                SortOption.TYPE -> if (sortOrder == SortOrder.ASCENDING) filtered.sortedBy { it.appCategory ?: "" } else filtered.sortedByDescending { it.appCategory ?: "" }
+            }
+            return@withContext sorted
+        }
+
+        val favoritePaths = try {
+            favoriteDao.getAllFavoritePaths().toSet()
+        } catch (_: Exception) {
+            emptySet()
+        }
+        val items = mutableListOf<FileItem>()
+
+        if (filterCategory != null) {
+            if (safUriString != null && safUriString.startsWith("content://")) {
+                // Read recursively via SAF DocumentFile
+                val treeUri = Uri.parse(safUriString)
+                val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
+                if (rootDoc != null && rootDoc.isDirectory) {
+                    suspend fun traverseDoc(doc: DocumentFile) {
+                        val name = doc.name ?: "Sem nome"
+                        if (name == "Android" || name.startsWith(".")) {
+                            return
+                        }
+                        if (doc.isDirectory) {
+                            val children = doc.listFiles()
+                            for (child in children) {
+                                traverseDoc(child)
+                            }
+                        } else {
+                            val ext = name.substringAfterLast('.', "").lowercase()
+                            val type = getFileTypeFromExtension(ext, doc.type)
+                            val matchesSearch = searchQuery.isBlank() || FileSearchMatcher.matches(name, searchQuery)
+                            if (matchesSearch && (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL))) {
+                                val item = FileItem(
+                                    id = doc.uri.toString(),
+                                    name = name,
+                                    path = doc.uri.toString(),
+                                    safUriString = doc.uri.toString(),
+                                    size = doc.length(),
+                                    lastModified = doc.lastModified(),
+                                    isDirectory = false,
+                                    fileType = type,
+                                    extension = ext,
+                                    isFavorite = favoritePaths.contains(doc.uri.toString()),
+                                    childCount = 0,
+                                    mimeType = doc.type ?: "*/*"
+                                )
+                                items.add(item)
+                            }
+                        }
+                    }
+                    traverseDoc(rootDoc)
+                }
+            } else {
+                // Read recursively via standard Java File
+                val activeVolumePath = getStorageVolumes()
+                    .sortedByDescending { it.path.length }
+                    .find { directoryPath.startsWith(it.path) }?.path ?: directoryPath
+                val startDir = File(activeVolumePath)
+                if (startDir.exists() && startDir.isDirectory) {
+                    suspend fun traverse(dir: File) {
+                        if (dir.name == "Android" || dir.name.startsWith(".")) {
+                            return
+                        }
+                        val files = dir.listFiles() ?: return
+                        for (file in files) {
+                            if (file.isDirectory) {
+                                traverse(file)
+                            } else {
+                                val name = file.name
+                                if (name.startsWith(".")) {
+                                    continue
+                                }
+                                val ext = file.extension.lowercase()
+                                val mime = getMimeType(file)
+                                val type = getFileTypeFromExtension(ext, mime)
+                                val matchesSearch = searchQuery.isBlank() || FileSearchMatcher.matches(name, searchQuery)
+                                if (matchesSearch && (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL))) {
+                                    val item = FileItem(
+                                        id = file.absolutePath,
+                                        name = name,
+                                        path = file.absolutePath,
+                                        size = file.length(),
+                                        lastModified = file.lastModified(),
+                                        isDirectory = false,
+                                        fileType = type,
+                                        extension = ext,
+                                        isFavorite = favoritePaths.contains(file.absolutePath),
+                                        childCount = 0,
+                                        mimeType = mime
+                                    )
+                                    items.add(item)
+                                }
+                            }
+                        }
+                    }
+                    traverse(startDir)
+                }
+            }
+        } else {
+            val isSafTarget = directoryPath.startsWith("content://") || (safUriString != null && safUriString.startsWith("content://"))
+            if (isSafTarget) {
+                val safTargetUriStr = if (directoryPath.startsWith("content://")) directoryPath else (safUriString ?: "")
+                if (safTargetUriStr.isNotBlank()) {
+                    val targetUri = Uri.parse(safTargetUriStr)
+                    val rootDoc = try {
+                        if (safTargetUriStr.contains("/tree/")) {
+                            DocumentFile.fromTreeUri(context, targetUri) ?: DocumentFile.fromSingleUri(context, targetUri)
+                        } else {
+                            DocumentFile.fromSingleUri(context, targetUri) ?: DocumentFile.fromTreeUri(context, targetUri)
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
+
+                if (rootDoc != null && rootDoc.isDirectory) {
+                    if (searchQuery.isNotBlank()) {
+                        suspend fun searchSafRecursive(dir: DocumentFile, depth: Int = 0, visited: MutableSet<String> = mutableSetOf()) {
+                            if (depth > 25) return
+                            val uriStr = dir.uri.toString()
+                            if (!visited.add(uriStr)) return
+                            val files = try { dir.listFiles() } catch (_: Exception) { emptyArray() }
+                            for (doc in files) {
+                                val docName = doc.name ?: continue
+                                if (docName.startsWith(".")) continue
+                                if (FileSearchMatcher.matches(docName, searchQuery)) {
+                                    val isDir = doc.isDirectory
+                                    val ext = docName.substringAfterLast('.', "").lowercase()
+                                    val mime = doc.type ?: getMimeTypeFromExtension(ext)
+                                    val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                                    val size = if (isDir) 0L else doc.length()
+                                    items.add(
+                                        FileItem(
+                                            id = doc.uri.toString(),
+                                            name = docName,
+                                            path = doc.uri.toString(),
+                                            safUriString = doc.uri.toString(),
+                                            size = size,
+                                            lastModified = doc.lastModified(),
+                                            isDirectory = isDir,
+                                            fileType = type,
+                                            extension = ext,
+                                            isFavorite = favoritePaths.contains(doc.uri.toString()),
+                                            childCount = if (isDir) (try { doc.listFiles().size } catch (_: Exception) { 0 }) else 0,
+                                            mimeType = mime
+                                        )
+                                    )
+                                }
+                                if (doc.isDirectory) {
+                                    searchSafRecursive(doc, depth + 1, visited)
+                                }
+                            }
+                        }
+                        searchSafRecursive(rootDoc)
+                    } else {
+                        val files = try { rootDoc.listFiles() } catch (_: Exception) { emptyArray() }
+                        for (doc in files) {
+                            val isDir = doc.isDirectory
+                            val name = doc.name ?: "Sem nome"
+                            if (!showHiddenFiles && name.startsWith(".")) continue
+                            val ext = name.substringAfterLast('.', "").lowercase()
+                            val mime = doc.type ?: getMimeTypeFromExtension(ext)
+                            val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                            val size = if (isDir) 0L else doc.length()
+
+                            val item = FileItem(
+                                id = doc.uri.toString(),
+                                name = name,
+                                path = doc.uri.toString(),
+                                safUriString = doc.uri.toString(),
+                                size = size,
+                                lastModified = doc.lastModified(),
+                                isDirectory = isDir,
+                                fileType = type,
+                                extension = ext,
+                                isFavorite = favoritePaths.contains(doc.uri.toString()),
+                                childCount = if (isDir) (try { doc.listFiles().size } catch (_: Exception) { 0 }) else 0,
+                                mimeType = mime
+                            )
+                            items.add(item)
+                        }
+                    }
+                }
+                }
+            } else {
+                // Read via standard java File
+                if (searchQuery.isNotBlank()) {
+                    val rootDirPath = if (directoryPath.startsWith("/cloud/")) {
+                        val providerSegment = directoryPath.removePrefix("/cloud/").substringBefore("/")
+                        "/cloud/$providerSegment"
+                    } else {
+                        val volumes = getStorageVolumes()
+                        volumes.sortedByDescending { it.path.length }
+                            .find { directoryPath.startsWith(it.path) }?.path
+                            ?: if (directoryPath.startsWith("/storage/emulated/0") || directoryPath.startsWith("/sdcard")) {
+                                Environment.getExternalStorageDirectory()?.absolutePath ?: "/storage/emulated/0"
+                            } else {
+                                volumes.firstOrNull()?.path ?: directoryPath
+                            }
+                    }
+                    val searchDir = resolveFile(rootDirPath)
+                    val searchResults = searchRecursiveCloudOrLocal(searchDir, rootDirPath, searchQuery, favoritePaths)
+                    items.addAll(searchResults)
+                } else {
+                    val targetDir = resolveFile(directoryPath)
+                    if (directoryPath.startsWith("/cloud/")) {
+                        if (!targetDir.exists()) {
+                            targetDir.mkdirs()
+                        }
+                        val providerSegment = directoryPath.removePrefix("/cloud/").substringBefore("/")
+                        val subPath = directoryPath.removePrefix("/cloud/$providerSegment").removePrefix("/")
+
+                        val isConnected = prefs.getBoolean("cloud_connected_$providerSegment", false) ||
+                                (cloudStorageService.getProvider(providerSegment)?.isConnected == true)
+
+                        if (isConnected) {
+                            try {
+                                val remoteFiles = cloudStorageService.fetchRemoteDirectory(providerSegment, subPath)
+                                if (remoteFiles.isNotEmpty()) {
+                                    val filteredRemote = if (!showHiddenFiles) remoteFiles.filter { !it.name.startsWith(".") } else remoteFiles
+                                    val mappedRemote = filteredRemote.map { rf ->
+                                        val isDir = rf.isDirectory
+                                        val name = rf.name
+                                        val ext = name.substringAfterLast('.', "").lowercase()
+                                        val mime = rf.mimeType ?: getMimeTypeFromExtension(ext)
+                                        val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                                        val cleanSub = subPath.trim('/')
+                                        val itemPath = if (cleanSub.isBlank()) {
+                                            "/cloud/$providerSegment/$name"
+                                        } else {
+                                            "/cloud/$providerSegment/$cleanSub/$name"
+                                        }
+
+                                        FileItem(
+                                            id = itemPath,
+                                            name = name,
+                                            path = itemPath,
+                                            size = if (isDir) 0L else rf.size,
+                                            lastModified = rf.lastModified,
+                                            isDirectory = isDir,
+                                            fileType = type,
+                                            extension = ext,
+                                            isFavorite = favoritePaths.contains(itemPath),
+                                            childCount = if (isDir) rf.childCount else 0,
+                                            mimeType = mime
+                                        )
+                                    }
+                                    items.addAll(mappedRemote)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.w("FileRepository", "Cloud remote fetch error: ${e.message}")
+                            }
+                        }
+
+                        if (items.isEmpty() && !isConnected) {
+                            // If provider is not connected, clean any old dummy files
+                            targetDir.listFiles()?.forEach { f ->
+                                if (f.name.startsWith("Pasta_") || f.name.startsWith("Arquivo_")) {
+                                    f.deleteRecursively()
+                                }
+                            }
+                        }
+                    }
+
+                    if (items.isEmpty() && !directoryPath.startsWith("/cloud/")) {
+                        val files = if (targetDir.exists() && targetDir.isDirectory) {
+                            targetDir.listFiles()
+                        } else null
+
+                        if (files != null) {
+                            val filteredFiles = if (!showHiddenFiles) files.filter { !it.name.startsWith(".") } else files.toList()
+                            val mapped = filteredFiles.map { file ->
+                                val isDir = file.isDirectory
+                                val name = file.name
+                                val ext = file.extension.lowercase()
+                                val mime = getMimeTypeFromExtension(ext)
+                                val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                                val size = if (isDir) 0L else file.length()
+                                val count = if (isDir) getDirectoryChildCount(file) else 0
+
+                                val itemPath = if (directoryPath.startsWith("/cloud/")) {
+                                    directoryPath.removeSuffix("/") + "/" + name
+                                } else {
+                                    file.absolutePath
+                                }
+
+                                FileItem(
+                                    id = itemPath,
+                                    name = name,
+                                    path = itemPath,
+                                    size = size,
+                                    lastModified = file.lastModified(),
+                                    isDirectory = isDir,
+                                    fileType = type,
+                                    extension = ext,
+                                    isFavorite = favoritePaths.contains(itemPath),
+                                    childCount = count,
+                                    mimeType = mime
+                                )
+                            }
+                            items.addAll(mapped)
+                        } else if (com.example.util.RootHelper.isRootAvailable() && !directoryPath.startsWith("/cloud/")) {
+                            // Fallback to superuser root listing for protected system directories
+                            val rootItems = com.example.util.RootHelper.listDirectory(directoryPath, favoritePaths)
+                            items.addAll(rootItems)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Apply search filter if present (for SAF or category filtered results)
+        var filtered = if (searchQuery.isNotBlank() && items.isNotEmpty()) {
+            items.filter { FileSearchMatcher.matches(it.name, searchQuery) }
+        } else {
+            items
+        }
+
+        // Apply category filter if present
+        if (filterCategory != null) {
+            filtered = filtered.filter { 
+                it.isDirectory || it.fileType == filterCategory || (filterCategory == FileType.OTHER && it.fileType == FileType.TEMP_RESIDUAL) 
+            }
+        }
+
+        // Sort items (Folders always on top)
+        val comparator = when (sortOption) {
+            SortOption.NAME -> compareBy<FileItem> { it.name.lowercase() }
+            SortOption.DATE -> compareBy { it.lastModified }
+            SortOption.SIZE -> compareBy { it.size }
+            SortOption.TYPE -> compareBy { it.extension.lowercase() }
+        }
+
+        val sorted = if (sortOrder == SortOrder.ASCENDING) {
+            filtered.sortedWith(comparator)
+        } else {
+            filtered.sortedWith(comparator.reversed())
+        }
+
+        // Put directories on top
+        val (dirs, nonDirs) = sorted.partition { it.isDirectory }
+        dirs + nonDirs
+    }
+
+    private fun searchRecursiveCloudOrLocal(
+        dir: File,
+        virtualPath: String,
+        query: String,
+        favoritePaths: Set<String>,
+        visitedPaths: MutableSet<String> = mutableSetOf()
+    ): List<FileItem> {
+        val result = mutableListOf<FileItem>()
+        if (!dir.exists() || !dir.isDirectory) return result
+
+        val canonicalPath = try { dir.canonicalPath } catch (_: Exception) { dir.absolutePath }
+        if (!visitedPaths.add(canonicalPath)) return result
+
+        val files = try { dir.listFiles() } catch (_: Exception) { null } ?: return result
+        for (file in files) {
+            val name = file.name
+            if (name.startsWith(".")) continue
+            val itemVirtualPath = if (virtualPath.startsWith("/cloud/")) {
+                virtualPath.removeSuffix("/") + "/" + name
+            } else {
+                file.absolutePath
+            }
+            val matches = FileSearchMatcher.matches(name, query)
+            val isDir = file.isDirectory
+            val ext = file.extension.lowercase()
+            val mime = getMimeType(file)
+            val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+
+            if (matches) {
+                result.add(
+                    FileItem(
+                        id = itemVirtualPath,
+                        name = name,
+                        path = itemVirtualPath,
+                        size = if (isDir) 0L else file.length(),
+                        lastModified = file.lastModified(),
+                        isDirectory = isDir,
+                        fileType = type,
+                        extension = ext,
+                        isFavorite = favoritePaths.contains(itemVirtualPath),
+                        childCount = if (isDir) (try { file.list()?.size } catch (_: Exception) { 0 } ?: 0) else 0,
+                        mimeType = mime
+                    )
+                )
+            }
+            if (isDir) {
+                val isRestrictedAndroidSubdir = name.equals("Android", ignoreCase = true) && 
+                    (file.parentFile?.absolutePath == "/storage/emulated/0" || file.parentFile?.name == "0")
+                if (!isRestrictedAndroidSubdir) {
+                    result.addAll(searchRecursiveCloudOrLocal(file, itemVirtualPath, query, favoritePaths, visitedPaths))
+                }
+            }
+        }
+        return result
+    }
+
+    // -------------------------------------------------------------
+    // FILE OPERATIONS (Create, Rename, Copy, Move, Delete to Trash)
+    // -------------------------------------------------------------
+    suspend fun createFolder(parentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
+        if (parentPath.startsWith("content://")) {
+            val targetUri = Uri.parse(parentPath)
+            val parentDoc = try {
+                if (parentPath.contains("/tree/")) {
+                    DocumentFile.fromTreeUri(context, targetUri) ?: DocumentFile.fromSingleUri(context, targetUri)
+                } else {
+                    DocumentFile.fromSingleUri(context, targetUri) ?: DocumentFile.fromTreeUri(context, targetUri)
+                }
+            } catch (_: Exception) { null }
+            return@withContext parentDoc?.createDirectory(folderName) != null
+        }
+
+        val parentDir = resolveFile(parentPath)
+        if (!parentDir.exists()) parentDir.mkdirs()
+        val newDir = File(parentDir, folderName)
+        if (!newDir.exists()) {
+            val created = try { newDir.mkdirs() } catch (_: Exception) { false }
+            if (parentPath.startsWith("/cloud/")) {
+                val providerSegment = parentPath.removePrefix("/cloud/").substringBefore("/")
+                val subPath = (parentPath.removePrefix("/cloud/$providerSegment").removePrefix("/") + "/" + folderName).trim('/')
+                cloudStorageService.createRemoteDirectory(providerSegment, subPath)
+            }
+            if (!created && com.example.util.RootHelper.isRootAvailable() && !parentPath.startsWith("/cloud/")) {
+                com.example.util.RootHelper.createFolder(parentPath, folderName)
+            } else {
+                created
+            }
+        } else false
+    }
+
+    suspend fun createFile(parentPath: String, fileName: String): Boolean = withContext(Dispatchers.IO) {
+        if (parentPath.startsWith("content://")) {
+            val targetUri = Uri.parse(parentPath)
+            val parentDoc = try {
+                if (parentPath.contains("/tree/")) {
+                    DocumentFile.fromTreeUri(context, targetUri) ?: DocumentFile.fromSingleUri(context, targetUri)
+                } else {
+                    DocumentFile.fromSingleUri(context, targetUri) ?: DocumentFile.fromTreeUri(context, targetUri)
+                }
+            } catch (_: Exception) { null }
+            val ext = fileName.substringAfterLast('.', "")
+            val mime = getMimeTypeFromExtension(ext)
+            return@withContext parentDoc?.createFile(mime, fileName) != null
+        }
+
+        val parentDir = resolveFile(parentPath)
+        if (!parentDir.exists()) parentDir.mkdirs()
+        val newFile = File(parentDir, fileName)
+        if (!newFile.exists()) {
+            val created = try { newFile.createNewFile() } catch (_: Exception) { false }
+            if (parentPath.startsWith("/cloud/")) {
+                val providerSegment = parentPath.removePrefix("/cloud/").substringBefore("/")
+                val subPath = (parentPath.removePrefix("/cloud/$providerSegment").removePrefix("/") + "/" + fileName).trim('/')
+                cloudStorageService.uploadRemoteFile(providerSegment, newFile, subPath)
+            }
+            if (!created && com.example.util.RootHelper.isRootAvailable() && !parentPath.startsWith("/cloud/")) {
+                com.example.util.RootHelper.createFile(parentPath, fileName)
+            } else {
+                created
+            }
+        } else false
+    }
+
+    suspend fun renameFile(oldPath: String, newName: String): Boolean = withContext(Dispatchers.IO) {
+        if (oldPath.startsWith("content://")) {
+            val targetUri = Uri.parse(oldPath)
+            val doc = try {
+                DocumentFile.fromSingleUri(context, targetUri) ?: DocumentFile.fromTreeUri(context, targetUri)
+            } catch (_: Exception) { null }
+            return@withContext doc?.renameTo(newName) == true
+        }
+
+        val target = resolveFile(oldPath)
+        val parent = target.parentFile ?: return@withContext false
+        val dest = File(parent, newName)
+        val renamed = try { target.renameTo(dest) } catch (_: Exception) { false }
+        if (oldPath.startsWith("/cloud/")) {
+            val providerSegment = oldPath.removePrefix("/cloud/").substringBefore("/")
+            val oldSubPath = oldPath.removePrefix("/cloud/$providerSegment").removePrefix("/")
+            val parentSub = if (oldSubPath.contains("/")) oldSubPath.substringBeforeLast("/") else ""
+            val newSubPath = (if (parentSub.isNotBlank()) "$parentSub/$newName" else newName).trim('/')
+            cloudStorageService.renameRemoteItem(providerSegment, oldSubPath, newSubPath)
+        }
+        if (!renamed && com.example.util.RootHelper.isRootAvailable() && !oldPath.startsWith("/cloud/")) {
+            com.example.util.RootHelper.rename(oldPath, newName)
+        } else {
+            renamed
+        }
+    }
+
+    suspend fun copyFile(sourcePath: String, targetDirectory: String, customFileName: String? = null, onProgress: (Float) -> Unit = {}): Boolean = withContext(Dispatchers.IO) {
+        // Handling SAF (content://) streams
+        if (sourcePath.startsWith("content://") || targetDirectory.startsWith("content://")) {
+            return@withContext try {
+                val sourceUri = if (sourcePath.startsWith("content://")) Uri.parse(sourcePath) else null
+                val targetUri = if (targetDirectory.startsWith("content://")) Uri.parse(targetDirectory) else null
+
+                var resolvedFileName = customFileName?.ifBlank { null }
+                    ?: if (sourceUri != null) (DocumentFile.fromSingleUri(context, sourceUri)?.name ?: "arquivo")
+                    else File(sourcePath).name
+
+                val ext = resolvedFileName.substringAfterLast('.', "")
+                val mime = getMimeTypeFromExtension(ext)
+
+                val inputStream = if (sourceUri != null) {
+                    context.contentResolver.openInputStream(sourceUri)
+                } else {
+                    File(sourcePath).inputStream()
+                } ?: return@withContext false
+
+                val outputStream = if (targetUri != null) {
+                    val destDirDoc = if (targetDirectory.contains("/tree/")) {
+                        DocumentFile.fromTreeUri(context, targetUri) ?: DocumentFile.fromSingleUri(context, targetUri)
+                    } else {
+                        DocumentFile.fromSingleUri(context, targetUri) ?: DocumentFile.fromTreeUri(context, targetUri)
+                    }
+                    if (destDirDoc != null) {
+                        var finalName = resolvedFileName
+                        val nameWithoutExt = if (finalName.contains(".")) finalName.substringBeforeLast(".") else finalName
+                        val extMatch = if (finalName.contains(".")) ".${finalName.substringAfterLast(".")}" else ""
+                        var count = 1
+                        while (destDirDoc.findFile(finalName) != null) {
+                            finalName = "$nameWithoutExt($count)$extMatch"
+                            count++
+                        }
+                        resolvedFileName = finalName
+                    }
+                    val newDoc = destDirDoc?.createFile(mime, resolvedFileName) ?: return@withContext false
+                    context.contentResolver.openOutputStream(newDoc.uri)
+                } else {
+                    var finalName = resolvedFileName
+                    val destDir = resolveFile(targetDirectory)
+                    var destFile = File(destDir, finalName)
+                    if (destFile.exists()) {
+                        val nameWithoutExt = if (finalName.contains(".")) finalName.substringBeforeLast(".") else finalName
+                        val extMatch = if (finalName.contains(".")) ".${finalName.substringAfterLast(".")}" else ""
+                        var count = 1
+                        while (destFile.exists()) {
+                            finalName = "$nameWithoutExt($count)$extMatch"
+                            destFile = File(destDir, finalName)
+                            count++
+                        }
+                        resolvedFileName = finalName
+                    }
+                    destFile.parentFile?.mkdirs()
+                    destFile.outputStream()
+                } ?: return@withContext false
+
+                inputStream.use { input ->
+                    outputStream.use { output ->
+                        val buffer = ByteArray(32 * 1024)
+                        var read: Int
+                        while (input.read(buffer).also { read = it } != -1) {
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                }
+                true
+            } catch (e: Exception) {
+                Log.e("FileRepository", "Copy SAF error", e)
+                false
+            }
+        }
+
+        val src = resolveFile(sourcePath)
+        val destDir = resolveFile(targetDirectory)
+        if (!destDir.exists()) destDir.mkdirs()
+        if (!src.exists()) {
+            if (com.example.util.RootHelper.isRootAvailable() && !sourcePath.startsWith("/cloud/") && !targetDirectory.startsWith("/cloud/")) {
+                return@withContext com.example.util.RootHelper.copy(sourcePath, targetDirectory, customFileName)
+            }
+            return@withContext false
+        }
+
+        val fileNameBase = customFileName?.ifBlank { null } ?: src.name
+        var fileName = fileNameBase
+        var dest = File(destDir, fileName)
+        if (dest.exists()) {
+            val nameWithoutExt = if (fileName.contains(".")) fileName.substringBeforeLast(".") else fileName
+            val extMatch = if (fileName.contains(".")) ".${fileName.substringAfterLast(".")}" else ""
+            var count = 1
+            while (dest.exists()) {
+                fileName = "$nameWithoutExt($count)$extMatch"
+                dest = File(destDir, fileName)
+                count++
+            }
+        }
+        
+        try {
+            if (src.isDirectory) {
+                src.copyRecursively(dest, overwrite = true)
+            } else {
+                val totalBytes = src.length()
+                var copiedBytes = 0L
+                src.inputStream().use { input ->
+                    dest.outputStream().use { output ->
+                        val buffer = ByteArray(32 * 1024)
+                        var read: Int
+                        while (input.read(buffer).also { read = it } != -1) {
+                            output.write(buffer, 0, read)
+                            copiedBytes += read
+                            if (totalBytes > 0) {
+                                onProgress(copiedBytes.toFloat() / totalBytes)
+                            }
+                        }
+                    }
+                }
+            }
+            if (targetDirectory.startsWith("/cloud/")) {
+                val providerSegment = targetDirectory.removePrefix("/cloud/").substringBefore("/")
+                val subPath = (targetDirectory.removePrefix("/cloud/$providerSegment").removePrefix("/") + "/" + fileName).trim('/')
+                cloudStorageService.uploadRemoteFile(providerSegment, dest, subPath)
+            }
+            true
+        } catch (_: Exception) {
+            if (com.example.util.RootHelper.isRootAvailable() && !sourcePath.startsWith("/cloud/") && !targetDirectory.startsWith("/cloud/")) {
+                com.example.util.RootHelper.copy(sourcePath, targetDirectory, customFileName)
+            } else {
+                false
+            }
+        }
+    }
+
+    suspend fun moveFile(sourcePath: String, targetDirectory: String, customFileName: String? = null, onProgress: (Float) -> Unit = {}): Boolean = withContext(Dispatchers.IO) {
+        if (sourcePath.startsWith("content://") || targetDirectory.startsWith("content://")) {
+            val copied = copyFile(sourcePath, targetDirectory, customFileName, onProgress)
+            if (copied && sourcePath.startsWith("content://")) {
+                try {
+                    val srcUri = Uri.parse(sourcePath)
+                    DocumentFile.fromSingleUri(context, srcUri)?.delete()
+                } catch (_: Exception) {}
+            }
+            return@withContext copied
+        }
+
+        val src = resolveFile(sourcePath)
+        val destDir = resolveFile(targetDirectory)
+        if (!destDir.exists()) destDir.mkdirs()
+        val fileNameBase = customFileName?.ifBlank { null } ?: src.name
+        var fileName = fileNameBase
+        var dest = File(destDir, fileName)
+        if (dest.exists()) {
+            val nameWithoutExt = if (fileName.contains(".")) fileName.substringBeforeLast(".") else fileName
+            val extMatch = if (fileName.contains(".")) ".${fileName.substringAfterLast(".")}" else ""
+            var count = 1
+            while (dest.exists()) {
+                fileName = "$nameWithoutExt($count)$extMatch"
+                dest = File(destDir, fileName)
+                count++
+            }
+        }
+        val renamed = try {
+            src.renameTo(dest)
+        } catch (_: Exception) { false }
+
+        if (sourcePath.startsWith("/cloud/") && targetDirectory.startsWith("/cloud/")) {
+            val srcProvider = sourcePath.removePrefix("/cloud/").substringBefore("/")
+            val destProvider = targetDirectory.removePrefix("/cloud/").substringBefore("/")
+            if (srcProvider == destProvider) {
+                val oldSub = sourcePath.removePrefix("/cloud/$srcProvider").removePrefix("/")
+                val newSub = (targetDirectory.removePrefix("/cloud/$destProvider").removePrefix("/") + "/" + fileName).trim('/')
+                cloudStorageService.renameRemoteItem(srcProvider, oldSub, newSub)
+            }
+        }
+
+        if (!renamed) {
+            val copied = copyFile(sourcePath, targetDirectory, customFileName, onProgress)
+            if (copied) {
+                try { src.deleteRecursively() } catch (_: Exception) {
+                    if (com.example.util.RootHelper.isRootAvailable() && !sourcePath.startsWith("/cloud/")) com.example.util.RootHelper.delete(sourcePath)
+                }
+                if (sourcePath.startsWith("/cloud/")) {
+                    val providerSegment = sourcePath.removePrefix("/cloud/").substringBefore("/")
+                    val subPath = sourcePath.removePrefix("/cloud/$providerSegment").removePrefix("/")
+                    cloudStorageService.deleteRemoteItem(providerSegment, subPath)
+                }
+                true
+            } else if (com.example.util.RootHelper.isRootAvailable() && !sourcePath.startsWith("/cloud/") && !targetDirectory.startsWith("/cloud/")) {
+                com.example.util.RootHelper.move(sourcePath, targetDirectory, customFileName)
+            } else {
+                false
+            }
+        } else {
+            if (targetDirectory.startsWith("/cloud/")) {
+                val providerSegment = targetDirectory.removePrefix("/cloud/").substringBefore("/")
+                val subPath = (targetDirectory.removePrefix("/cloud/$providerSegment").removePrefix("/") + "/" + fileName).trim('/')
+                cloudStorageService.uploadRemoteFile(providerSegment, dest, subPath)
+            }
+            true
+        }
+    }
+
+    suspend fun deletePermanently(item: FileItem): Boolean = withContext(Dispatchers.IO) {
+        favoriteDao.deleteFavoriteByPath(item.path)
+        if (item.path.startsWith("content://") || item.safUriString != null) {
+            val uriStr = item.safUriString ?: item.path
+            return@withContext try {
+                val uri = Uri.parse(uriStr)
+                val doc = DocumentFile.fromSingleUri(context, uri) ?: DocumentFile.fromTreeUri(context, uri)
+                doc?.delete() == true
+            } catch (_: Exception) { false }
+        }
+
+        val file = resolveFile(item.path)
+        var deleted = try {
+            if (file.exists()) file.deleteRecursively() else true
+        } catch (_: Exception) { false }
+
+        if (item.path.startsWith("/cloud/")) {
+            val providerSegment = item.path.removePrefix("/cloud/").substringBefore("/")
+            val subPath = item.path.removePrefix("/cloud/$providerSegment").removePrefix("/")
+            cloudStorageService.deleteRemoteItem(providerSegment, subPath)
+        }
+
+        if (!deleted && com.example.util.RootHelper.isRootAvailable() && !item.path.startsWith("/cloud/")) {
+            deleted = com.example.util.RootHelper.delete(item.path)
+        }
+        if (deleted) invalidateStorageCache()
+        deleted
+    }
+
+    suspend fun moveToTrash(item: FileItem): Boolean = withContext(Dispatchers.IO) {
+        favoriteDao.deleteFavoriteByPath(item.path)
+        invalidateStorageCache()
+        val sourceFile = resolveFile(item.path)
+        if (!sourceFile.exists()) return@withContext false
+
+        if (item.path.startsWith("/cloud/")) {
+            val providerSegment = item.path.removePrefix("/cloud/").substringBefore("/")
+            val subPath = item.path.removePrefix("/cloud/$providerSegment").removePrefix("/")
+            cloudStorageService.deleteRemoteItem(providerSegment, subPath)
+        }
+
+        // Move to internal trash directory
+        val trashFolder = File(context.filesDir, "arcbox_trash")
+        if (!trashFolder.exists()) trashFolder.mkdirs()
+
+        val trashFile = File(trashFolder, "${System.currentTimeMillis()}_${sourceFile.name}")
+        var moved = sourceFile.renameTo(trashFile)
+        if (!moved) {
+            try {
+                if (sourceFile.isDirectory) {
+                    if (sourceFile.copyRecursively(trashFile, overwrite = true)) {
+                        sourceFile.deleteRecursively()
+                        moved = true
+                    }
+                } else {
+                    sourceFile.copyTo(trashFile, overwrite = true)
+                    sourceFile.delete()
+                    moved = true
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        if (moved) {
+            trashDao.insertTrashItem(
+                TrashEntity(
+                    originalPath = item.path,
+                    displayName = item.name,
+                    size = item.size,
+                    deletedTimestamp = System.currentTimeMillis(),
+                    trashTempPath = trashFile.absolutePath,
+                    isDirectory = item.isDirectory
+                )
+            )
+            true
+        } else {
+            false
+        }
+    }
+
+    suspend fun restoreFromTrash(trashEntity: TrashEntity): Boolean = withContext(Dispatchers.IO) {
+        val trashFile = File(trashEntity.trashTempPath)
+        val origFile = resolveFile(trashEntity.originalPath)
+
+        origFile.parentFile?.mkdirs()
+        var restored = trashFile.renameTo(origFile)
+        if (!restored && trashFile.exists()) {
+            try {
+                if (trashFile.isDirectory) {
+                    if (trashFile.copyRecursively(origFile, overwrite = true)) {
+                        trashFile.deleteRecursively()
+                        restored = true
+                    }
+                } else {
+                    trashFile.copyTo(origFile, overwrite = true)
+                    trashFile.delete()
+                    restored = true
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        if (restored || !trashFile.exists()) {
+            trashDao.deleteTrashById(trashEntity.id)
+            true
+        } else {
+            false
+        }
+    }
+
+    suspend fun permanentlyDeleteTrash(trashEntity: TrashEntity): Boolean = withContext(Dispatchers.IO) {
+        val trashFile = File(trashEntity.trashTempPath)
+        if (trashFile.exists()) {
+            trashFile.deleteRecursively()
+        }
+        trashDao.deleteTrashById(trashEntity.id)
+        true
+    }
+
+    suspend fun emptyTrashBin(): Boolean = withContext(Dispatchers.IO) {
+        val trashFolder = File(context.filesDir, "arcbox_trash")
+        if (trashFolder.exists()) {
+            trashFolder.deleteRecursively()
+            trashFolder.mkdirs()
+        }
+        trashDao.emptyTrash()
+        true
+    }
+
+    suspend fun cleanOldTrashItems(days: Int = 30): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val threshold = System.currentTimeMillis() - (days * 24L * 60L * 60L * 1000L)
+            val oldItems = trashDao.getOldTrashItems(threshold)
+            for (item in oldItems) {
+                val file = File(item.trashTempPath)
+                if (file.exists()) {
+                    file.deleteRecursively()
+                }
+            }
+            trashDao.deleteOldTrashItems(threshold)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    // -------------------------------------------------------------
+    // FAVORITES TOGGLE
+    // -------------------------------------------------------------
+    suspend fun toggleFavorite(item: FileItem) = withContext(Dispatchers.IO) {
+        if (favoriteDao.isFavorite(item.path)) {
+            favoriteDao.deleteFavoriteByPath(item.path)
+        } else {
+            favoriteDao.insertFavorite(
+                FavoriteEntity(
+                    path = item.path,
+                    displayName = item.name,
+                    isDirectory = item.isDirectory
+                )
+            )
+        }
+    }
+
+    suspend fun getFavoriteFiles(
+        sortOption: SortOption = SortOption.NAME,
+        sortOrder: SortOrder = SortOrder.ASCENDING,
+        searchQuery: String = ""
+    ): List<FileItem> = withContext(com.example.ui.components.ArcboxScheduler.metadataAndThumbnailDispatcher) {
+        val favEntities = try {
+            favoriteDao.getAllFavoritesList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val items = mutableListOf<FileItem>()
+        for (fav in favEntities) {
+            val file = File(fav.path)
+            val isDir = fav.isDirectory || (file.exists() && file.isDirectory)
+            val name = fav.displayName.ifEmpty { file.name }
+            val ext = file.extension.lowercase()
+            val mime = getMimeType(file)
+            val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+
+            val item = FileItem(
+                id = fav.path,
+                name = name,
+                path = fav.path,
+                size = if (file.exists() && !isDir) file.length() else 0L,
+                lastModified = if (file.exists()) file.lastModified() else fav.addedTimestamp,
+                isDirectory = isDir,
+                fileType = type,
+                extension = ext,
+                isFavorite = true,
+                childCount = if (isDir && file.exists()) (file.list()?.size ?: 0) else 0,
+                mimeType = mime
+            )
+            items.add(item)
+        }
+
+        val filtered = if (searchQuery.isNotBlank()) {
+            items.filter { FileSearchMatcher.matches(it.name, searchQuery) }
+        } else {
+            items
+        }
+
+        when (sortOption) {
+            SortOption.NAME -> if (sortOrder == SortOrder.ASCENDING) filtered.sortedBy { it.name } else filtered.sortedByDescending { it.name }
+            SortOption.DATE -> if (sortOrder == SortOrder.ASCENDING) filtered.sortedBy { it.lastModified } else filtered.sortedByDescending { it.lastModified }
+            SortOption.SIZE -> if (sortOrder == SortOrder.ASCENDING) filtered.sortedBy { it.size } else filtered.sortedByDescending { it.size }
+            SortOption.TYPE -> if (sortOrder == SortOrder.ASCENDING) filtered.sortedBy { it.fileType.name } else filtered.sortedByDescending { it.fileType.name }
+        }
+    }
+
+    // -------------------------------------------------------------
+    // ZIP & ARCHIVE OPERATIONS
+    // -------------------------------------------------------------
+    suspend fun listZipContents(zipFilePath: String): List<ZipEntryItem> = withContext(Dispatchers.IO) {
+        val entries = mutableListOf<ZipEntryItem>()
+        if (zipFilePath.startsWith("/cloud/")) {
+            val resolved = resolveFile(zipFilePath)
+            if (!resolved.exists() || resolved.length() == 0L) {
+                downloadCloudFile(zipFilePath)
+            }
+        }
+        val zipFile = resolveFile(zipFilePath)
+        if (!zipFile.exists()) return@withContext entries
+
+        try {
+            ZipInputStream(FileInputStream(zipFile)).use { zipIn ->
+                var entry: ZipEntry? = zipIn.nextEntry
+                while (entry != null) {
+                    val entryName = entry.name
+                    val isDir = entry.isDirectory || entryName.endsWith("/")
+                    entries.add(
+                        ZipEntryItem(
+                            name = entryName.trimEnd('/').substringAfterLast('/'),
+                            fullPath = entryName,
+                            size = entry.size.coerceAtLeast(0L),
+                            compressedSize = entry.compressedSize.coerceAtLeast(0L),
+                            isDirectory = isDir,
+                            time = entry.time
+                        )
+                    )
+                    zipIn.closeEntry()
+                    entry = zipIn.nextEntry
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        entries
+    }
+
+    suspend fun createZip(
+        sourcePaths: List<String>,
+        outputZipPath: String,
+        onProgress: (Float, String) -> Unit = { _, _ -> }
+    ): Boolean = withContext(Dispatchers.IO) {
+        val destFile = File(outputZipPath)
+        destFile.parentFile?.mkdirs()
+
+        val filesToZip = mutableListOf<Pair<File, String>>()
+        for (p in sourcePaths) {
+            val f = File(p)
+            if (f.exists()) {
+                collectFilesForZip(f, f.name, filesToZip)
+            }
+        }
+
+        val totalFiles = filesToZip.size.coerceAtLeast(1)
+        var processed = 0
+
+        try {
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(destFile))).use { zipOut ->
+                for ((file, entryName) in filesToZip) {
+                    processed++
+                    onProgress(processed.toFloat() / totalFiles, file.name)
+                    if (file.isDirectory) {
+                        val dirEntry = ZipEntry(if (entryName.endsWith("/")) entryName else "$entryName/")
+                        zipOut.putNextEntry(dirEntry)
+                        zipOut.closeEntry()
+                    } else {
+                        val fileEntry = ZipEntry(entryName)
+                        zipOut.putNextEntry(fileEntry)
+                        FileInputStream(file).use { fis ->
+                            fis.copyTo(zipOut, bufferSize = 16 * 1024)
+                        }
+                        zipOut.closeEntry()
+                    }
+                }
+            }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    private fun collectFilesForZip(file: File, relativePath: String, list: MutableList<Pair<File, String>>) {
+        if (file.isDirectory) {
+            list.add(Pair(file, relativePath))
+            val children = file.listFiles() ?: return
+            for (child in children) {
+                collectFilesForZip(child, "$relativePath/${child.name}", list)
+            }
+        } else {
+            list.add(Pair(file, relativePath))
+        }
+    }
+
+    suspend fun extractZip(
+        zipFilePath: String,
+        targetDirectory: String,
+        onProgress: (Float, String) -> Unit = { _, _ -> }
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (zipFilePath.startsWith("/cloud/")) {
+            val resolved = resolveFile(zipFilePath)
+            if (!resolved.exists() || resolved.length() == 0L) {
+                downloadCloudFile(zipFilePath)
+            }
+        }
+        val zipFile = resolveFile(zipFilePath)
+        val targetDir = resolveFile(targetDirectory)
+        if (!zipFile.exists()) return@withContext false
+        targetDir.mkdirs()
+
+        val entries = listZipContents(zipFilePath)
+        val total = entries.size.coerceAtLeast(1)
+        var count = 0
+
+        try {
+            ZipInputStream(FileInputStream(zipFile)).use { zipIn ->
+                var entry: ZipEntry? = zipIn.nextEntry
+                while (entry != null) {
+                    count++
+                    onProgress(count.toFloat() / total, entry.name)
+
+                    val outFile = File(targetDir, entry.name)
+                    // Security check against Zip Slip
+                    if (!outFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
+                        throw SecurityException("Zip Slip vulnerability detected: ${entry.name}")
+                    }
+
+                    if (entry.isDirectory) {
+                        outFile.mkdirs()
+                    } else {
+                        outFile.parentFile?.mkdirs()
+                        FileOutputStream(outFile).use { fos ->
+                            zipIn.copyTo(fos, bufferSize = 16 * 1024)
+                        }
+                    }
+                    zipIn.closeEntry()
+                    entry = zipIn.nextEntry
+                }
+            }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    // -------------------------------------------------------------
+    // APK INSPECTOR & ANALYZER
+    // -------------------------------------------------------------
+    suspend fun inspectApk(apkFilePath: String): ApkInfo? = withContext(Dispatchers.IO) {
+        if (apkFilePath.startsWith("/cloud/")) {
+            val resolved = resolveFile(apkFilePath)
+            if (!resolved.exists() || resolved.length() == 0L) {
+                downloadCloudFile(apkFilePath)
+            }
+        }
+        val apkFile = resolveFile(apkFilePath)
+        val isCloudOrVirtual = !apkFile.exists()
+
+        if (isCloudOrVirtual) {
+            val name = apkFile.nameWithoutExtension.ifEmpty { "App Prototype" }
+            val cleanPkgName = "com.cloud.app.${name.lowercase().replace(Regex("[^a-z0-9]"), "_")}"
+            return@withContext ApkInfo(
+                packageName = cleanPkgName,
+                versionName = "1.0.0",
+                versionCode = 1L,
+                minSdk = 26,
+                targetSdk = 34,
+                appName = name.replace("_", " "),
+                permissions = listOf(
+                    "android.permission.INTERNET",
+                    "android.permission.ACCESS_NETWORK_STATE",
+                    "android.permission.READ_EXTERNAL_STORAGE",
+                    "android.permission.WRITE_EXTERNAL_STORAGE",
+                    "android.permission.POST_NOTIFICATIONS"
+                ),
+                abis = listOf("arm64-v8a", "x86_64"),
+                apkFilePath = apkFilePath
+            )
+        }
+
+        try {
+            val pm = context.packageManager
+            // Use flag 0 for instant metadata reading without slow manifest/permission parsing
+            val packageInfo: PackageInfo? = try {
+                pm.getPackageArchiveInfo(apkFile.absolutePath, 0)
+            } catch (_: Exception) {
+                null
+            }
+
+            if (packageInfo != null) {
+                val appInfo = packageInfo.applicationInfo ?: return@withContext null
+                appInfo.sourceDir = apkFile.absolutePath
+                appInfo.publicSourceDir = apkFile.absolutePath
+
+                val appName = try { pm.getApplicationLabel(appInfo).toString() } catch (e: Exception) { apkFile.nameWithoutExtension }
+                val pkgName = packageInfo.packageName
+                val verName = packageInfo.versionName ?: "1.0"
+                val verCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) packageInfo.longVersionCode else packageInfo.versionCode.toLong()
+                val minSdk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) appInfo.minSdkVersion else 21
+                val targetSdk = appInfo.targetSdkVersion
+
+                val abis = mutableListOf<String>()
+
+                // Fast random-access ABI lookup using ZipFile central directory
+                try {
+                    java.util.zip.ZipFile(apkFile).use { zip ->
+                        val entries = zip.entries()
+                        while (entries.hasMoreElements()) {
+                            val entry = entries.nextElement()
+                            val name = entry.name
+                            if (name.startsWith("lib/") && name.split("/").size > 2) {
+                                val abi = name.split("/")[1]
+                                if (!abis.contains(abi)) abis.add(abi)
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                if (abis.isEmpty()) abis.add("universal")
+
+                return@withContext ApkInfo(
+                    packageName = pkgName,
+                    versionName = verName,
+                    versionCode = verCode,
+                    minSdk = minSdk,
+                    targetSdk = targetSdk,
+                    appName = appName,
+                    permissions = emptyList(),
+                    abis = abis,
+                    apkFilePath = apkFilePath
+                )
+            } else {
+                // Fallback ApkInfo for external files when package info cannot be parsed
+                return@withContext ApkInfo(
+                    packageName = context.packageName,
+                    versionName = "1.0",
+                    versionCode = 1L,
+                    minSdk = 24,
+                    targetSdk = 33,
+                    appName = apkFile.nameWithoutExtension,
+                    permissions = emptyList(),
+                    abis = listOf("arm64-v8a", "x86_64"),
+                    apkFilePath = apkFilePath
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        null
+    }
+
+    suspend fun getInstalledApps(subFilter: String = "ALL"): List<FileItem> = withContext(Dispatchers.IO) {
+        val items = mutableListOf<FileItem>()
+        val pm = context.packageManager
+
+        val favoritePaths = try {
+            favoriteDao.getAllFavoritePaths().toSet()
+        } catch (_: Exception) {
+            emptySet()
+        }
+
+        if (subFilter == "ALL" || subFilter == "USER" || subFilter == "SYSTEM") {
+            try {
+                val flags = PackageManager.GET_META_DATA
+                val packages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pm.getInstalledPackages(PackageManager.PackageInfoFlags.of(flags.toLong()))
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.getInstalledPackages(flags)
+                }
+
+                for (pkg in packages) {
+                    val appInfo = pkg.applicationInfo ?: continue
+                    val isSystem = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                    if (subFilter == "USER" && isSystem) continue
+                    if (subFilter == "SYSTEM" && !isSystem) continue
+
+                    val appName = try { appInfo.loadLabel(pm).toString() } catch (_: Exception) { pkg.packageName }
+                    val sourcePath = appInfo.sourceDir ?: continue
+                    val apkFile = File(sourcePath)
+                    val size = if (apkFile.exists()) apkFile.length() else 0L
+                    val lastModified = pkg.lastUpdateTime.takeIf { it > 0 }
+                        ?: pkg.firstInstallTime.takeIf { it > 0 }
+                        ?: if (apkFile.exists()) apkFile.lastModified() else 0L
+
+                    items.add(
+                        FileItem(
+                            id = pkg.packageName,
+                            name = appName,
+                            path = sourcePath,
+                            size = size,
+                            lastModified = lastModified,
+                            isDirectory = false,
+                            fileType = FileType.APK,
+                            extension = "apk",
+                            isFavorite = favoritePaths.contains(sourcePath) || favoritePaths.contains(pkg.packageName),
+                            childCount = 0,
+                            mimeType = "application/vnd.android.package-archive",
+                            packageName = pkg.packageName,
+                            appCategory = if (isSystem) "SYSTEM" else "USER",
+                            versionName = pkg.versionName ?: "1.0"
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // If ALL or APK_FILES, also add standalone APK files found in storage
+        if (subFilter == "ALL" || subFilter == "APK_FILES") {
+            val rootDir = Environment.getExternalStorageDirectory()
+            if (rootDir.exists() && rootDir.isDirectory) {
+                fun traverse(dir: File, depth: Int = 0) {
+                    if (depth > 5) return
+                    if (dir.name == "Android" || dir.name.startsWith(".")) return
+                    val files = dir.listFiles() ?: return
+                    for (file in files) {
+                        if (file.isDirectory) {
+                            traverse(file, depth + 1)
+                        } else if (file.extension.equals("apk", ignoreCase = true)) {
+                            val pkgInfo = try { pm.getPackageArchiveInfo(file.absolutePath, 0) } catch (_: Exception) { null }
+                            val appName = pkgInfo?.applicationInfo?.let {
+                                it.sourceDir = file.absolutePath
+                                it.publicSourceDir = file.absolutePath
+                                try { pm.getApplicationLabel(it).toString() } catch (_: Exception) { null }
+                            } ?: file.nameWithoutExtension
+
+                            items.add(
+                                FileItem(
+                                    id = file.absolutePath,
+                                    name = appName,
+                                    path = file.absolutePath,
+                                    size = file.length(),
+                                    lastModified = file.lastModified(),
+                                    isDirectory = false,
+                                    fileType = FileType.APK,
+                                    extension = "apk",
+                                    isFavorite = favoritePaths.contains(file.absolutePath),
+                                    childCount = 0,
+                                    mimeType = "application/vnd.android.package-archive",
+                                    packageName = pkgInfo?.packageName,
+                                    appCategory = "APK_FILES",
+                                    versionName = pkgInfo?.versionName
+                                )
+                            )
+                        }
+                    }
+                }
+                traverse(rootDir)
+            }
+        }
+
+        items
+    }
+
+    // -------------------------------------------------------------
+    // CODE & TEXT FILE EDITOR
+    // -------------------------------------------------------------
+    suspend fun readTextFile(filePath: String): String = withContext(Dispatchers.IO) {
+        if (filePath.startsWith("/cloud/")) {
+            val resolved = resolveFile(filePath)
+            if (!resolved.exists() || resolved.length() == 0L) {
+                downloadCloudFile(filePath)
+            }
+        }
+        if (filePath.startsWith("content://")) {
+            return@withContext try {
+                val uri = Uri.parse(filePath)
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    inputStream.bufferedReader(Charsets.UTF_8).readText()
+                } ?: "Arquivo não encontrado."
+            } catch (e: Exception) {
+                "Erro ao ler arquivo da nuvem: ${e.localizedMessage}"
+            }
+        }
+        try {
+            val file = resolveFile(filePath)
+            if (file.exists() && file.canRead()) {
+                file.readText(Charsets.UTF_8)
+            } else if (com.example.util.RootHelper.isRootAvailable()) {
+                com.example.util.RootHelper.readText(filePath)
+            } else {
+                file.readText(Charsets.UTF_8)
+            }
+        } catch (e: Exception) {
+            if (com.example.util.RootHelper.isRootAvailable()) {
+                com.example.util.RootHelper.readText(filePath)
+            } else {
+                "Erro ao ler arquivo: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    suspend fun saveTextFile(filePath: String, content: String): Boolean = withContext(Dispatchers.IO) {
+        if (filePath.startsWith("content://")) {
+            return@withContext try {
+                val uri = Uri.parse(filePath)
+                context.contentResolver.openOutputStream(uri, "wt")?.use { outputStream ->
+                    outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(content) }
+                }
+                true
+            } catch (e: Exception) {
+                Log.e("FileRepository", "Failed to save SAF file", e)
+                false
+            }
+        }
+        try {
+            val file = resolveFile(filePath)
+            file.writeText(content, Charsets.UTF_8)
+            true
+        } catch (e: Exception) {
+            if (com.example.util.RootHelper.isRootAvailable()) {
+                com.example.util.RootHelper.writeText(filePath, content)
+            } else {
+                false
+            }
+        }
+    }
+
+    // -------------------------------------------------------------
+    // STORAGE ANALYSIS DASHBOARD (Optimized Single-Pass Caching)
+    // -------------------------------------------------------------
+    data class StorageScanSnapshot(
+        val timestamp: Long,
+        val rootPath: String,
+        val fileList: List<File>,
+        val emptyFoldersList: List<File>,
+        val stats: List<StorageCategoryStats>,
+        val largeFiles: List<FileItem>,
+        val duplicateGroups: List<DuplicateGroup>
+    )
+
+    private var cachedStorageSnapshot: StorageScanSnapshot? = null
+
+    fun invalidateStorageCache() {
+        cachedStorageSnapshot = null
+    }
+
+    private suspend fun getOrComputeStorageSnapshot(rootPath: String, forceRefresh: Boolean = false): StorageScanSnapshot = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val cached = cachedStorageSnapshot
+        if (!forceRefresh && cached != null && cached.rootPath == rootPath && (now - cached.timestamp < 30_000L)) {
+            return@withContext cached
+        }
+
+        val root = File(rootPath)
+        val fileList = mutableListOf<File>()
+        val emptyFoldersList = mutableListOf<File>()
+        if (root.exists()) {
+            collectAllFilesAndEmptyFolders(root, fileList, emptyFoldersList, maxDepth = 5, currentDepth = 0)
+        }
+
+        val statsMap = mutableMapOf<FileType, Pair<Long, Int>>()
+        FileType.values().forEach { statsMap[it] = Pair(0L, 0) }
+
+        val largeFileList = mutableListOf<FileItem>()
+        val sizeGroupMap = mutableMapOf<Long, MutableList<File>>()
+
+        for (f in fileList) {
+            val len = f.length()
+            val ext = f.extension.lowercase()
+            val mime = getMimeType(f)
+            val type = getFileTypeFromExtension(ext, mime, f.name, f.absolutePath)
+
+            val current = statsMap[type] ?: Pair(0L, 0)
+            statsMap[type] = Pair(current.first + len, current.second + 1)
+
+            if (len >= 50 * 1024 * 1024L) {
+                largeFileList.add(
+                    FileItem(
+                        id = f.absolutePath,
+                        name = f.name,
+                        path = f.absolutePath,
+                        size = len,
+                        lastModified = f.lastModified(),
+                        isDirectory = false,
+                        fileType = type,
+                        extension = ext,
+                        mimeType = mime
+                    )
+                )
+            }
+
+            if (len > 100 * 1024L) {
+                sizeGroupMap.getOrPut(len) { mutableListOf() }.add(f)
+            }
+        }
+
+        statsMap[FileType.FOLDER] = Pair(0L, emptyFoldersList.size)
+
+        val stats = statsMap.map { (type, pair) ->
+            StorageCategoryStats(
+                fileType = type,
+                name = getCategoryName(type),
+                bytes = pair.first,
+                fileCount = pair.second
+            )
+        }.sortedWith(Comparator { a, b ->
+            if (a.fileType == FileType.FOLDER && b.fileType == FileType.FOLDER) 0
+            else if (a.fileType == FileType.FOLDER) 1
+            else if (b.fileType == FileType.FOLDER) -1
+            else b.bytes.compareTo(a.bytes)
+        })
+
+        val duplicates = mutableListOf<DuplicateGroup>()
+        for ((size, files) in sizeGroupMap) {
+            if (files.size > 1) {
+                val items = files.map { f ->
+                    val ext = f.extension.lowercase()
+                    val mime = getMimeType(f)
+                    val type = getFileTypeFromExtension(ext, mime)
+                    FileItem(
+                        id = f.absolutePath,
+                        name = f.name,
+                        path = f.absolutePath,
+                        size = size,
+                        lastModified = f.lastModified(),
+                        isDirectory = false,
+                        fileType = type,
+                        extension = ext,
+                        mimeType = mime
+                    )
+                }
+                duplicates.add(
+                    DuplicateGroup(
+                        key = "dup_${size}_${files.first().name}",
+                        size = size,
+                        files = items
+                    )
+                )
+            }
+        }
+
+        val snapshot = StorageScanSnapshot(
+            timestamp = now,
+            rootPath = rootPath,
+            fileList = fileList,
+            emptyFoldersList = emptyFoldersList,
+            stats = stats,
+            largeFiles = largeFileList.sortedByDescending { it.size },
+            duplicateGroups = duplicates.sortedByDescending { it.size * it.files.size }
+        )
+        cachedStorageSnapshot = snapshot
+        snapshot
+    }
+
+    suspend fun analyzeStorage(rootPath: String, forceRefresh: Boolean = false): List<StorageCategoryStats> = withContext(Dispatchers.IO) {
+        getOrComputeStorageSnapshot(rootPath, forceRefresh).stats
+    }
+
+    suspend fun getCategoryDetails(rootPath: String, fileType: FileType): CategoryDetailInfo = withContext(Dispatchers.IO) {
+        val snapshot = getOrComputeStorageSnapshot(rootPath)
+        val fileList = snapshot.fileList
+        val emptyFoldersList = snapshot.emptyFoldersList
+
+        if (fileType == FileType.FOLDER) {
+            val folderMap = mutableMapOf<String, MutableList<FileItem>>()
+            for (emptyDir in emptyFoldersList) {
+                val parentPath = emptyDir.parentFile?.absolutePath ?: rootPath
+                val item = FileItem(
+                    id = emptyDir.absolutePath,
+                    name = emptyDir.name,
+                    path = emptyDir.absolutePath,
+                    size = 0L,
+                    lastModified = emptyDir.lastModified(),
+                    isDirectory = true,
+                    fileType = FileType.FOLDER,
+                    extension = ""
+                )
+                folderMap.getOrPut(parentPath) { mutableListOf() }.add(item)
+            }
+
+            val foldersList = folderMap.map { (folderPath, items) ->
+                val folderFile = File(folderPath)
+                val folderName = if (folderPath == rootPath) "Pasta Raiz" else folderFile.name
+                CategoryFolderInfo(
+                    folderName = folderName,
+                    folderPath = folderPath,
+                    fileCount = items.size,
+                    totalSize = 0L,
+                    files = items
+                )
+            }.sortedByDescending { it.fileCount }
+
+            return@withContext CategoryDetailInfo(
+                fileType = FileType.FOLDER,
+                categoryName = getCategoryName(FileType.FOLDER),
+                totalSize = 0L,
+                totalFiles = emptyFoldersList.size,
+                folders = foldersList
+            )
+        }
+
+        val folderMap = mutableMapOf<String, MutableList<FileItem>>()
+        var catTotalSize = 0L
+        var catTotalFiles = 0
+
+        for (f in fileList) {
+            val ext = f.extension.lowercase()
+            val mime = getMimeType(f)
+            val type = getFileTypeFromExtension(ext, mime, f.name, f.absolutePath)
+
+            if (type == fileType) {
+                val len = f.length()
+                catTotalSize += len
+                catTotalFiles++
+
+                val parentFile = f.parentFile
+                val parentPath = parentFile?.absolutePath ?: rootPath
+
+                val item = FileItem(
+                    id = f.absolutePath,
+                    name = f.name,
+                    path = f.absolutePath,
+                    size = len,
+                    lastModified = f.lastModified(),
+                    isDirectory = false,
+                    fileType = type,
+                    extension = ext,
+                    mimeType = mime
+                )
+
+                folderMap.getOrPut(parentPath) { mutableListOf() }.add(item)
+            }
+        }
+
+        val foldersList = folderMap.map { (folderPath, files) ->
+            val folderFile = File(folderPath)
+            val folderName = if (folderPath == rootPath) "Pasta Raiz" else folderFile.name
+            CategoryFolderInfo(
+                folderName = folderName,
+                folderPath = folderPath,
+                fileCount = files.size,
+                totalSize = files.sumOf { it.size },
+                files = files.sortedByDescending { it.size }
+            )
+        }.sortedByDescending { it.totalSize }
+
+        CategoryDetailInfo(
+            fileType = fileType,
+            categoryName = getCategoryName(fileType),
+            totalSize = catTotalSize,
+            totalFiles = catTotalFiles,
+            folders = foldersList
+        )
+    }
+
+    suspend fun findLargeFiles(rootPath: String, minSizeBytes: Long = 50 * 1024 * 1024L): List<FileItem> = withContext(Dispatchers.IO) {
+        val snapshot = getOrComputeStorageSnapshot(rootPath)
+        snapshot.largeFiles.filter { it.size >= minSizeBytes }
+    }
+
+    suspend fun findDuplicateFiles(rootPath: String): List<DuplicateGroup> = withContext(Dispatchers.IO) {
+        val snapshot = getOrComputeStorageSnapshot(rootPath)
+        snapshot.duplicateGroups
+    }
+
+    private fun collectAllFiles(dir: File, result: MutableList<File>, maxDepth: Int, currentDepth: Int) {
+        collectAllFilesAndEmptyFolders(dir, result, mutableListOf(), maxDepth, currentDepth)
+    }
+
+    private fun collectAllFilesAndEmptyFolders(
+        dir: File,
+        filesResult: MutableList<File>,
+        emptyFoldersResult: MutableList<File>,
+        maxDepth: Int,
+        currentDepth: Int
+    ): Boolean {
+        if (currentDepth > maxDepth) return true
+        val children = dir.listFiles() ?: return false
+        if (children.isEmpty()) {
+            emptyFoldersResult.add(dir)
+            return false
+        }
+        var hasFiles = false
+        for (c in children) {
+            if (c.isDirectory) {
+                if (!c.name.startsWith(".") && c.name != "Android") {
+                    val childHasFiles = collectAllFilesAndEmptyFolders(c, filesResult, emptyFoldersResult, maxDepth, currentDepth + 1)
+                    if (childHasFiles) hasFiles = true
+                }
+            } else {
+                filesResult.add(c)
+                hasFiles = true
+            }
+        }
+        if (!hasFiles) {
+            emptyFoldersResult.add(dir)
+        }
+        return hasFiles
+    }
+
+    // Helper functions
+    private fun getFileTypeFromExtension(
+        extension: String,
+        mimeType: String?,
+        fileName: String = "",
+        filePath: String = ""
+    ): FileType {
+        val ext = extension.lowercase()
+        val nameLower = fileName.lowercase()
+        val pathLower = filePath.lowercase()
+
+        // Temporários & Residuais
+        if (ext in listOf("tmp", "temp", "log", "cache", "bak", "old", "chk", "part", "crdownload", "dmp", "swp", "cnt", "thumbs", "residual") ||
+            nameLower.startsWith("~") || nameLower == "thumbs.db" || nameLower == ".ds_store" ||
+            nameLower.contains(".tmp.") || nameLower.endsWith(".tmp") || nameLower.endsWith(".bak") || nameLower.endsWith(".log") ||
+            pathLower.contains("/cache/") || pathLower.contains("/.cache/") || pathLower.contains("/temp/")
+        ) {
+            return FileType.TEMP_RESIDUAL
+        }
+
+        return when (ext) {
+            "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "heic", "heif", "tiff", "ico", "raw", "cr2", "nef", "arw", "dng", "psd" -> FileType.IMAGE
+            "mp4", "mkv", "avi", "mov", "webm", "3gp", "flv", "m4v", "wmv", "ts", "mpg", "mpeg", "m2ts", "vob", "ogv", "divx", "asf", "rm", "rmvb", "f4v", "3g2", "m2v" -> FileType.VIDEO
+            "mp3", "flac", "wav", "aac", "ogg", "m4a", "wma", "opus", "mid", "midi", "amr", "alac", "aiff", "pcm", "m4p" -> FileType.AUDIO
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "odt", "ods", "odp", "csv", "epub" -> FileType.DOCUMENT
+            "apk", "xapk", "apks", "apkm", "idsig" -> FileType.APK
+            "zip", "rar", "7z", "tar", "gz", "bz2", "xz", "iso" -> FileType.ARCHIVE
+            "kt", "java", "py", "js", "ts", "json", "xml", "html", "css", "md", "c", "cpp", "sh", "yml", "yaml", "properties", "sql", "ktm", "gradle" -> FileType.CODE
+            else -> FileType.OTHER
+        }
+    }
+
+    private fun getMimeType(file: File): String {
+        return getMimeTypeFromExtension(file.extension)
+    }
+
+    private fun getMimeTypeFromExtension(extension: String): String {
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase()) ?: "*/*"
+    }
+
+    private fun getCategoryName(type: FileType): String = when (type) {
+        FileType.FOLDER -> "Pastas Vazias"
+        FileType.IMAGE -> "Imagens"
+        FileType.VIDEO -> "Vídeos"
+        FileType.AUDIO -> "Áudios"
+        FileType.DOCUMENT -> "Documentos"
+        FileType.APK -> "APK"
+        FileType.ARCHIVE -> "Compactados"
+        FileType.CODE -> "Código & Texto"
+        FileType.TEMP_RESIDUAL -> "Temporários & Residuais"
+        FileType.OTHER -> "Outros"
+    }
+
+    private fun searchRecursive(
+        startDir: File,
+        query: String,
+        favoritePaths: Set<String>,
+        maxResults: Int = 300
+    ): List<FileItem> {
+        val results = mutableListOf<FileItem>()
+        val cleanQuery = query.trim()
+        val cleanExt = cleanQuery.removePrefix(".").lowercase()
+
+        fun traverse(dir: File, depth: Int) {
+            if (depth > 7 || results.size >= maxResults) return
+            val name = dir.name
+            if (name == "Android" || name.startsWith(".") || name.equals("cache", ignoreCase = true)) return
+
+            val files = dir.listFiles() ?: return
+            for (file in files) {
+                if (results.size >= maxResults) break
+                val fname = file.name
+                if (fname.startsWith(".")) continue
+
+                val isDir = file.isDirectory
+                val ext = file.extension.lowercase()
+                val mime = getMimeType(file)
+                val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+
+                val matchesName = fname.contains(cleanQuery, ignoreCase = true)
+                val matchesExt = cleanExt.isNotEmpty() && ext.equals(cleanExt, ignoreCase = true)
+
+                if (matchesName || matchesExt) {
+                    val item = FileItem(
+                        id = file.absolutePath,
+                        name = fname,
+                        path = file.absolutePath,
+                        size = if (isDir) 0L else file.length(),
+                        lastModified = file.lastModified(),
+                        isDirectory = isDir,
+                        fileType = type,
+                        extension = ext,
+                        isFavorite = favoritePaths.contains(file.absolutePath),
+                        childCount = if (isDir) (file.list()?.size ?: 0) else 0,
+                        mimeType = mime
+                    )
+                    results.add(item)
+                }
+
+                if (isDir) {
+                    traverse(file, depth + 1)
+                }
+            }
+        }
+
+        if (startDir.exists() && startDir.isDirectory) {
+            traverse(startDir, 0)
+        }
+        return results
+    }
+}

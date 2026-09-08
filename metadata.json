@@ -1,0 +1,6 @@
+{
+  "name": "Arcbox",
+  "description": "Gerenciador de arquivos nativo Android em Kotlin com Material Design 3.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,535 @@
+package com.example.ui.components
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.R
+import com.example.data.models.FileType
+import com.example.data.models.StorageVolume
+import com.example.data.models.ThemeMode
+import com.example.util.formatFileSize
+import com.example.ui.theme.*
+
+@Composable
+fun ArcboxNavigationDrawerContent(
+    storageVolumes: List<StorageVolume>,
+    selectedVolume: StorageVolume?,
+    currentFilterCategory: FileType?,
+    trashCount: Int,
+    favoritesCount: Int = 0,
+    isFavoritesOnly: Boolean = false,
+    isRecentsOnly: Boolean = false,
+    isAppManagerOpen: Boolean = false,
+    currentThemeMode: ThemeMode,
+    isMegaConnected: Boolean = false,
+    isDriveConnected: Boolean = false,
+    isMediafireConnected: Boolean = false,
+    isOnedriveConnected: Boolean = false,
+    isDropboxConnected: Boolean = false,
+    isWebdavConnected: Boolean = false,
+    megaEmail: String = "",
+    driveEmail: String = "",
+    mediafireEmail: String = "",
+    onedriveEmail: String = "",
+    dropboxEmail: String = "",
+    webdavEmail: String = "",
+    onSelectVolume: (StorageVolume) -> Unit,
+    onStartOAuthFlow: (CloudProvider) -> Unit = {},
+    onSelectFavorites: () -> Unit = {},
+    onSelectRecents: () -> Unit = {},
+    onSelectCategory: (FileType?) -> Unit,
+    onOpenAppManager: () -> Unit = {},
+    onOpenStorageDashboard: () -> Unit,
+    onOpenTrashBin: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenCloudManager: () -> Unit = {},
+    onOpenWelcomeOnboarding: () -> Unit = {},
+    onToggleThemeMode: (ThemeMode) -> Unit,
+    onCloseDrawer: () -> Unit
+) {
+    ModalDrawerSheet(
+        drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
+        drawerContainerColor = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.width(310.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 24.dp)
+        ) {
+            // Header Section
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ArcboxLogoIcon(
+                                modifier = Modifier.size(42.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Arcbox",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Gerenciador de Arquivos",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Storage Capacity Summary Cards (Internal Storage + SD Card / OTG if available)
+                    val localUnits = storageVolumes.filter { it.typeKey != "CLOUD" }.ifEmpty {
+                        listOfNotNull(selectedVolume)
+                    }
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        localUnits.forEach { volume ->
+                            val isSelected = selectedVolume?.id == volume.id && !isFavoritesOnly && !isRecentsOnly && currentFilterCategory == null
+
+                            Surface(
+                                onClick = {
+                                    onSelectVolume(volume)
+                                    onCloseDrawer()
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    if (isSelected) 1.5.dp else 1.dp,
+                                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        ) {
+                                            Icon(
+                                                when (volume.typeKey) {
+                                                    "SDCARD" -> Icons.Default.SdCard
+                                                    "OTG", "USB" -> Icons.Default.Usb
+                                                    "ROOT" -> Icons.Default.Security
+                                                    else -> Icons.Default.Storage
+                                                },
+                                                contentDescription = null,
+                                                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = volume.name,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Icon(
+                                            Icons.Default.ChevronRight,
+                                            contentDescription = "Abrir diretório",
+                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    LinearProgressIndicator(
+                                        progress = { volume.usedRatio },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(CircleShape),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                        strokeCap = StrokeCap.Round,
+                                        gapSize = 0.dp,
+                                        drawStopIndicator = {}
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (volume.totalBytes > 0) "${formatFileSize(volume.usedBytes)} de ${formatFileSize(volume.totalBytes)} usados" else "Armazenamento",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        if (volume.totalBytes > 0) {
+                                            Text(
+                                                text = "${(volume.usedRatio * 100).toInt()}%",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Navigation Item: MEGA Cloud
+            val megaVolume = storageVolumes.find { it.id == "cloud_mega" || it.path == "/cloud/mega" }
+            NavigationDrawerItem(
+                label = {
+                    Column {
+                        Text("MEGA", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = if (isMegaConnected) (if (megaEmail.isNotBlank()) megaEmail else "Conectado • 50 GB") else "Toque para conectar (50 GB)",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
+                            color = if (isMegaConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                selected = selectedVolume?.path == "/cloud/mega",
+                onClick = {
+                    if (isMegaConnected && megaVolume != null) {
+                        onSelectVolume(megaVolume)
+                    } else if (isMegaConnected) {
+                        onSelectVolume(
+                            StorageVolume(
+                                id = "cloud_mega",
+                                name = "MEGA",
+                                path = "/cloud/mega",
+                                totalBytes = 50L * 1024 * 1024 * 1024L,
+                                freeBytes = 50L * 1024 * 1024 * 1024L,
+                                typeKey = "CLOUD"
+                            )
+                        )
+                    } else {
+                        onStartOAuthFlow(CloudProvider.MEGA)
+                    }
+                    onCloseDrawer()
+                },
+                icon = {
+                    Icon(
+                        Icons.Default.Cloud,
+                        contentDescription = "MEGA Cloud",
+                        tint = if (isMegaConnected) Color(0xFFD9272E) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                badge = {
+                    if (isMegaConnected) {
+                        Surface(
+                            color = Color(0xFFD9272E).copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                "Ativo",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFD9272E),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            // Navigation Item: Favoritos
+            NavigationDrawerItem(
+                label = { Text("Favoritos", fontWeight = FontWeight.SemiBold) },
+                selected = isFavoritesOnly,
+                onClick = {
+                    onSelectFavorites()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFB300)) },
+                badge = {
+                    if (favoritesCount > 0) {
+                        Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                            Text("$favoritesCount", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            // Navigation Item: Recentes
+            NavigationDrawerItem(
+                label = { Text("Recentes", fontWeight = FontWeight.SemiBold) },
+                selected = isRecentsOnly,
+                onClick = {
+                    onSelectRecents()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
+
+            val headerColor = MaterialTheme.colorScheme.primary
+
+            // Section Header: Categorias & Atalhos
+            Text(
+                text = "CATEGORIAS DE ARQUIVOS",
+                style = MaterialTheme.typography.labelSmall,
+                color = headerColor,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+            )
+
+            DrawerCategoryItem(
+                label = "Imagens",
+                icon = Icons.Default.Image,
+                color = FileType.IMAGE.getCategoryColor(),
+                isSelected = currentFilterCategory == FileType.IMAGE,
+                onClick = {
+                    onSelectCategory(FileType.IMAGE)
+                    onCloseDrawer()
+                }
+            )
+
+            DrawerCategoryItem(
+                label = "Vídeos",
+                icon = Icons.Default.Movie,
+                color = FileType.VIDEO.getCategoryColor(),
+                isSelected = currentFilterCategory == FileType.VIDEO,
+                onClick = {
+                    onSelectCategory(FileType.VIDEO)
+                    onCloseDrawer()
+                }
+            )
+
+            DrawerCategoryItem(
+                label = "Músicas & Áudios",
+                icon = Icons.Default.MusicNote,
+                color = FileType.AUDIO.getCategoryColor(),
+                isSelected = currentFilterCategory == FileType.AUDIO,
+                onClick = {
+                    onSelectCategory(FileType.AUDIO)
+                    onCloseDrawer()
+                }
+            )
+
+            DrawerCategoryItem(
+                label = "Documentos",
+                icon = Icons.Default.Description,
+                color = FileType.DOCUMENT.getCategoryColor(),
+                isSelected = currentFilterCategory == FileType.DOCUMENT,
+                onClick = {
+                    onSelectCategory(FileType.DOCUMENT)
+                    onCloseDrawer()
+                }
+            )
+
+            DrawerCategoryItem(
+                label = "Arquivos APK",
+                icon = Icons.Default.Android,
+                color = FileType.APK.getCategoryColor(),
+                isSelected = currentFilterCategory == FileType.APK && !isAppManagerOpen,
+                onClick = {
+                    onSelectCategory(FileType.APK)
+                    onCloseDrawer()
+                }
+            )
+
+            DrawerCategoryItem(
+                label = "Compactados",
+                icon = Icons.Default.FolderZip,
+                color = FileType.ARCHIVE.getCategoryColor(),
+                isSelected = currentFilterCategory == FileType.ARCHIVE,
+                onClick = {
+                    onSelectCategory(FileType.ARCHIVE)
+                    onCloseDrawer()
+                }
+            )
+
+            DrawerCategoryItem(
+                label = "Códigos & Textos",
+                icon = Icons.Default.Code,
+                color = FileType.CODE.getCategoryColor(),
+                isSelected = currentFilterCategory == FileType.CODE,
+                onClick = {
+                    onSelectCategory(FileType.CODE)
+                    onCloseDrawer()
+                }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
+
+            // Section Header: Ferramentas & Armazenamento
+            Text(
+                text = "FERRAMENTAS DE DISCO",
+                style = MaterialTheme.typography.labelSmall,
+                color = headerColor,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+            )
+
+            val toolIconTint = MaterialTheme.colorScheme.primary
+
+            NavigationDrawerItem(
+                label = { Text("Aplicativos instalados") },
+                selected = isAppManagerOpen,
+                onClick = {
+                    onOpenAppManager()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Default.Apps, contentDescription = null, tint = toolIconTint) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            NavigationDrawerItem(
+                label = { Text("Análise e Limpeza") },
+                selected = false,
+                onClick = {
+                    onOpenStorageDashboard()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Outlined.PieChart, contentDescription = null, tint = toolIconTint) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp))
+
+            // Section Header: Configurações & Preferências
+            Text(
+                text = "CONFIGURAÇÕES",
+                style = MaterialTheme.typography.labelSmall,
+                color = headerColor,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+            )
+
+            NavigationDrawerItem(
+                label = { Text("Recursos & Permissões") },
+                selected = false,
+                onClick = {
+                    onOpenWelcomeOnboarding()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Default.Info, contentDescription = null, tint = toolIconTint) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            NavigationDrawerItem(
+                label = { Text("Configurações do App") },
+                selected = false,
+                onClick = {
+                    onOpenSettings()
+                    onCloseDrawer()
+                },
+                icon = { Icon(Icons.Outlined.Settings, contentDescription = null, tint = toolIconTint) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            // Removed Quick Theme Switcher Row inside drawer footer as requested
+        }
+    }
+}
+
+@Composable
+fun DrawerCategoryItem(
+    label: String,
+    icon: ImageVector,
+    color: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val iconTint = color
+
+    NavigationDrawerItem(
+        label = {
+            Text(
+                text = label,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) color else MaterialTheme.colorScheme.onSurface
+            )
+        },
+        selected = isSelected,
+        onClick = onClick,
+        icon = {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Color.Transparent,
+                border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.35f)),
+                modifier = Modifier
+                    .size(30.dp)
+                    .background(getVibrantBadgeGradient(color), RoundedCornerShape(10.dp))
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+                }
+            }
+        },
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+    )
+}
+
+data class CloudDrawerEntry(
+    val provider: CloudProvider,
+    val isConnected: Boolean,
+    val email: String,
+    val volumePath: String,
+    val defaultVolumeName: String,
+    val totalBytes: Long,
+    val usedBytes: Long
+)
