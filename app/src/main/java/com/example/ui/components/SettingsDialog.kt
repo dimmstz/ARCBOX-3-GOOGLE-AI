@@ -127,7 +127,24 @@ fun ArcboxSettingsModal(
     val activity = remember(context) { context.findFragmentActivity() }
     val scrollState = rememberScrollState()
 
-    var cacheSizeMb by remember { mutableStateOf(42.5f) }
+    fun getFolderSize(file: java.io.File): Long {
+        if (!file.exists()) return 0L
+        if (file.isFile) return file.length()
+        var size = 0L
+        file.listFiles()?.forEach { size += getFolderSize(it) }
+        return size
+    }
+
+    var cacheSizeMb by remember {
+        mutableStateOf(
+            run {
+                val thumbSize = getFolderSize(context.cacheDir.resolve("arcbox_thumbnails"))
+                val cloudCacheSize = getFolderSize(context.cacheDir.resolve("cloud_storage"))
+                val legacyCloudSize = getFolderSize(context.filesDir.resolve("cloud_storage"))
+                ((thumbSize + cloudCacheSize + legacyCloudSize).toFloat() / (1024 * 1024)).coerceAtLeast(0f)
+            }
+        )
+    }
 
     Dialog(
         onDismissRequest = onClose,
@@ -728,6 +745,12 @@ fun ArcboxSettingsModal(
                                     } catch (_: Exception) {}
                                     try {
                                         context.cacheDir.resolve("arcbox_thumbnails").deleteRecursively()
+                                    } catch (_: Exception) {}
+                                    try {
+                                        context.cacheDir.resolve("cloud_storage").deleteRecursively()
+                                    } catch (_: Exception) {}
+                                    try {
+                                        context.filesDir.resolve("cloud_storage").deleteRecursively()
                                     } catch (_: Exception) {}
                                     cacheSizeMb = 0.0f
                                     Toast.makeText(context, "Cache limpo com sucesso!", Toast.LENGTH_SHORT).show()

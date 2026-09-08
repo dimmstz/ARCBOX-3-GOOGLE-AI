@@ -86,7 +86,7 @@ import kotlin.math.sin
 fun resolveMediaFile(context: android.content.Context, path: String): File {
     return if (path.startsWith("/cloud/")) {
         val relative = path.removePrefix("/cloud/").removePrefix("/")
-        val cloudDir = File(context.filesDir, "cloud_storage")
+        val cloudDir = File(context.cacheDir, "cloud_storage")
         File(cloudDir, relative)
     } else {
         File(path)

@@ -176,6 +176,6 @@ class CloudStorageService private constructor(private val context: Context) {
     }
 
     fun getLocalCacheDir(providerId: String): File {
-        return File(context.filesDir, "cloud_storage/${providerId.lowercase()}")
+        return File(context.cacheDir, "cloud_storage/${providerId.lowercase()}")
     }
 }

@@ -53,7 +53,7 @@ class WebDavProvider(
     private val directoryCache = java.util.concurrent.ConcurrentHashMap<String, CachedFolder>()
     private val CACHE_TTL_MS = 600_000L
 
-    private fun getCacheDir(): File = File(context.filesDir, "cloud_storage/webdav")
+    private fun getCacheDir(): File = File(context.cacheDir, "cloud_storage/webdav")
 
     private fun buildWebDavUrl(baseUrl: String, subPath: String): String {
         val cleanBase = if (baseUrl.isBlank()) {

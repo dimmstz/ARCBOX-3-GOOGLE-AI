@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.14-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.14"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.15-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.15"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,18 +18,24 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.14
+## 🚀 Novidades da Versão v1.0.15
 
-- ⚡ **Navegação Instantânea de Pastas na Nuvem (Cache de 10 min)**:
-  - O TTL de cache das listagens de diretórios de todos os provedores em nuvem (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV) foi expandido de 1 para **10 minutos**.
-  - A navegação entre pastas, voltar e avançar agora é totalmente local e instantânea, eliminando as chamadas repetitivas de rede. Operações de modificação (criar pasta, deletar, renomear, mover, upload) continuam invalidando o cache imediatamente e com precisão.
-- 🖼️ **Otimização de Resolução e Tamanho de Miniaturas**:
-  - Ajustado o limite de download automático de arquivos em nuvem para miniaturas de fotos de 12MB para **5MB**, poupando dados e acelerando o grid de imagens.
-  - Corrigido o envio de caminhos de arquivos virtuais para a engine do Coil (`dataObj == null` se não baixado), prevenindo verificações inúteis de disco e erros de I/O em segundo plano.
+- ⚡ **Carregamento Instantâneo sem Downloads Automáticos**:
+  - Removidos completamente todos os downloads automáticos em segundo plano de arquivos de mídia (imagens e fotos) no grid de arquivos da nuvem. Agora, a listagem de diretórios do MEGA é **instantânea e limpa**, sem lag de rede ou consumo indevido de banda para miniaturas.
+- ☁️ **Funcionamento Puro em Nuvem (Acesso sob Demanda)**:
+  - Arquivos abertos (fotos, vídeos, PDFs, etc.) são mantidos estritamente na memória temporária do sistema (`context.cacheDir`), funcionando de forma idêntica a um navegador web. Nenhum arquivo se acumula permanentemente no armazenamento interno offline do aparelho.
+  - O download definitivo de arquivos ocorre apenas quando o usuário clica explicitamente no ícone de "Download" na barra de ações, que salva o arquivo diretamente na pasta pública de *Downloads* do sistema.
+- 🧹 **Cálculo e Limpeza Inteligente de Cache**:
+  - A tela de Configurações agora calcula em tempo real o espaço exato ocupado pelo cache de miniaturas e arquivos temporários da nuvem.
+  - A opção "Limpar" agora esvazia completamente a pasta temporária `cacheDir/cloud_storage` e limpa dados legados, liberando espaço instantaneamente.
 
 ---
 
 ## 📋 Histórico de Versões
+
+### v1.0.14
+- ⚡ **Navegação Instantânea de Pastas na Nuvem (Cache de 10 min)**: Expansão do TTL de cache das listagens de diretórios de todos os provedores em nuvem de 1 para 10 minutos.
+- 🖼️ **Otimização de Resolução e Tamanho de Miniaturas**: Ajuste do limite de download automático para 5MB e prevenção de erros de I/O em segundo plano no Coil.
 
 ### v1.0.13
 - 🚀 **Abertura Ultrarrápida de Vídeos e Imagens no MEGA**: Removido download de vídeos em segundo plano para miniaturas e incluído semáforo de concorrência controlada para fotos.

@@ -80,7 +80,7 @@ class MegaProvider(
     override val isTemporarySession: Boolean
         get() = sessionManager.getSession(providerId)?.isTemporary ?: false
 
-    private fun getCacheDir(): File = File(context.filesDir, "cloud_storage/mega")
+    private fun getCacheDir(): File = File(context.cacheDir, "cloud_storage/mega")
 
     override suspend fun authenticate(
         email: String,

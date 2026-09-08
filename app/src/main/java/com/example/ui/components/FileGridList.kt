@@ -1521,23 +1521,6 @@ fun FileThumbnailImage(
             val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
             var isFileReady by remember(item.path) { mutableStateOf(resolvedFile.exists() && resolvedFile.length() > 0) }
 
-            if (item.path.startsWith("/cloud/") && !isFileReady && (item.size <= 5 * 1024 * 1024L || item.size <= 0L)) {
-                LaunchedEffect(item.path) {
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        thumbnailDownloadSemaphore.acquire()
-                        try {
-                            val repository = com.example.data.repository.FileRepository(context)
-                            val ok = repository.downloadCloudFile(item.path)
-                            if (ok) {
-                                isFileReady = true
-                            }
-                        } finally {
-                            thumbnailDownloadSemaphore.release()
-                        }
-                    }
-                }
-            }
-
             val cacheKey = remember(item.path, item.lastModified, isFileReady) {
                 "${item.path}_${item.lastModified}_$isFileReady"
             }
