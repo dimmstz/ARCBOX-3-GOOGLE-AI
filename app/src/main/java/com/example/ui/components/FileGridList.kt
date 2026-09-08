@@ -1485,6 +1485,8 @@ private fun formatDate(timestamp: Long): String {
     return dateFormatThreadLocal.get()?.format(Date(timestamp)) ?: "-"
 }
 
+private val thumbnailDownloadSemaphore = kotlinx.coroutines.sync.Semaphore(2)
+
 @Composable
 fun FileThumbnailImage(
     item: FileItem,
@@ -1519,13 +1521,18 @@ fun FileThumbnailImage(
             val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
             var isFileReady by remember(item.path) { mutableStateOf(resolvedFile.exists() && resolvedFile.length() > 0) }
 
-            if (item.path.startsWith("/cloud/") && !isFileReady) {
+            if (item.path.startsWith("/cloud/") && !isFileReady && (item.size <= 12 * 1024 * 1024L || item.size <= 0L)) {
                 LaunchedEffect(item.path) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        val repository = com.example.data.repository.FileRepository(context)
-                        val ok = repository.downloadCloudFile(item.path)
-                        if (ok) {
-                            isFileReady = true
+                        thumbnailDownloadSemaphore.acquire()
+                        try {
+                            val repository = com.example.data.repository.FileRepository(context)
+                            val ok = repository.downloadCloudFile(item.path)
+                            if (ok) {
+                                isFileReady = true
+                            }
+                        } finally {
+                            thumbnailDownloadSemaphore.release()
                         }
                     }
                 }
@@ -1572,19 +1579,7 @@ fun FileThumbnailImage(
         }
         FileType.VIDEO -> {
             val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
-            var isFileReady by remember(item.path) { mutableStateOf(resolvedFile.exists() && resolvedFile.length() > 0) }
-
-            if (item.path.startsWith("/cloud/") && !isFileReady) {
-                LaunchedEffect(item.path) {
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        val repository = com.example.data.repository.FileRepository(context)
-                        val ok = repository.downloadCloudFile(item.path)
-                        if (ok) {
-                            isFileReady = true
-                        }
-                    }
-                }
-            }
+            val isFileReady = remember(item.path) { resolvedFile.exists() && resolvedFile.length() > 0 }
 
             val cacheKey = remember(item.path, item.lastModified, isFileReady) {
                 "video_${item.path}_${item.lastModified}_$isFileReady"
@@ -1618,12 +1613,14 @@ fun FileThumbnailImage(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(iconSize)
                 )
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = item.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (isFileReady) {
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = item.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .size(18.dp)

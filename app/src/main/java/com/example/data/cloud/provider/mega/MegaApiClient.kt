@@ -755,7 +755,7 @@ class MegaApiClient(
                 val isEncrypted = finalKeyBytes != null && finalKeyBytes.isNotEmpty()
                 rawInput.use { input ->
                     FileOutputStream(tempFile).use { fos ->
-                        java.io.BufferedOutputStream(fos, 64 * 1024).use { output ->
+                        java.io.BufferedOutputStream(fos, 256 * 1024).use { output ->
                             if (isEncrypted) {
                                 val aesKey = ByteArray(16) { i ->
                                     if (finalKeyBytes!!.size >= 32) (finalKeyBytes[i].toInt() xor finalKeyBytes[i + 16].toInt()).toByte()
@@ -768,29 +768,31 @@ class MegaApiClient(
                                 val cipher = Cipher.getInstance("AES/CTR/NoPadding")
                                 cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(aesKey, "AES"), IvParameterSpec(iv))
 
-                                val inBuffer = ByteArray(64 * 1024)
-                                val outBuffer = ByteArray(64 * 1024 + 16)
+                                val inBuffer = ByteArray(256 * 1024)
+                                val outBuffer = ByteArray(256 * 1024 + 16)
                                 var read: Int
                                 var transferred = 0L
 
                                 var lastReportedProgress = -1f
                                 var lastReportedTime = 0L
 
-                                while (input.read(inBuffer).also { read = it } != -1) {
-                                    if (read > 0) {
-                                        totalBytesRead += read
-                                        val decLen = cipher.update(inBuffer, 0, read, outBuffer, 0)
-                                        if (decLen > 0) {
-                                            output.write(outBuffer, 0, decLen)
-                                        }
-                                        transferred += read
-                                        if (totalBytes > 0) {
-                                            val p = (transferred.toFloat() / totalBytes).coerceIn(0f, 1f)
-                                            val now = System.currentTimeMillis()
-                                            if (p >= 1f || p - lastReportedProgress >= 0.01f || now - lastReportedTime >= 100L) {
-                                                lastReportedProgress = p
-                                                lastReportedTime = now
-                                                onProgress(p)
+                                java.io.BufferedInputStream(input, 256 * 1024).use { bis ->
+                                    while (bis.read(inBuffer).also { read = it } != -1) {
+                                        if (read > 0) {
+                                            totalBytesRead += read
+                                            val decLen = cipher.update(inBuffer, 0, read, outBuffer, 0)
+                                            if (decLen > 0) {
+                                                output.write(outBuffer, 0, decLen)
+                                            }
+                                            transferred += read
+                                            if (totalBytes > 0) {
+                                                val p = (transferred.toFloat() / totalBytes).coerceIn(0f, 1f)
+                                                val now = System.currentTimeMillis()
+                                                if (p >= 1f || p - lastReportedProgress >= 0.02f || now - lastReportedTime >= 150L) {
+                                                    lastReportedProgress = p
+                                                    lastReportedTime = now
+                                                    onProgress(p)
+                                                }
                                             }
                                         }
                                     }
@@ -800,24 +802,26 @@ class MegaApiClient(
                                     output.write(outBuffer, 0, finalLen)
                                 }
                             } else {
-                                val inBuffer = ByteArray(64 * 1024)
+                                val inBuffer = ByteArray(256 * 1024)
                                 var read: Int
                                 var transferred = 0L
                                 var lastReportedProgress = -1f
                                 var lastReportedTime = 0L
 
-                                while (input.read(inBuffer).also { read = it } != -1) {
-                                    if (read > 0) {
-                                        totalBytesRead += read
-                                        output.write(inBuffer, 0, read)
-                                        transferred += read
-                                        if (totalBytes > 0) {
-                                            val p = (transferred.toFloat() / totalBytes).coerceIn(0f, 1f)
-                                            val now = System.currentTimeMillis()
-                                            if (p >= 1f || p - lastReportedProgress >= 0.01f || now - lastReportedTime >= 100L) {
-                                                lastReportedProgress = p
-                                                lastReportedTime = now
-                                                onProgress(p)
+                                java.io.BufferedInputStream(input, 256 * 1024).use { bis ->
+                                    while (bis.read(inBuffer).also { read = it } != -1) {
+                                        if (read > 0) {
+                                            totalBytesRead += read
+                                            output.write(inBuffer, 0, read)
+                                            transferred += read
+                                            if (totalBytes > 0) {
+                                                val p = (transferred.toFloat() / totalBytes).coerceIn(0f, 1f)
+                                                val now = System.currentTimeMillis()
+                                                if (p >= 1f || p - lastReportedProgress >= 0.02f || now - lastReportedTime >= 150L) {
+                                                    lastReportedProgress = p
+                                                    lastReportedTime = now
+                                                    onProgress(p)
+                                                }
                                             }
                                         }
                                     }

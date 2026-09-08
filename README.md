@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.12-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.12"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.13-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.13"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,21 +18,25 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.12
+## 🚀 Novidades da Versão v1.0.13
 
-- ⚡ **Abertura e Streaming Instantâneo no MEGA Cloud**:
-  - Correção na validação de chaves AES individuais de 16 bytes que forçavam chamadas redundantes da árvore de nós completa ao abrir arquivos.
-  - O streaming e a visualização de mídias, PDFs e documentos do MEGA agora iniciam instantaneamente.
-- ☁️ **Exibição Dinâmica de Discos em Nuvem**:
-  - Os serviços em nuvem (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV) aparecem no menu lateral e nos seletores somente quando estiverem conectados e ativos.
-- ➕ **Opção "Adicionar Nuvem" Unificada**:
-  - Botão fixo **"+ Adicionar Nuvem"** no menu lateral (*Navigation Drawer*), atalho na barra superior (*TopBar*) e painel do dashboard.
-- 🚀 **Desempenho & Otimizações**:
-  - Tratamento suave da exceção `LeftCompositionCancellationException` e regulação do progresso de downloads e uploads para manter a UI fluida.
+- 🚀 **Abertura Ultrarrápida de Vídeos e Imagens no MEGA**:
+  - Removido o download em segundo plano automático e simultâneo de vídeos inteiros para renderização de miniaturas no grid de arquivos.
+  - Implementado semáforo de concorrência controlada para miniaturas de fotos/imagens em nuvem, eliminando congestionamento de rede e gargalos de CPU/I/O.
+  - Os vídeos e mídias no MEGA agora abrem e iniciam o streaming na velocidade máxima da sua conexão sem filas de espera.
+- ⚡ **Otimização de Buffers I/O de Leitura/Decriptação**:
+  - Expansão dos buffers de stream de download e cifra AES-CTR do MEGA de 64KB para 256KB (`256KB BufferedInputStream/OutputStream`).
+  - Redução massiva de chamadas de sistema I/O e processamento contínuo mais fluido durante a recepção de dados.
+- ☁️ **Exibição Dinâmica & Atalho de Nuvem**:
+  - Apenas serviços em nuvem conectados aparecem no menu lateral e seletores.
 
 ---
 
 ## 📋 Histórico de Versões
+
+### v1.0.12
+- ⚡ **Abertura e Streaming Instantâneo no MEGA Cloud**: Validação e decodificação otimizada de nós e mídias.
+- ☁️ **Exibição Dinâmica de Discos em Nuvem**: Nuvens aparecem somente quando conectadas e ativas.
 
 ### v1.0.11
 - ☁️ **Exibição Dinâmica de Armazenamento em Nuvem**: Discos de nuvem aparecem apenas quando conectados.
