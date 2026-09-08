@@ -244,6 +244,17 @@ fun ArcboxTopBar(
                                 }
                             )
                         }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        DropdownMenuItem(
+                            text = { Text("Adicionar Nuvem...", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary) },
+                            onClick = {
+                                onOpenCloudManager()
+                                showVolumeDropdown = false
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Add, contentDescription = "Adicionar Nuvem", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        )
                     }
                 }
 

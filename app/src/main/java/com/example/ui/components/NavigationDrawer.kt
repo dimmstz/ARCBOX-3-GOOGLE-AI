@@ -224,51 +224,47 @@ fun ArcboxNavigationDrawerContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
 
-            // Navigation Item: MEGA Cloud
-            val megaVolume = storageVolumes.find { it.id == "cloud_mega" || it.path == "/cloud/mega" }
-            NavigationDrawerItem(
-                label = {
-                    Column {
-                        Text("MEGA", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            text = if (isMegaConnected) (if (megaEmail.isNotBlank()) megaEmail else "Conectado • 50 GB") else "Toque para conectar (50 GB)",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontSize = 11.sp,
-                            color = if (isMegaConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                selected = selectedVolume?.path == "/cloud/mega",
-                onClick = {
-                    if (isMegaConnected && megaVolume != null) {
-                        onSelectVolume(megaVolume)
-                    } else if (isMegaConnected) {
-                        onSelectVolume(
-                            StorageVolume(
-                                id = "cloud_mega",
-                                name = "MEGA",
-                                path = "/cloud/mega",
-                                totalBytes = 50L * 1024 * 1024 * 1024L,
-                                freeBytes = 50L * 1024 * 1024 * 1024L,
-                                typeKey = "CLOUD"
+            Text(
+                text = "NUVEM & ARMAZENAMENTO",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+            )
+
+            // Render connected cloud drives only
+            if (isMegaConnected) {
+                val megaVolume = storageVolumes.find { it.id == "cloud_mega" || it.path == "/cloud/mega" }
+                    ?: StorageVolume(id = "cloud_mega", name = "MEGA", path = "/cloud/mega", totalBytes = 50L * 1024 * 1024 * 1024L, freeBytes = 50L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+
+                NavigationDrawerItem(
+                    label = {
+                        Column {
+                            Text("MEGA", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (megaEmail.isNotBlank()) megaEmail else "Conectado • 50 GB",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
                             )
+                        }
+                    },
+                    selected = selectedVolume?.path == "/cloud/mega",
+                    onClick = {
+                        onSelectVolume(megaVolume)
+                        onCloseDrawer()
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.Cloud,
+                            contentDescription = "MEGA Cloud",
+                            tint = Color(0xFFD9272E)
                         )
-                    } else {
-                        onStartOAuthFlow(CloudProvider.MEGA)
-                    }
-                    onCloseDrawer()
-                },
-                icon = {
-                    Icon(
-                        Icons.Default.Cloud,
-                        contentDescription = "MEGA Cloud",
-                        tint = if (isMegaConnected) Color(0xFFD9272E) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                badge = {
-                    if (isMegaConnected) {
+                    },
+                    badge = {
                         Surface(
                             color = Color(0xFFD9272E).copy(alpha = 0.15f),
                             shape = CircleShape
@@ -281,6 +277,319 @@ fun ArcboxNavigationDrawerContent(
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+            if (isDriveConnected) {
+                val driveVolume = storageVolumes.find { it.id == "cloud_drive" || it.path == "/cloud/drive" }
+                    ?: StorageVolume(id = "cloud_drive", name = "Google Drive", path = "/cloud/drive", totalBytes = 15L * 1024 * 1024 * 1024L, freeBytes = 15L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+
+                NavigationDrawerItem(
+                    label = {
+                        Column {
+                            Text("Google Drive", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (driveEmail.isNotBlank()) driveEmail else "Conectado • 15 GB",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    selected = selectedVolume?.path == "/cloud/drive",
+                    onClick = {
+                        onSelectVolume(driveVolume)
+                        onCloseDrawer()
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.CloudQueue,
+                            contentDescription = "Google Drive",
+                            tint = Color(0xFF4285F4)
+                        )
+                    },
+                    badge = {
+                        Surface(
+                            color = Color(0xFF4285F4).copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                "Ativo",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF4285F4),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+            if (isOnedriveConnected) {
+                val odVolume = storageVolumes.find { it.id == "cloud_onedrive" || it.path == "/cloud/onedrive" }
+                    ?: StorageVolume(id = "cloud_onedrive", name = "OneDrive", path = "/cloud/onedrive", totalBytes = 5L * 1024 * 1024 * 1024L, freeBytes = 5L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+
+                NavigationDrawerItem(
+                    label = {
+                        Column {
+                            Text("OneDrive", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (onedriveEmail.isNotBlank()) onedriveEmail else "Conectado • 5 GB",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    selected = selectedVolume?.path == "/cloud/onedrive",
+                    onClick = {
+                        onSelectVolume(odVolume)
+                        onCloseDrawer()
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.CloudDone,
+                            contentDescription = "OneDrive",
+                            tint = Color(0xFF0078D4)
+                        )
+                    },
+                    badge = {
+                        Surface(
+                            color = Color(0xFF0078D4).copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                "Ativo",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF0078D4),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+            if (isDropboxConnected) {
+                val dbxVolume = storageVolumes.find { it.id == "cloud_dropbox" || it.path == "/cloud/dropbox" }
+                    ?: StorageVolume(id = "cloud_dropbox", name = "Dropbox", path = "/cloud/dropbox", totalBytes = 2L * 1024 * 1024 * 1024L, freeBytes = 2L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+
+                NavigationDrawerItem(
+                    label = {
+                        Column {
+                            Text("Dropbox", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (dropboxEmail.isNotBlank()) dropboxEmail else "Conectado • 2 GB",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    selected = selectedVolume?.path == "/cloud/dropbox",
+                    onClick = {
+                        onSelectVolume(dbxVolume)
+                        onCloseDrawer()
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.CloudQueue,
+                            contentDescription = "Dropbox",
+                            tint = Color(0xFF0061FE)
+                        )
+                    },
+                    badge = {
+                        Surface(
+                            color = Color(0xFF0061FE).copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                "Ativo",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF0061FE),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+            if (isMediafireConnected) {
+                val mfVolume = storageVolumes.find { it.id == "cloud_mediafire" || it.path == "/cloud/mediafire" }
+                    ?: StorageVolume(id = "cloud_mediafire", name = "MediaFire", path = "/cloud/mediafire", totalBytes = 10L * 1024 * 1024 * 1024L, freeBytes = 10L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+
+                NavigationDrawerItem(
+                    label = {
+                        Column {
+                            Text("MediaFire", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (mediafireEmail.isNotBlank()) mediafireEmail else "Conectado • 10 GB",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    selected = selectedVolume?.path == "/cloud/mediafire",
+                    onClick = {
+                        onSelectVolume(mfVolume)
+                        onCloseDrawer()
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.CloudDownload,
+                            contentDescription = "MediaFire",
+                            tint = Color(0xFF0070F0)
+                        )
+                    },
+                    badge = {
+                        Surface(
+                            color = Color(0xFF0070F0).copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                "Ativo",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF0070F0),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+            if (isWebdavConnected) {
+                val webdavVolume = storageVolumes.find { it.id == "cloud_webdav" || it.path == "/cloud/webdav" }
+                    ?: StorageVolume(id = "cloud_webdav", name = "WebDAV", path = "/cloud/webdav", totalBytes = 100L * 1024 * 1024 * 1024L, freeBytes = 100L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+
+                NavigationDrawerItem(
+                    label = {
+                        Column {
+                            Text("WebDAV", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (webdavEmail.isNotBlank()) webdavEmail else "Conectado",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    selected = selectedVolume?.path == "/cloud/webdav",
+                    onClick = {
+                        onSelectVolume(webdavVolume)
+                        onCloseDrawer()
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.Dns,
+                            contentDescription = "WebDAV",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    badge = {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                "Ativo",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+            // Additional SAF cloud drives if registered
+            val knownCloudIds = setOf("cloud_mega", "cloud_drive", "cloud_onedrive", "cloud_dropbox", "cloud_mediafire", "cloud_webdav")
+            storageVolumes.filter { it.typeKey == "CLOUD" && it.id !in knownCloudIds }.forEach { vol ->
+                NavigationDrawerItem(
+                    label = {
+                        Column {
+                            Text(vol.name, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = "Conectado",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    selected = selectedVolume?.id == vol.id,
+                    onClick = {
+                        onSelectVolume(vol)
+                        onCloseDrawer()
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.CloudSync,
+                            contentDescription = vol.name,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    badge = {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                "Ativo",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+            // Always present option to Add Cloud Storage
+            NavigationDrawerItem(
+                label = {
+                    Text(
+                        text = "Adicionar Nuvem",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                },
+                selected = false,
+                onClick = {
+                    onOpenCloudManager()
+                    onCloseDrawer()
+                },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Adicionar Nuvem",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                badge = {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = CircleShape
+                    ) {
+                        Text(
+                            text = "+",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 },
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)

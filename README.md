@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.9-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.9"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.11-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.11"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,22 +18,31 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.9
+## 🚀 Novidades da Versão v1.0.11
 
-- 🎨 **Splash Screen com Fundo Branco**: O fundo de abertura atrás do ícone da aplicação foi ajustado para branco puro (`@android:color/white`) em todas as versões do Android (incluindo Android 12+ / Splash Screen API), garantindo contraste e visual limpo na inicialização.
-- ☁️ **Correção Crítica no Download do MEGA Cloud**:
-  - Desacoplamento da extração da chave de decodificação AES-CTR em relação aos atributos do nome do arquivo.
-  - Prevenção de perda de chave (`file key`) durante downloads de arquivos com nomes codificados ou transitórios.
-  - Streaming e decodificação contínua em tempo real com integridade de dados garantida.
-- ⚡ **Otimizações Gerais**: Refinamento de estabilidade na transição de telas e gerenciamento de cache de arquivos em nuvem.
+- ☁️ **Exibição Dinâmica de Armazenamento em Nuvem**:
+  - Os discos de nuvem (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV, etc.) agora são exibidos dinamicamente apenas quando a conta correspondente estiver **conectada e ativa**.
+  - Nuvens desconectadas são automaticamente ocultadas dos seletores para manter a interface limpa e organizada.
+- ➕ **Opção "Adicionar Nuvem" Sempre Acessível**:
+  - Adicionado o botão fixo **"+ Adicionar Nuvem"** no menu lateral (*Navigation Drawer*).
+  - Adicionado atalho **"Adicionar Nuvem..."** no menu suspenso de unidades da barra de topo (*TopBar*).
+  - Atualizado o botão no painel principal para **"Adicionar / Gerenciar Nuvens"**, facilitando o vínculo de novas contas.
+- ⚡ **Desempenho & Corrotinas de Download**:
+  - Correção do tratamento da exceção `LeftCompositionCancellationException`, permitindo cancelamento suave de transferências de nuvem ao fechar mídias ou navegar entre telas.
+  - Estrangulamento de progresso (*throttling* a cada 100ms / 1%) durante downloads e uploads, eliminando gargalos de animação e travamentos de renderização de interface (`FrameTracker timeout`).
+  - Fallback aprimorado para arquivos locais e sincronização em segundo plano.
 
 ---
 
 ## 📋 Histórico de Versões
 
-### v1.0.8
-- ☁️ **Download MEGA Cloud**: Suporte aprimorado a handles diretos, gravação atômica em arquivos temporários e revalidação automática de nós.
-- 🎨 **Splash e Ícone Adaptativo**: Ícone de abertura ampliado (160dp) e ícone adaptativo elevado de 64dp para 96dp.
+### v1.0.10
+- ☁️ **Estabilidade no Provedor de Nuvem**: Correção na revalidação de sessões de nuvem e fallbacks de cache offline.
+- 🐛 **Resolução de Erros de Transição**: Ajustes refinados no gerenciador de estados das animações.
+
+### v1.0.9
+- 🎨 **Splash Screen com Fundo Branco**: O fundo de abertura atrás do ícone da aplicação foi ajustado para branco puro (`@android:color/white`) em todas as versões do Android.
+- ☁️ **Correção Crítica no Download do MEGA Cloud**: Streaming e decodificação contínua em tempo real com integridade de dados garantida.
 
 ### v1.0.7
 - 🎛️ **Botão Liga/Desliga para Transições**: Interruptor moderno (*Switch*) no cabeçalho do cartão "Transição entre Pastas" nas Configurações.

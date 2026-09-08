@@ -115,11 +115,16 @@ fun ArcboxMediaViewerModal(
         if (item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() == 0L)) {
             isDownloadingCloudFile = true
             val repository = com.example.data.repository.FileRepository(context)
-            repository.downloadCloudFile(item.path) { p ->
-                downloadProgress = p
+            try {
+                repository.downloadCloudFile(item.path) { p ->
+                    downloadProgress = p
+                }
+                downloadVersion++
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            } finally {
+                isDownloadingCloudFile = false
             }
-            downloadVersion++
-            isDownloadingCloudFile = false
         }
     }
 
@@ -469,14 +474,18 @@ fun ArcboxImageViewerScreen(
         if (item.path.startsWith("/cloud/") && (!file.exists() || file.length() == 0L)) {
             isDownloadingCloudFile = true
             val repository = com.example.data.repository.FileRepository(context)
-            val ok = repository.downloadCloudFile(item.path) { p ->
-                downloadProgress = p
-            }
-            if (ok) {
-                imageVersion = System.currentTimeMillis()
-                isDownloadingCloudFile = false
-            } else {
-                toastFeedback = "Falha ao baixar imagem da nuvem"
+            try {
+                val ok = repository.downloadCloudFile(item.path) { p ->
+                    downloadProgress = p
+                }
+                if (ok) {
+                    imageVersion = System.currentTimeMillis()
+                } else {
+                    toastFeedback = "Falha ao baixar imagem da nuvem"
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            } finally {
                 isDownloadingCloudFile = false
             }
         }

@@ -4,8 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.example.data.cloud.CloudAuthResult
 import com.example.data.cloud.RemoteCloudFile
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -332,6 +331,8 @@ class OneDriveProvider(
                         destinationFile.parentFile?.mkdirs()
                         val totalBytes = resp.body?.contentLength() ?: -1L
                         var bytesRead = 0L
+                        var lastReportedProgress = -1f
+                        var lastReportedTime = 0L
                         resp.body?.byteStream()?.use { input ->
                             FileOutputStream(destinationFile).use { output ->
                                 val buffer = ByteArray(64 * 1024)
@@ -340,7 +341,13 @@ class OneDriveProvider(
                                     output.write(buffer, 0, read)
                                     bytesRead += read
                                     if (totalBytes > 0) {
-                                        onProgress(bytesRead.toFloat() / totalBytes)
+                                        val p = (bytesRead.toFloat() / totalBytes).coerceIn(0f, 1f)
+                                        val now = System.currentTimeMillis()
+                                        if (p >= 1f || p - lastReportedProgress >= 0.01f || now - lastReportedTime >= 100L) {
+                                            lastReportedProgress = p
+                                            lastReportedTime = now
+                                            onProgress(p)
+                                        }
                                     }
                                 }
                             }
@@ -349,6 +356,7 @@ class OneDriveProvider(
                     }
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.w("OneDriveProvider", "Graph API download error: ${e.message}")
             }
         }
@@ -361,6 +369,8 @@ class OneDriveProvider(
         var bytesRead = 0L
 
         try {
+            var lastReportedProgress = -1f
+            var lastReportedTime = 0L
             srcFile.inputStream().use { input ->
                 FileOutputStream(destinationFile).use { output ->
                     val buffer = ByteArray(64 * 1024)
@@ -369,13 +379,20 @@ class OneDriveProvider(
                         output.write(buffer, 0, read)
                         bytesRead += read
                         if (totalBytes > 0) {
-                            onProgress(bytesRead.toFloat() / totalBytes)
+                            val p = (bytesRead.toFloat() / totalBytes).coerceIn(0f, 1f)
+                            val now = System.currentTimeMillis()
+                            if (p >= 1f || p - lastReportedProgress >= 0.01f || now - lastReportedTime >= 100L) {
+                                lastReportedProgress = p
+                                lastReportedTime = now
+                                onProgress(p)
+                            }
                         }
                     }
                 }
             }
             true
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("OneDriveProvider", "Download error", e)
             false
         }

@@ -599,6 +599,7 @@ class MegaApiClient(
             }
             nodes
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("MegaApiClient", "Fetch nodes failed", e)
             emptyList()
         }
@@ -772,6 +773,9 @@ class MegaApiClient(
                                 var read: Int
                                 var transferred = 0L
 
+                                var lastReportedProgress = -1f
+                                var lastReportedTime = 0L
+
                                 while (input.read(inBuffer).also { read = it } != -1) {
                                     if (read > 0) {
                                         totalBytesRead += read
@@ -781,7 +785,13 @@ class MegaApiClient(
                                         }
                                         transferred += read
                                         if (totalBytes > 0) {
-                                            onProgress((transferred.toFloat() / totalBytes).coerceIn(0f, 1f))
+                                            val p = (transferred.toFloat() / totalBytes).coerceIn(0f, 1f)
+                                            val now = System.currentTimeMillis()
+                                            if (p >= 1f || p - lastReportedProgress >= 0.01f || now - lastReportedTime >= 100L) {
+                                                lastReportedProgress = p
+                                                lastReportedTime = now
+                                                onProgress(p)
+                                            }
                                         }
                                     }
                                 }
@@ -793,13 +803,22 @@ class MegaApiClient(
                                 val inBuffer = ByteArray(64 * 1024)
                                 var read: Int
                                 var transferred = 0L
+                                var lastReportedProgress = -1f
+                                var lastReportedTime = 0L
+
                                 while (input.read(inBuffer).also { read = it } != -1) {
                                     if (read > 0) {
                                         totalBytesRead += read
                                         output.write(inBuffer, 0, read)
                                         transferred += read
                                         if (totalBytes > 0) {
-                                            onProgress((transferred.toFloat() / totalBytes).coerceIn(0f, 1f))
+                                            val p = (transferred.toFloat() / totalBytes).coerceIn(0f, 1f)
+                                            val now = System.currentTimeMillis()
+                                            if (p >= 1f || p - lastReportedProgress >= 0.01f || now - lastReportedTime >= 100L) {
+                                                lastReportedProgress = p
+                                                lastReportedTime = now
+                                                onProgress(p)
+                                            }
                                         }
                                     }
                                 }
@@ -831,6 +850,7 @@ class MegaApiClient(
                 false
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("MegaApiClient", "Download failed with exception", e)
             false
         }
@@ -899,6 +919,7 @@ class MegaApiClient(
             onProgress(1f)
             true
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("MegaApiClient", "Upload failed", e)
             false
         }
@@ -919,6 +940,7 @@ class MegaApiClient(
             executeMegaRequest(reqPayload, sid)
             true
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("MegaApiClient", "Delete failed", e)
             false
         }

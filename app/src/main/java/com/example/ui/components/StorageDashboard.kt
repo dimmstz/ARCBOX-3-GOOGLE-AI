@@ -1084,7 +1084,7 @@ fun StorageVolumesView(
                     ) {
                         Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Gerenciar Armazenamentos em Nuvem", fontWeight = FontWeight.Bold)
+                        Text("Adicionar / Gerenciar Nuvens", fontWeight = FontWeight.Bold)
                     }
                 }
             }
