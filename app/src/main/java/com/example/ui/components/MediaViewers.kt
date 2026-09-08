@@ -104,7 +104,8 @@ fun ArcboxMediaViewerModal(
     onEditWithThirdParty: ((FileItem) -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
+    var downloadVersion by remember(item.path) { mutableIntStateOf(0) }
+    val resolvedFile = remember(item.path, downloadVersion) { resolveMediaFile(context, item.path) }
     var showInfo by remember { mutableStateOf(false) }
 
     var isDownloadingCloudFile by remember(item.path) { mutableStateOf(item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() == 0L)) }
@@ -117,6 +118,7 @@ fun ArcboxMediaViewerModal(
             repository.downloadCloudFile(item.path) { p ->
                 downloadProgress = p
             }
+            downloadVersion++
             isDownloadingCloudFile = false
         }
     }

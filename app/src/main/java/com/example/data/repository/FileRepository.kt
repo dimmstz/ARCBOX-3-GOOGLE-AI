@@ -1026,6 +1026,34 @@ class FileRepository(private val context: Context) {
         val destDir = resolveFile(targetDirectory)
         if (!destDir.exists()) destDir.mkdirs()
         if (!src.exists()) {
+            if (sourcePath.startsWith("/cloud/")) {
+                val providerSegment = sourcePath.removePrefix("/cloud/").substringBefore("/")
+                val subPath = sourcePath.removePrefix("/cloud/$providerSegment").removePrefix("/")
+                val fileNameBase = customFileName?.ifBlank { null } ?: subPath.substringAfterLast('/')
+                var fileName = fileNameBase
+                var dest = File(destDir, fileName)
+                if (dest.exists()) {
+                    val nameWithoutExt = if (fileName.contains(".")) fileName.substringBeforeLast(".") else fileName
+                    val extMatch = if (fileName.contains(".")) ".${fileName.substringAfterLast(".")}" else ""
+                    var count = 1
+                    while (dest.exists()) {
+                        fileName = "$nameWithoutExt($count)$extMatch"
+                        dest = File(destDir, fileName)
+                        count++
+                    }
+                }
+                val ok = cloudStorageService.downloadRemoteFile(providerSegment, subPath, dest) { p ->
+                    onProgress(p)
+                }
+                if (ok) {
+                    if (targetDirectory.startsWith("/cloud/")) {
+                        val destProviderSegment = targetDirectory.removePrefix("/cloud/").substringBefore("/")
+                        val destSubPath = (targetDirectory.removePrefix("/cloud/$destProviderSegment").removePrefix("/") + "/" + fileName).trim('/')
+                        cloudStorageService.uploadRemoteFile(destProviderSegment, dest, destSubPath)
+                    }
+                    return@withContext true
+                }
+            }
             if (com.example.util.RootHelper.isRootAvailable() && !sourcePath.startsWith("/cloud/") && !targetDirectory.startsWith("/cloud/")) {
                 return@withContext com.example.util.RootHelper.copy(sourcePath, targetDirectory, customFileName)
             }

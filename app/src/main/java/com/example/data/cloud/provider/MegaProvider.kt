@@ -28,6 +28,8 @@ class MegaProvider(
     // Cached node mapping: handle -> MegaNode
     private val nodeCache = mutableMapOf<String, MegaNode>()
     private var rootHandle: String = "root"
+    private var lastFetchTimestamp: Long = 0L
+    private val CACHE_TTL_MS = 60_000L // 1 minute in-memory cache TTL
 
     init {
         restoreSession()
@@ -140,6 +142,7 @@ class MegaProvider(
         apiClient.clearSession()
         sessionManager.removeSession(providerId)
         nodeCache.clear()
+        lastFetchTimestamp = 0L
         // Clean temporary cache files
         try {
             getCacheDir().deleteRecursively()
@@ -154,8 +157,9 @@ class MegaProvider(
             restoreSession()
         }
 
-        // Refresh remote nodes if online
-        if (apiClient.sessionId != null) {
+        val isCacheStale = (System.currentTimeMillis() - lastFetchTimestamp > CACHE_TTL_MS)
+        // Refresh remote nodes if cache is empty or stale
+        if (apiClient.sessionId != null && (nodeCache.isEmpty() || isCacheStale)) {
             val remoteNodes = apiClient.fetchNodes()
             if (remoteNodes.isNotEmpty()) {
                 updateNodeCache(remoteNodes)
@@ -205,6 +209,7 @@ class MegaProvider(
     }
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
+        lastFetchTimestamp = 0L
         val parentHandle = resolveHandleFromPath(remoteParentPath) ?: rootHandle
         val result = apiClient.createFolder(parentHandle, folderName)
         if (result.isSuccess) {
@@ -223,6 +228,7 @@ class MegaProvider(
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
         if (!localFile.exists()) return@withContext false
+        lastFetchTimestamp = 0L
 
         val parentHandle = resolveHandleFromPath(remoteParentPath) ?: rootHandle
         val uploaded = apiClient.uploadFile(localFile, parentHandle, onProgress)
@@ -277,6 +283,7 @@ class MegaProvider(
     }
 
     override suspend fun deleteFile(remoteFilePath: String): Boolean = withContext(Dispatchers.IO) {
+        lastFetchTimestamp = 0L
         val handle = findHandleFromPath(remoteFilePath)
         if (handle != null) {
             apiClient.deleteNode(handle)
@@ -291,6 +298,7 @@ class MegaProvider(
     }
 
     override suspend fun renameFile(oldRemotePath: String, newName: String): Boolean = withContext(Dispatchers.IO) {
+        lastFetchTimestamp = 0L
         val file = File(getCacheDir(), oldRemotePath.trimStart('/'))
         if (file.exists()) {
             val newFile = File(file.parentFile, newName)
@@ -304,6 +312,7 @@ class MegaProvider(
         destRemotePath: String,
         isMove: Boolean
     ): Boolean = withContext(Dispatchers.IO) {
+        lastFetchTimestamp = 0L
         val src = File(getCacheDir(), sourceRemotePath.trimStart('/'))
         val dest = File(getCacheDir(), destRemotePath.trimStart('/'))
         if (!src.exists()) return@withContext false
@@ -345,6 +354,7 @@ class MegaProvider(
         if (!foundRoot) {
             rootHandle = nodes.firstOrNull { it.parentHandle == null }?.handle ?: "root"
         }
+        lastFetchTimestamp = System.currentTimeMillis()
     }
 
     private fun resolveHandleFromPath(path: String): String? {
@@ -373,7 +383,8 @@ class MegaProvider(
         if (apiClient.sessionId == null || apiClient.sessionId!!.contains(":::") || apiClient.currentMasterKey == null) {
             restoreSession()
         }
-        if (nodeCache.isEmpty() && apiClient.sessionId != null) {
+        val isCacheStale = (System.currentTimeMillis() - lastFetchTimestamp > CACHE_TTL_MS)
+        if ((nodeCache.isEmpty() || isCacheStale) && apiClient.sessionId != null) {
             val remoteNodes = apiClient.fetchNodes()
             if (remoteNodes.isNotEmpty()) {
                 updateNodeCache(remoteNodes)

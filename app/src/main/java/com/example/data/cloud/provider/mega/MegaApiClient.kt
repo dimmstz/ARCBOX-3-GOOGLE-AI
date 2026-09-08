@@ -61,28 +61,37 @@ class MegaApiClient(
         private set
     private var masterKey: ByteArray? = null
     private val nodeCacheMap = java.util.concurrent.ConcurrentHashMap<String, MegaNode>()
+    private val decryptedAttrCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, ByteArray?>>()
 
     val currentMasterKey: ByteArray?
         get() = masterKey
 
     fun setSession(sid: String, key: ByteArray? = null) {
-        this.sessionId = sid
-        if (key != null) {
-            this.masterKey = key
+        if (sid.contains(":::")) {
+            this.sessionId = sid.substringBefore(":::")
+            val b64Key = sid.substringAfter(":::")
+            this.masterKey = key ?: try { Base64.decode(b64Key, Base64.NO_WRAP) } catch (_: Exception) { null }
+        } else {
+            this.sessionId = sid
+            if (key != null) {
+                this.masterKey = key
+            }
         }
     }
 
     fun clearSession() {
         this.sessionId = null
         this.masterKey = null
+        this.nodeCacheMap.clear()
+        this.decryptedAttrCache.clear()
     }
 
     /**
      * Executes an API request to MEGA endpoint, handling HTTP 402 X-Hashcash challenges automatically.
      */
     private suspend fun executeMegaRequest(payload: JSONArray, sid: String? = null): String = withContext(Dispatchers.IO) {
-        val currentSid = sid ?: sessionId
-        val url = if (currentSid != null) {
+        val currentSid = (sid ?: sessionId)?.substringBefore(":::")
+        val url = if (!currentSid.isNullOrBlank()) {
             "$megaApiEndpoint?id=${sequenceId.incrementAndGet()}&sid=$currentSid"
         } else {
             "$megaApiEndpoint?id=${sequenceId.incrementAndGet()}"
@@ -646,7 +655,8 @@ class MegaApiClient(
         passedKeyBytes: ByteArray? = null,
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
-        var sid = sessionId ?: return@withContext false
+        val rawSid = sessionId ?: return@withContext false
+        val sid = rawSid.substringBefore(":::")
 
         try {
             var keyBytes = passedKeyBytes ?: nodeCacheMap[nodeHandle]?.keyBytes
@@ -665,13 +675,16 @@ class MegaApiClient(
             }
 
             var respStr = executeMegaRequest(reqPayload, sid)
-            if (respStr.startsWith("[-")) {
+            if (respStr.startsWith("[-") || respStr.startsWith("-")) {
                 Log.w("MegaApiClient", "Download request returned error code: $respStr, refreshing nodes...")
                 fetchNodes()
-                sid = sessionId ?: return@withContext false
-                respStr = executeMegaRequest(reqPayload, sid)
+                val retrySid = (sessionId ?: sid).substringBefore(":::")
+                respStr = executeMegaRequest(reqPayload, retrySid)
             }
-            if (!respStr.startsWith("[")) return@withContext false
+            if (!respStr.startsWith("[")) {
+                Log.e("MegaApiClient", "Invalid MEGA API download response: $respStr")
+                return@withContext false
+            }
 
             val array = JSONArray(respStr)
             if (array.length() == 0) return@withContext false
@@ -682,7 +695,10 @@ class MegaApiClient(
             }
 
             val downloadUrl = first.optString("g")
-            if (downloadUrl.isBlank()) return@withContext false
+            if (downloadUrl.isBlank()) {
+                Log.e("MegaApiClient", "Download URL 'g' is empty in response: $first")
+                return@withContext false
+            }
             val expectedSize = first.optLong("s", -1L)
 
             // If returned payload contains file key and we don't have keyBytes, decrypt it
@@ -698,75 +714,124 @@ class MegaApiClient(
 
             val downloadReq = Request.Builder()
                 .url(downloadUrl)
-                .header("User-Agent", "Arcbox-FileManager-Android/2.4")
+                .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:109.0) Gecko/119.0 Firefox/119.0")
+                .get()
                 .build()
 
             val parentDir = destinationFile.parentFile ?: destinationFile.absoluteFile.parentFile
-            val tempFile = File(parentDir, "${destinationFile.name}.tmp")
             parentDir?.mkdirs()
+            val tempFile = File(parentDir ?: destinationFile.parentFile, "${destinationFile.name}.tmp_${System.currentTimeMillis()}")
 
             val downloadClient = client.newBuilder()
                 .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(10, java.util.concurrent.TimeUnit.MINUTES)
+                .followRedirects(true)
+                .followSslRedirects(true)
                 .build()
 
+            // Handle 0-byte file edge case immediately
+            if (expectedSize == 0L) {
+                if (destinationFile.exists()) destinationFile.delete()
+                destinationFile.createNewFile()
+                onProgress(1f)
+                Log.d("MegaApiClient", "Download succeeded (0-byte file): ${destinationFile.absolutePath}")
+                return@withContext true
+            }
+
+            var totalBytesRead = 0L
             downloadClient.newCall(downloadReq).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext false
-                val body = resp.body ?: return@withContext false
-                val totalBytes = if (expectedSize > 0) expectedSize else body.contentLength().coerceAtLeast(1L)
-
-                val rawInput = body.byteStream()
-                val inputStream = if (finalKeyBytes != null && finalKeyBytes.isNotEmpty()) {
-                    val aesKey = ByteArray(16) { i ->
-                        if (finalKeyBytes.size >= 32) (finalKeyBytes[i].toInt() xor finalKeyBytes[i + 16].toInt()).toByte()
-                        else finalKeyBytes[i]
-                    }
-                    val iv = ByteArray(16)
-                    if (finalKeyBytes.size >= 24) {
-                        System.arraycopy(finalKeyBytes, 16, iv, 0, 8)
-                    }
-                    val cipher = Cipher.getInstance("AES/CTR/NoPadding")
-                    cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(aesKey, "AES"), IvParameterSpec(iv))
-                    javax.crypto.CipherInputStream(rawInput, cipher)
-                } else {
-                    rawInput
+                if (!resp.isSuccessful) {
+                    Log.e("MegaApiClient", "Download HTTP error code ${resp.code}: ${resp.message}")
+                    return@withContext false
                 }
+                val body = resp.body ?: run {
+                    Log.e("MegaApiClient", "Download response body is null")
+                    return@withContext false
+                }
+                val totalBytes = if (expectedSize > 0) expectedSize else body.contentLength().coerceAtLeast(1L)
+                val rawInput = body.byteStream()
 
-                inputStream.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        var read: Int
-                        var transferred = 0L
-                        while (input.read(buffer).also { read = it } != -1) {
-                            output.write(buffer, 0, read)
-                            transferred += read
-                            if (totalBytes > 0) {
-                                onProgress((transferred.toFloat() / totalBytes).coerceIn(0f, 1f))
+                val isEncrypted = finalKeyBytes != null && finalKeyBytes.isNotEmpty()
+                rawInput.use { input ->
+                    FileOutputStream(tempFile).use { fos ->
+                        java.io.BufferedOutputStream(fos, 64 * 1024).use { output ->
+                            if (isEncrypted) {
+                                val aesKey = ByteArray(16) { i ->
+                                    if (finalKeyBytes!!.size >= 32) (finalKeyBytes[i].toInt() xor finalKeyBytes[i + 16].toInt()).toByte()
+                                    else finalKeyBytes[i]
+                                }
+                                val iv = ByteArray(16)
+                                if (finalKeyBytes!!.size >= 24) {
+                                    System.arraycopy(finalKeyBytes, 16, iv, 0, 8)
+                                }
+                                val cipher = Cipher.getInstance("AES/CTR/NoPadding")
+                                cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(aesKey, "AES"), IvParameterSpec(iv))
+
+                                val inBuffer = ByteArray(64 * 1024)
+                                val outBuffer = ByteArray(64 * 1024 + 16)
+                                var read: Int
+                                var transferred = 0L
+
+                                while (input.read(inBuffer).also { read = it } != -1) {
+                                    if (read > 0) {
+                                        totalBytesRead += read
+                                        val decLen = cipher.update(inBuffer, 0, read, outBuffer, 0)
+                                        if (decLen > 0) {
+                                            output.write(outBuffer, 0, decLen)
+                                        }
+                                        transferred += read
+                                        if (totalBytes > 0) {
+                                            onProgress((transferred.toFloat() / totalBytes).coerceIn(0f, 1f))
+                                        }
+                                    }
+                                }
+                                val finalLen = cipher.doFinal(outBuffer, 0)
+                                if (finalLen > 0) {
+                                    output.write(outBuffer, 0, finalLen)
+                                }
+                            } else {
+                                val inBuffer = ByteArray(64 * 1024)
+                                var read: Int
+                                var transferred = 0L
+                                while (input.read(inBuffer).also { read = it } != -1) {
+                                    if (read > 0) {
+                                        totalBytesRead += read
+                                        output.write(inBuffer, 0, read)
+                                        transferred += read
+                                        if (totalBytes > 0) {
+                                            onProgress((transferred.toFloat() / totalBytes).coerceIn(0f, 1f))
+                                        }
+                                    }
+                                }
                             }
+                            output.flush()
                         }
                     }
                 }
             }
 
-            if (tempFile.exists() && tempFile.length() > 0) {
+            if (tempFile.exists() && (tempFile.length() > 0 || (expectedSize == 0L || totalBytesRead == 0L))) {
                 if (destinationFile.exists()) destinationFile.delete()
                 val renamed = tempFile.renameTo(destinationFile)
                 if (!renamed) {
                     tempFile.inputStream().use { input ->
                         FileOutputStream(destinationFile).use { output ->
                             input.copyTo(output)
+                            output.flush()
                         }
                     }
                     tempFile.delete()
                 }
                 onProgress(1f)
+                Log.d("MegaApiClient", "Download succeeded: ${destinationFile.absolutePath} (${destinationFile.length()} bytes)")
                 true
             } else {
                 tempFile.delete()
+                Log.e("MegaApiClient", "Download failed: temp file is empty or non-existent (read $totalBytesRead bytes, expected $expectedSize)")
                 false
             }
         } catch (e: Exception) {
-            Log.e("MegaApiClient", "Download failed", e)
+            Log.e("MegaApiClient", "Download failed with exception", e)
             false
         }
     }
@@ -904,6 +969,9 @@ class MegaApiClient(
         if (type == 3) return Pair("Caixa de Entrada", null)
         if (type == 4) return Pair("Lixeira", null)
 
+        val cacheKey = "$handle|$attrStr|$kStr"
+        decryptedAttrCache[cacheKey]?.let { return it }
+
         val currentMasterKey = masterKey
         var extractedKeyBytes: ByteArray? = null
         var extractedName: String? = null
@@ -975,7 +1043,9 @@ class MegaApiClient(
         }
 
         val finalName = extractedName ?: parseNodeName(attrStr, type, handle)
-        return Pair(finalName, extractedKeyBytes)
+        val result = Pair(finalName, extractedKeyBytes)
+        decryptedAttrCache[cacheKey] = result
+        return result
     }
 
     private fun parseNodeName(attrStr: String, type: Int, handle: String): String {
