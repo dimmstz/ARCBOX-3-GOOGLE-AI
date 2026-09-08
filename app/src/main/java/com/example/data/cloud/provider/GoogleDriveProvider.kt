@@ -44,6 +44,14 @@ class GoogleDriveProvider(
     override val isTemporarySession: Boolean
         get() = sessionManager.getSession(providerId)?.isTemporary ?: false
 
+    private data class CachedFolder(
+        val timestamp: Long,
+        val items: List<RemoteCloudFile>
+    )
+
+    private val directoryCache = java.util.concurrent.ConcurrentHashMap<String, CachedFolder>()
+    private val CACHE_TTL_MS = 60_000L
+
     private fun getCacheDir(): File = File(context.filesDir, "cloud_storage/drive")
 
     override suspend fun authenticate(
@@ -105,10 +113,17 @@ class GoogleDriveProvider(
     }
 
     override suspend fun disconnect() {
+        directoryCache.clear()
         sessionManager.removeSession(providerId)
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
+        val cacheKey = remoteSubPath.trim().removePrefix("/cloud/drive").removePrefix("/cloud/DRIVE").trim('/')
+        val cached = directoryCache[cacheKey]
+        if (cached != null && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
+            return@withContext cached.items
+        }
+
         val session = sessionManager.getSession(providerId)
         val cloudDir = getCacheDir()
         val targetLocalDir = if (remoteSubPath.isBlank()) cloudDir else File(cloudDir, remoteSubPath)
@@ -166,7 +181,9 @@ class GoogleDriveProvider(
                                 }
                             }
                             if (items.isNotEmpty()) {
-                                return@withContext items.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+                                val sorted = items.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+                                directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), sorted)
+                                return@withContext sorted
                             }
                         }
                     }
@@ -177,7 +194,7 @@ class GoogleDriveProvider(
         }
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
-        return@withContext files.map { file ->
+        val result = files.map { file ->
             RemoteCloudFile(
                 name = file.name,
                 path = file.absolutePath,
@@ -187,9 +204,13 @@ class GoogleDriveProvider(
                 mimeType = if (file.isDirectory) "resource/folder" else "application/octet-stream"
             )
         }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+
+        directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), result)
+        result
     }
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val session = sessionManager.getSession(providerId)
         val parentDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
         val newFolder = File(parentDir, folderName)
@@ -223,6 +244,7 @@ class GoogleDriveProvider(
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
         if (!localFile.exists()) return@withContext false
+        directoryCache.clear()
         val destDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
         if (!destDir.exists()) destDir.mkdirs()
 
@@ -303,6 +325,7 @@ class GoogleDriveProvider(
     }
 
     override suspend fun deleteFile(remoteFilePath: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val file = File(getCacheDir(), remoteFilePath.trimStart('/'))
         if (file.exists()) {
             if (file.isDirectory) file.deleteRecursively() else file.delete()
@@ -312,6 +335,7 @@ class GoogleDriveProvider(
     }
 
     override suspend fun renameFile(oldRemotePath: String, newName: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val file = File(getCacheDir(), oldRemotePath.trimStart('/'))
         if (!file.exists()) return@withContext false
         val newFile = File(file.parentFile, newName)
@@ -323,6 +347,7 @@ class GoogleDriveProvider(
         destRemotePath: String,
         isMove: Boolean
     ): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val src = File(getCacheDir(), sourceRemotePath.trimStart('/'))
         val dest = File(getCacheDir(), destRemotePath.trimStart('/'))
         if (!src.exists()) return@withContext false

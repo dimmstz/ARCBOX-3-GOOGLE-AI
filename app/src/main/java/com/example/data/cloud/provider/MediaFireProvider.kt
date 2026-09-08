@@ -42,6 +42,14 @@ class MediaFireProvider(
     override val isTemporarySession: Boolean
         get() = sessionManager.getSession(providerId)?.isTemporary ?: false
 
+    private data class CachedFolder(
+        val timestamp: Long,
+        val items: List<RemoteCloudFile>
+    )
+
+    private val directoryCache = java.util.concurrent.ConcurrentHashMap<String, CachedFolder>()
+    private val CACHE_TTL_MS = 60_000L
+
     private fun getCacheDir(): File = File(context.filesDir, "cloud_storage/mediafire")
 
     override suspend fun authenticate(
@@ -77,15 +85,22 @@ class MediaFireProvider(
     }
 
     override suspend fun disconnect() {
+        directoryCache.clear()
         sessionManager.removeSession(providerId)
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
+        val cacheKey = remoteSubPath.trim().removePrefix("/cloud/mediafire").removePrefix("/cloud/MEDIAFIRE").trim('/')
+        val cached = directoryCache[cacheKey]
+        if (cached != null && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
+            return@withContext cached.items
+        }
+
         val targetLocalDir = if (remoteSubPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteSubPath)
         if (!targetLocalDir.exists()) return@withContext emptyList()
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
-        return@withContext files.map { file ->
+        val result = files.map { file ->
             RemoteCloudFile(
                 name = file.name,
                 path = file.absolutePath,
@@ -95,9 +110,13 @@ class MediaFireProvider(
                 mimeType = if (file.isDirectory) "resource/folder" else "application/octet-stream"
             )
         }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+
+        directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), result)
+        result
     }
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val parentDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
         val newFolder = File(parentDir, folderName)
         newFolder.mkdirs()
@@ -109,6 +128,7 @@ class MediaFireProvider(
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
         if (!localFile.exists()) return@withContext false
+        directoryCache.clear()
         val destDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
         if (!destDir.exists()) destDir.mkdirs()
 
@@ -172,6 +192,7 @@ class MediaFireProvider(
     }
 
     override suspend fun deleteFile(remoteFilePath: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val file = File(getCacheDir(), remoteFilePath.trimStart('/'))
         if (file.exists()) {
             if (file.isDirectory) file.deleteRecursively() else file.delete()
@@ -181,6 +202,7 @@ class MediaFireProvider(
     }
 
     override suspend fun renameFile(oldRemotePath: String, newName: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val file = File(getCacheDir(), oldRemotePath.trimStart('/'))
         if (!file.exists()) return@withContext false
         val newFile = File(file.parentFile, newName)
@@ -192,6 +214,7 @@ class MediaFireProvider(
         destRemotePath: String,
         isMove: Boolean
     ): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val src = File(getCacheDir(), sourceRemotePath.trimStart('/'))
         val dest = File(getCacheDir(), destRemotePath.trimStart('/'))
         if (!src.exists()) return@withContext false

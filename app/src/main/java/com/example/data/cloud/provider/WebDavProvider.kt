@@ -46,6 +46,14 @@ class WebDavProvider(
     override val isTemporarySession: Boolean
         get() = sessionManager.getSession(providerId)?.isTemporary ?: false
 
+    private data class CachedFolder(
+        val timestamp: Long,
+        val items: List<RemoteCloudFile>
+    )
+
+    private val directoryCache = java.util.concurrent.ConcurrentHashMap<String, CachedFolder>()
+    private val CACHE_TTL_MS = 60_000L
+
     private fun getCacheDir(): File = File(context.filesDir, "cloud_storage/webdav")
 
     private fun buildWebDavUrl(baseUrl: String, subPath: String): String {
@@ -150,10 +158,17 @@ class WebDavProvider(
     }
 
     override suspend fun disconnect() {
+        directoryCache.clear()
         sessionManager.removeSession(providerId)
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
+        val cacheKey = remoteSubPath.trim().removePrefix("/cloud/webdav").removePrefix("/cloud/WEBDAV").trim('/')
+        val cached = directoryCache[cacheKey]
+        if (cached != null && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
+            return@withContext cached.items
+        }
+
         val session = sessionManager.getSession(providerId)
         val cloudDir = getCacheDir()
         val targetLocalDir = if (remoteSubPath.isBlank()) cloudDir else File(cloudDir, remoteSubPath)
@@ -198,6 +213,7 @@ class WebDavProvider(
                                     } catch (_: Exception) {}
                                 }
                             }
+                            directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), parsedItems)
                             return@withContext parsedItems
                         }
                     }
@@ -209,7 +225,7 @@ class WebDavProvider(
 
         // Fallback to local cache files
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
-        return@withContext files.map { file ->
+        val result = files.map { file ->
             RemoteCloudFile(
                 name = file.name,
                 path = file.absolutePath,
@@ -219,6 +235,9 @@ class WebDavProvider(
                 mimeType = if (file.isDirectory) "resource/folder" else "application/octet-stream"
             )
         }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+
+        directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), result)
+        result
     }
 
     private fun parseWebDavPropfindResponse(xml: String, requestUrl: String): List<RemoteCloudFile> {
@@ -314,6 +333,7 @@ class WebDavProvider(
     }
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val session = sessionManager.getSession(providerId)
         val parentDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
         val newFolder = File(parentDir, folderName)
@@ -346,6 +366,7 @@ class WebDavProvider(
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
         if (!localFile.exists()) return@withContext false
+        directoryCache.clear()
         val destDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
         if (!destDir.exists()) destDir.mkdirs()
 
@@ -465,6 +486,7 @@ class WebDavProvider(
     }
 
     override suspend fun deleteFile(remoteFilePath: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val file = File(getCacheDir(), remoteFilePath.trimStart('/'))
         val localDeleted = if (file.exists()) {
             if (file.isDirectory) file.deleteRecursively() else file.delete()
@@ -492,6 +514,7 @@ class WebDavProvider(
     }
 
     override suspend fun renameFile(oldRemotePath: String, newName: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val file = File(getCacheDir(), oldRemotePath.trimStart('/'))
         val newFile = File(file.parentFile, newName)
         val localRenamed = if (file.exists()) file.renameTo(newFile) else false
@@ -526,6 +549,7 @@ class WebDavProvider(
         destRemotePath: String,
         isMove: Boolean
     ): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val src = File(getCacheDir(), sourceRemotePath.trimStart('/'))
         val dest = File(getCacheDir(), destRemotePath.trimStart('/'))
         if (!src.exists()) return@withContext false

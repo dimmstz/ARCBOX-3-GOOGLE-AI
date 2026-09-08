@@ -42,6 +42,14 @@ class OneDriveProvider(
     override val isTemporarySession: Boolean
         get() = sessionManager.getSession(providerId)?.isTemporary ?: false
 
+    private data class CachedFolder(
+        val timestamp: Long,
+        val items: List<RemoteCloudFile>
+    )
+
+    private val directoryCache = java.util.concurrent.ConcurrentHashMap<String, CachedFolder>()
+    private val CACHE_TTL_MS = 60_000L
+
     private fun getCacheDir(): File = File(context.filesDir, "cloud_storage/onedrive")
 
     override suspend fun authenticate(
@@ -103,10 +111,17 @@ class OneDriveProvider(
     }
 
     override suspend fun disconnect() {
+        directoryCache.clear()
         sessionManager.removeSession(providerId)
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
+        val cacheKey = remoteSubPath.trim().removePrefix("/cloud/onedrive").removePrefix("/cloud/ONEDRIVE").trim('/')
+        val cached = directoryCache[cacheKey]
+        if (cached != null && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
+            return@withContext cached.items
+        }
+
         val session = sessionManager.getSession(providerId)
         val cloudDir = getCacheDir()
         val targetLocalDir = if (remoteSubPath.isBlank()) cloudDir else File(cloudDir, remoteSubPath)
@@ -169,7 +184,9 @@ class OneDriveProvider(
                                 }
                             }
                             if (items.isNotEmpty()) {
-                                return@withContext items.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+                                val sorted = items.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+                                directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), sorted)
+                                return@withContext sorted
                             }
                         }
                     }
@@ -180,7 +197,7 @@ class OneDriveProvider(
         }
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
-        return@withContext files.map { file ->
+        val result = files.map { file ->
             RemoteCloudFile(
                 name = file.name,
                 path = file.absolutePath,
@@ -190,9 +207,13 @@ class OneDriveProvider(
                 mimeType = if (file.isDirectory) "resource/folder" else "application/octet-stream"
             )
         }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+
+        directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), result)
+        result
     }
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val session = sessionManager.getSession(providerId)
         val parentDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
         val newFolder = File(parentDir, folderName)
@@ -234,6 +255,7 @@ class OneDriveProvider(
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
         if (!localFile.exists()) return@withContext false
+        directoryCache.clear()
         val destDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
         if (!destDir.exists()) destDir.mkdirs()
 
@@ -358,6 +380,7 @@ class OneDriveProvider(
     }
 
     override suspend fun deleteFile(remoteFilePath: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val file = File(getCacheDir(), remoteFilePath.trimStart('/'))
         val localDeleted = if (file.exists()) {
             if (file.isDirectory) file.deleteRecursively() else file.delete()
@@ -386,6 +409,7 @@ class OneDriveProvider(
     }
 
     override suspend fun renameFile(oldRemotePath: String, newName: String): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val file = File(getCacheDir(), oldRemotePath.trimStart('/'))
         val newFile = File(file.parentFile, newName)
         val localRenamed = if (file.exists()) file.renameTo(newFile) else false
@@ -421,6 +445,7 @@ class OneDriveProvider(
         destRemotePath: String,
         isMove: Boolean
     ): Boolean = withContext(Dispatchers.IO) {
+        directoryCache.clear()
         val src = File(getCacheDir(), sourceRemotePath.trimStart('/'))
         val dest = File(getCacheDir(), destRemotePath.trimStart('/'))
         if (!src.exists()) return@withContext false
