@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.7-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.7"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.8-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.8"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,11 +18,27 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.7
+## 🚀 Novidades da Versão v1.0.8
 
-- 🎛️ **Botão Liga/Desliga para Transições**: Adicionado um interruptor moderno (*Switch*) diretamente no cabeçalho do cartão "Transição entre Pastas" nas Configurações. Quando desligado, a navegação entre pastas torna-se instantânea; quando ligado, exibe os 5 estilos visuais disponíveis com animação de expansão suave.
-- ⏱️ **Tempo de Transição Calibrado**: Aumentada a duração das animações entre pastas (340ms a 400ms) com curvas de interpolação *Emphasized Decelerate* e *FastOutSlowInEasing*, permitindo perceber claramente a dinâmica e o movimento de profundidade ao navegar para frente e para trás.
-- 🚀 **Rolagem Rápida a 120Hz Mantida**: Algoritmo de rolagem inteligente com fading suave na barra de rolagem e congelamento temporário de thumbnails pesadas durante o movimento rápido de arrasto (*fling*).
+- ☁️ **Correção Completa do Download MEGA Cloud**:
+  - Resolução robusta de handles e diretórios remotos (`findHandleFromPath`) com suporte a nós com URLs codificadas e identificadores diretos.
+  - Extração e descriptografia direta de chaves AES-CTR a partir da carga útil do MEGA quando não disponíveis no cache de nós.
+  - Gravação segura e atômica com fallback automático de stream para arquivos temporários e limpeza garantida.
+  - Nova tentativa automática e revalidação de sessão (`fetchNodes`) caso o link de download expire ou responda com erro temporário.
+- 🎨 **Splash Screen e Ícone do App Ampliados**:
+  - Nova Splash Screen customizada com `@drawable/splash_icon_large` em alta resolução (160dp) para Android 12+ (`values-v31/themes.xml`) e fundo harmônico `#0B132B`.
+  - Ícone adaptativo de primeiro plano ajustado de 64dp para 96dp (`ic_launcher_foreground.xml`), garantindo nitidez e visibilidade ideal na tela inicial.
+- 🛠️ **Estabilidade & Sincronização**:
+  - Aprimoramentos no fluxo de download e exportação de itens de armazenamento em nuvem para a pasta de Downloads local.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.7
+- 🎛️ **Botão Liga/Desliga para Transições**: Interruptor moderno (*Switch*) no cabeçalho do cartão "Transição entre Pastas" nas Configurações.
+- ⏱️ **Tempo de Transição Calibrado**: Duração aumentada (340ms a 400ms) com curvas *Emphasized Decelerate* e *FastOutSlowInEasing*.
+- 🚀 **Rolagem Rápida a 120Hz**: Algoritmo com fading suave e congelamento temporário de thumbnails durante fling rápido.
 
 ---
 
