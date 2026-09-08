@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -54,7 +55,9 @@ fun ArcboxSettingsModal(
     currentAccent: AccentColorOption,
     customAccentColorHex: Long = 0xFF4F46E5L,
     currentFolderTransition: FolderTransitionType = FolderTransitionType.MATERIAL_SLIDE,
+    folderTransitionsEnabled: Boolean = true,
     onSelectFolderTransition: (FolderTransitionType) -> Unit = {},
+    onToggleFolderTransitionsEnabled: (Boolean) -> Unit = {},
     deletePermanently: Boolean,
     onToggleDeletePermanently: (Boolean) -> Unit,
     confirmDelete: Boolean,
@@ -538,16 +541,31 @@ fun ArcboxSettingsModal(
                     // CATEGORY: TRANSIÇÕES ENTRE PASTAS (5 ESTILOS SUAVES)
                     SettingsSectionCard(
                         title = "Transição entre Pastas",
-                        icon = Icons.Default.Animation
+                        icon = Icons.Default.Animation,
+                        action = {
+                            Switch(
+                                checked = folderTransitionsEnabled,
+                                onCheckedChange = { onToggleFolderTransitionsEnabled(it) },
+                                modifier = Modifier.testTag("switch_folder_transitions")
+                            )
+                        }
                     ) {
                         Text(
-                            text = "Selecione o estilo visual e dinâmica da transição suave de 120Hz ao abrir pastas e voltar aos diretórios anteriores.",
+                            text = if (folderTransitionsEnabled)
+                                "Selecione o estilo visual e dinâmica da transição suave de abertura e retorno de diretórios."
+                            else
+                                "Transições desativadas. A navegação entre pastas será direta e instantânea sem animações.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 16.sp
                         )
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = folderTransitionsEnabled,
+                            enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                            exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
 
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -651,7 +669,9 @@ fun ArcboxSettingsModal(
                                     }
                                 }
                             }
+                            }
                         }
+                    }
                     }
 
                     // CATEGORY 2: DESEMPENHO & CACHE
@@ -1055,6 +1075,7 @@ fun ArcboxSettingsModal(
 fun SettingsSectionCard(
     title: String,
     icon: ImageVector,
+    action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
@@ -1078,8 +1099,12 @@ fun SettingsSectionCard(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
+                if (action != null) {
+                    action()
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), modifier = Modifier.padding(bottom = 12.dp))
             content()

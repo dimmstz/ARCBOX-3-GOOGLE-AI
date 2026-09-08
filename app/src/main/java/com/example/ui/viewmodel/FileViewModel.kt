@@ -101,6 +101,7 @@ data class FileUiState(
     val showHiddenFiles: Boolean = false,
     val showExtensions: Boolean = true,
     val parallelDirectoryReading: Boolean = true,
+    val folderTransitionsEnabled: Boolean = true,
     val folderTransition: FolderTransitionType = FolderTransitionType.MATERIAL_SLIDE,
     val compressionLevel: String = "Normal",
     val biometricLock: Boolean = false,
@@ -160,6 +161,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             val showHiddenFiles = prefs.getBoolean("show_hidden_files", false)
             val showExtensions = prefs.getBoolean("show_extensions", true)
             val parallelDirectoryReading = prefs.getBoolean("parallel_directory_reading", true)
+            val folderTransitionsEnabled = prefs.getBoolean("folder_transitions_enabled", true)
             val savedFolderTransitionName = prefs.getString("folder_transition", FolderTransitionType.MATERIAL_SLIDE.name) ?: FolderTransitionType.MATERIAL_SLIDE.name
             val loadedFolderTransition = try { FolderTransitionType.valueOf(savedFolderTransitionName) } catch (_: Exception) { FolderTransitionType.MATERIAL_SLIDE }
             val compressionLevel = prefs.getString("compression_level", "Normal") ?: "Normal"
@@ -210,6 +212,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 showHiddenFiles = showHiddenFiles,
                 showExtensions = showExtensions,
                 parallelDirectoryReading = parallelDirectoryReading,
+                folderTransitionsEnabled = folderTransitionsEnabled,
                 folderTransition = loadedFolderTransition,
                 compressionLevel = compressionLevel,
                 biometricLock = biometricLock,
@@ -1017,12 +1020,18 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(folderTransition = transition) }
     }
 
+    fun setFolderTransitionsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("folder_transitions_enabled", enabled).apply()
+        _uiState.update { it.copy(folderTransitionsEnabled = enabled) }
+    }
+
     fun restoreDefaultSettings() {
         prefs.edit()
             .putBoolean("show_hidden_files", false)
             .putBoolean("show_extensions", true)
             .putBoolean("show_thumbnails", true)
             .putBoolean("parallel_directory_reading", true)
+            .putBoolean("folder_transitions_enabled", true)
             .putString("folder_transition", FolderTransitionType.MATERIAL_SLIDE.name)
             .putString("compression_level", "Normal")
             .putBoolean("biometric_lock", false)
@@ -1041,6 +1050,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 showExtensions = true,
                 showThumbnails = true,
                 parallelDirectoryReading = true,
+                folderTransitionsEnabled = true,
                 folderTransition = FolderTransitionType.MATERIAL_SLIDE,
                 compressionLevel = "Normal",
                 biometricLock = false,

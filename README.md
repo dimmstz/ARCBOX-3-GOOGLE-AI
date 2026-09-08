@@ -9,12 +9,20 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.6-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.6"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.7-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.7"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
   <img src="https://img.shields.io/badge/Licen%C3%A7a-MIT-blue.svg?style=flat-square" alt="Licença">
 </p>
+
+---
+
+## 🚀 Novidades da Versão v1.0.7
+
+- 🎛️ **Botão Liga/Desliga para Transições**: Adicionado um interruptor moderno (*Switch*) diretamente no cabeçalho do cartão "Transição entre Pastas" nas Configurações. Quando desligado, a navegação entre pastas torna-se instantânea; quando ligado, exibe os 5 estilos visuais disponíveis com animação de expansão suave.
+- ⏱️ **Tempo de Transição Calibrado**: Aumentada a duração das animações entre pastas (340ms a 400ms) com curvas de interpolação *Emphasized Decelerate* e *FastOutSlowInEasing*, permitindo perceber claramente a dinâmica e o movimento de profundidade ao navegar para frente e para trás.
+- 🚀 **Rolagem Rápida a 120Hz Mantida**: Algoritmo de rolagem inteligente com fading suave na barra de rolagem e congelamento temporário de thumbnails pesadas durante o movimento rápido de arrasto (*fling*).
 
 ---
 

@@ -54,13 +54,18 @@ val ArcboxModalExit = scaleOut(
 
 /**
  * Returns a high-performance, butter-smooth ContentTransform for folder transitions.
- * Durations and offsets are carefully tuned to avoid GPU overdraw and texture thrashing.
+ * Timings and offsets are calibrated for clearly perceptible, fluid motion (340-400ms).
  */
 fun getOptimizedFolderTransition(
     type: FolderTransitionType,
     initialState: String,
-    targetState: String
+    targetState: String,
+    enabled: Boolean = true
 ): ContentTransform {
+    if (!enabled) {
+        return (fadeIn(animationSpec = tween(0)) togetherWith fadeOut(animationSpec = tween(0)))
+    }
+
     val initialDepth = initialState.count { it == '/' }
     val targetDepth = targetState.count { it == '/' }
     val isSubfolder = (targetState.startsWith(initialState) && targetState.length > initialState.length) || targetDepth > initialDepth
@@ -69,52 +74,58 @@ fun getOptimizedFolderTransition(
     return when (type) {
         FolderTransitionType.MATERIAL_SLIDE -> {
             if (isSubfolder) {
-                // Forward navigation: entering from right (+16%), exiting to left (-8%)
+                // Forward navigation: entering from right (+38%), exiting to left (-18%) with visible depth
                 (slideInHorizontally(
-                    animationSpec = tween(durationMillis = 210, easing = M3EmphasizedDecel),
-                    initialOffsetX = { fullWidth -> (fullWidth * 0.16f).toInt() }
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialOffsetX = { fullWidth -> (fullWidth * 0.38f).toInt() }
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 260, easing = LinearOutSlowInEasing)
                 ) + scaleIn(
-                    animationSpec = tween(durationMillis = 210, easing = M3EmphasizedDecel),
-                    initialScale = 0.98f
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialScale = 0.92f
                 )).togetherWith(
                     slideOutHorizontally(
-                        animationSpec = tween(durationMillis = 160, easing = M3EmphasizedAccel),
-                        targetOffsetX = { fullWidth -> -(fullWidth * 0.08f).toInt() }
+                        animationSpec = tween(durationMillis = 320, easing = M3EmphasizedAccel),
+                        targetOffsetX = { fullWidth -> -(fullWidth * 0.18f).toInt() }
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 130, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 220, easing = FastOutLinearInEasing)
+                    ) + scaleOut(
+                        animationSpec = tween(durationMillis = 320, easing = M3EmphasizedAccel),
+                        targetScale = 0.94f
                     )
                 ).apply {
                     targetContentZIndex = 1f
                 }
             } else if (isParent) {
-                // Backward navigation: entering from left (-8%), exiting to right (+16%)
+                // Backward navigation: entering from left (-18%), exiting to right (+38%)
                 (slideInHorizontally(
-                    animationSpec = tween(durationMillis = 210, easing = M3EmphasizedDecel),
-                    initialOffsetX = { fullWidth -> -(fullWidth * 0.08f).toInt() }
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialOffsetX = { fullWidth -> -(fullWidth * 0.18f).toInt() }
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 260, easing = LinearOutSlowInEasing)
+                ) + scaleIn(
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialScale = 1.05f
                 )).togetherWith(
                     slideOutHorizontally(
-                        animationSpec = tween(durationMillis = 170, easing = M3EmphasizedAccel),
-                        targetOffsetX = { fullWidth -> (fullWidth * 0.16f).toInt() }
+                        animationSpec = tween(durationMillis = 320, easing = M3EmphasizedAccel),
+                        targetOffsetX = { fullWidth -> (fullWidth * 0.38f).toInt() }
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 130, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 220, easing = FastOutLinearInEasing)
                     ) + scaleOut(
-                        animationSpec = tween(durationMillis = 170, easing = M3EmphasizedAccel),
-                        targetScale = 0.98f
+                        animationSpec = tween(durationMillis = 320, easing = M3EmphasizedAccel),
+                        targetScale = 1.05f
                     )
                 ).apply {
                     targetContentZIndex = -1f
                 }
             } else {
                 // Peer folder navigation
-                (fadeIn(animationSpec = tween(durationMillis = 170, easing = LinearOutSlowInEasing)) +
-                 slideInHorizontally(animationSpec = tween(durationMillis = 190, easing = M3EmphasizedDecel)) { (it * 0.06f).toInt() }
+                (fadeIn(animationSpec = tween(durationMillis = 260, easing = LinearOutSlowInEasing)) +
+                 slideInHorizontally(animationSpec = tween(durationMillis = 320, easing = M3EmphasizedDecel)) { (it * 0.18f).toInt() }
                 ).togetherWith(
-                    fadeOut(animationSpec = tween(durationMillis = 140, easing = FastOutLinearInEasing)) +
-                    slideOutHorizontally(animationSpec = tween(durationMillis = 160, easing = M3EmphasizedAccel)) { -(it * 0.06f).toInt() }
+                    fadeOut(animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)) +
+                    slideOutHorizontally(animationSpec = tween(durationMillis = 280, easing = M3EmphasizedAccel)) { -(it * 0.18f).toInt() }
                 )
             }
         }
@@ -122,48 +133,48 @@ fun getOptimizedFolderTransition(
         FolderTransitionType.ZOOM_EXPAND -> {
             if (isSubfolder) {
                 (scaleIn(
-                    animationSpec = tween(durationMillis = 210, easing = M3EmphasizedDecel),
-                    initialScale = 0.92f
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialScale = 0.78f
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 280, easing = LinearOutSlowInEasing)
                 )).togetherWith(
                     scaleOut(
-                        animationSpec = tween(durationMillis = 160, easing = M3EmphasizedAccel),
-                        targetScale = 1.05f
+                        animationSpec = tween(durationMillis = 320, easing = M3EmphasizedAccel),
+                        targetScale = 1.18f
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 130, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 220, easing = FastOutLinearInEasing)
                     )
                 ).apply {
                     targetContentZIndex = 1f
                 }
             } else if (isParent) {
                 (scaleIn(
-                    animationSpec = tween(durationMillis = 210, easing = M3EmphasizedDecel),
-                    initialScale = 1.05f
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialScale = 1.18f
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 280, easing = LinearOutSlowInEasing)
                 )).togetherWith(
                     scaleOut(
-                        animationSpec = tween(durationMillis = 160, easing = M3EmphasizedAccel),
-                        targetScale = 0.92f
+                        animationSpec = tween(durationMillis = 320, easing = M3EmphasizedAccel),
+                        targetScale = 0.78f
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 130, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 220, easing = FastOutLinearInEasing)
                     )
                 ).apply {
                     targetContentZIndex = -1f
                 }
             } else {
                 (scaleIn(
-                    animationSpec = tween(durationMillis = 180, easing = M3EmphasizedDecel),
-                    initialScale = 0.96f
+                    animationSpec = tween(durationMillis = 300, easing = M3EmphasizedDecel),
+                    initialScale = 0.90f
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 150, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 240, easing = LinearOutSlowInEasing)
                 )).togetherWith(
                     scaleOut(
-                        animationSpec = tween(durationMillis = 150, easing = M3EmphasizedAccel),
-                        targetScale = 1.04f
+                        animationSpec = tween(durationMillis = 280, easing = M3EmphasizedAccel),
+                        targetScale = 1.08f
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 120, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
                     )
                 )
             }
@@ -172,58 +183,64 @@ fun getOptimizedFolderTransition(
         FolderTransitionType.VERTICAL_SLIDE -> {
             if (isSubfolder) {
                 (slideInVertically(
-                    animationSpec = tween(durationMillis = 210, easing = M3EmphasizedDecel),
-                    initialOffsetY = { fullHeight -> (fullHeight * 0.14f).toInt() }
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialOffsetY = { fullHeight -> (fullHeight * 0.35f).toInt() }
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 260, easing = LinearOutSlowInEasing)
+                ) + scaleIn(
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialScale = 0.93f
                 )).togetherWith(
                     slideOutVertically(
-                        animationSpec = tween(durationMillis = 160, easing = M3EmphasizedAccel),
-                        targetOffsetY = { fullHeight -> -(fullHeight * 0.08f).toInt() }
+                        animationSpec = tween(durationMillis = 320, easing = M3EmphasizedAccel),
+                        targetOffsetY = { fullHeight -> -(fullHeight * 0.18f).toInt() }
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 130, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
                     )
                 ).apply {
                     targetContentZIndex = 1f
                 }
             } else if (isParent) {
                 (slideInVertically(
-                    animationSpec = tween(durationMillis = 210, easing = M3EmphasizedDecel),
-                    initialOffsetY = { fullHeight -> -(fullHeight * 0.08f).toInt() }
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialOffsetY = { fullHeight -> -(fullHeight * 0.18f).toInt() }
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 260, easing = LinearOutSlowInEasing)
+                ) + scaleIn(
+                    animationSpec = tween(durationMillis = 380, easing = M3EmphasizedDecel),
+                    initialScale = 1.04f
                 )).togetherWith(
                     slideOutVertically(
-                        animationSpec = tween(durationMillis = 160, easing = M3EmphasizedAccel),
-                        targetOffsetY = { fullHeight -> (fullHeight * 0.14f).toInt() }
+                        animationSpec = tween(durationMillis = 320, easing = M3EmphasizedAccel),
+                        targetOffsetY = { fullHeight -> (fullHeight * 0.35f).toInt() }
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 130, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
                     )
                 ).apply {
                     targetContentZIndex = -1f
                 }
             } else {
-                (fadeIn(animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing)) +
-                 slideInVertically(animationSpec = tween(durationMillis = 180, easing = M3EmphasizedDecel)) { (it * 0.05f).toInt() }
+                (fadeIn(animationSpec = tween(durationMillis = 260, easing = LinearOutSlowInEasing)) +
+                 slideInVertically(animationSpec = tween(durationMillis = 320, easing = M3EmphasizedDecel)) { (it * 0.12f).toInt() }
                 ).togetherWith(
-                    fadeOut(animationSpec = tween(durationMillis = 130, easing = FastOutLinearInEasing)) +
-                    slideOutVertically(animationSpec = tween(durationMillis = 150, easing = M3EmphasizedAccel)) { -(it * 0.05f).toInt() }
+                    fadeOut(animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)) +
+                    slideOutVertically(animationSpec = tween(durationMillis = 280, easing = M3EmphasizedAccel)) { -(it * 0.12f).toInt() }
                 )
             }
         }
 
         FolderTransitionType.FADE_THROUGH -> {
             (fadeIn(
-                animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing)
+                animationSpec = tween(durationMillis = 320, easing = LinearOutSlowInEasing)
             ) + scaleIn(
-                animationSpec = tween(durationMillis = 180, easing = M3EmphasizedDecel),
-                initialScale = 0.97f
+                animationSpec = tween(durationMillis = 340, easing = M3EmphasizedDecel),
+                initialScale = 0.90f
             )).togetherWith(
                 fadeOut(
-                    animationSpec = tween(durationMillis = 130, easing = FastOutLinearInEasing)
+                    animationSpec = tween(durationMillis = 220, easing = FastOutLinearInEasing)
                 ) + scaleOut(
-                    animationSpec = tween(durationMillis = 130, easing = M3EmphasizedAccel),
-                    targetScale = 1.02f
+                    animationSpec = tween(durationMillis = 240, easing = M3EmphasizedAccel),
+                    targetScale = 1.06f
                 )
             )
         }
@@ -231,48 +248,48 @@ fun getOptimizedFolderTransition(
         FolderTransitionType.STACK_OVERLAY -> {
             if (isSubfolder) {
                 (slideInHorizontally(
-                    animationSpec = tween(durationMillis = 220, easing = M3EmphasizedDecel),
-                    initialOffsetX = { fullWidth -> (fullWidth * 0.65f).toInt() }
+                    animationSpec = tween(durationMillis = 400, easing = M3EmphasizedDecel),
+                    initialOffsetX = { fullWidth -> fullWidth }
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 140, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing)
                 )).togetherWith(
                     scaleOut(
-                        animationSpec = tween(durationMillis = 220, easing = M3EmphasizedAccel),
-                        targetScale = 0.95f
+                        animationSpec = tween(durationMillis = 360, easing = M3EmphasizedAccel),
+                        targetScale = 0.90f
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 160, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 260, easing = FastOutLinearInEasing)
                     )
                 ).apply {
                     targetContentZIndex = 2f
                 }
             } else if (isParent) {
                 (scaleIn(
-                    animationSpec = tween(durationMillis = 220, easing = M3EmphasizedDecel),
-                    initialScale = 0.95f
+                    animationSpec = tween(durationMillis = 400, easing = M3EmphasizedDecel),
+                    initialScale = 0.90f
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 260, easing = LinearOutSlowInEasing)
                 )).togetherWith(
                     slideOutHorizontally(
-                        animationSpec = tween(durationMillis = 200, easing = M3EmphasizedAccel),
-                        targetOffsetX = { fullWidth -> (fullWidth * 0.65f).toInt() }
+                        animationSpec = tween(durationMillis = 360, easing = M3EmphasizedAccel),
+                        targetOffsetX = { fullWidth -> fullWidth }
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 140, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 220, easing = FastOutLinearInEasing)
                     )
                 ).apply {
                     targetContentZIndex = -1f
                 }
             } else {
                 (slideInHorizontally(
-                    animationSpec = tween(durationMillis = 180, easing = M3EmphasizedDecel),
-                    initialOffsetX = { (it * 0.15f).toInt() }
+                    animationSpec = tween(durationMillis = 320, easing = M3EmphasizedDecel),
+                    initialOffsetX = { (it * 0.30f).toInt() }
                 ) + fadeIn(
-                    animationSpec = tween(durationMillis = 150, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 240, easing = LinearOutSlowInEasing)
                 )).togetherWith(
                     slideOutHorizontally(
-                        animationSpec = tween(durationMillis = 150, easing = M3EmphasizedAccel),
-                        targetOffsetX = { -(it * 0.15f).toInt() }
+                        animationSpec = tween(durationMillis = 280, easing = M3EmphasizedAccel),
+                        targetOffsetX = { -(it * 0.30f).toInt() }
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 130, easing = FastOutLinearInEasing)
+                        animationSpec = tween(durationMillis = 200, easing = FastOutLinearInEasing)
                     )
                 )
             }

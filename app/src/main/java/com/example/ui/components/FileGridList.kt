@@ -125,6 +125,7 @@ fun ArcboxFileGridList(
     onToggleGlobalSearch: () -> Unit = {},
     currentPath: String = "",
     folderTransition: FolderTransitionType = FolderTransitionType.MATERIAL_SLIDE,
+    folderTransitionsEnabled: Boolean = true,
     tempZipSourcePath: String? = null,
     onExtractIndividual: ((FileItem) -> Unit)? = null,
     onUninstallApp: ((String) -> Unit)? = null,
@@ -270,7 +271,8 @@ fun ArcboxFileGridList(
                     getOptimizedFolderTransition(
                         type = folderTransition,
                         initialState = initialState,
-                        targetState = targetState
+                        targetState = targetState,
+                        enabled = folderTransitionsEnabled
                     )
                 },
                 label = "FolderTransition",
