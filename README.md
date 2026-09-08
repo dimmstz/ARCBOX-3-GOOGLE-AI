@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.8-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.8"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.9-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.9"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,22 +18,22 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.8
+## 🚀 Novidades da Versão v1.0.9
 
-- ☁️ **Correção Completa do Download MEGA Cloud**:
-  - Resolução robusta de handles e diretórios remotos (`findHandleFromPath`) com suporte a nós com URLs codificadas e identificadores diretos.
-  - Extração e descriptografia direta de chaves AES-CTR a partir da carga útil do MEGA quando não disponíveis no cache de nós.
-  - Gravação segura e atômica com fallback automático de stream para arquivos temporários e limpeza garantida.
-  - Nova tentativa automática e revalidação de sessão (`fetchNodes`) caso o link de download expire ou responda com erro temporário.
-- 🎨 **Splash Screen e Ícone do App Ampliados**:
-  - Nova Splash Screen customizada com `@drawable/splash_icon_large` em alta resolução (160dp) para Android 12+ (`values-v31/themes.xml`) e fundo harmônico `#0B132B`.
-  - Ícone adaptativo de primeiro plano ajustado de 64dp para 96dp (`ic_launcher_foreground.xml`), garantindo nitidez e visibilidade ideal na tela inicial.
-- 🛠️ **Estabilidade & Sincronização**:
-  - Aprimoramentos no fluxo de download e exportação de itens de armazenamento em nuvem para a pasta de Downloads local.
+- 🎨 **Splash Screen com Fundo Branco**: O fundo de abertura atrás do ícone da aplicação foi ajustado para branco puro (`@android:color/white`) em todas as versões do Android (incluindo Android 12+ / Splash Screen API), garantindo contraste e visual limpo na inicialização.
+- ☁️ **Correção Crítica no Download do MEGA Cloud**:
+  - Desacoplamento da extração da chave de decodificação AES-CTR em relação aos atributos do nome do arquivo.
+  - Prevenção de perda de chave (`file key`) durante downloads de arquivos com nomes codificados ou transitórios.
+  - Streaming e decodificação contínua em tempo real com integridade de dados garantida.
+- ⚡ **Otimizações Gerais**: Refinamento de estabilidade na transição de telas e gerenciamento de cache de arquivos em nuvem.
 
 ---
 
 ## 📋 Histórico de Versões
+
+### v1.0.8
+- ☁️ **Download MEGA Cloud**: Suporte aprimorado a handles diretos, gravação atômica em arquivos temporários e revalidação automática de nós.
+- 🎨 **Splash e Ícone Adaptativo**: Ícone de abertura ampliado (160dp) e ícone adaptativo elevado de 64dp para 96dp.
 
 ### v1.0.7
 - 🎛️ **Botão Liga/Desliga para Transições**: Interruptor moderno (*Switch*) no cabeçalho do cartão "Transição entre Pastas" nas Configurações.
