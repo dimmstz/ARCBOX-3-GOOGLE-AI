@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.5-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.5"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.6-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.6"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -20,13 +20,13 @@
 
 ## 🚀 Sobre o ArcBox
 
-O **ArcBox** é um gerenciador de arquivos nativo para Android desenvolvido com foco em desempenho extremo, privacidade, design Material 3 e independência da Google Play Store através de um sistema nativo de auto-atualização conectado diretamente às **GitHub Releases**.
+O **ArcBox** é um gerenciador de arquivos nativo para Android desenvolvido com foco em desempenho extremo, fluidez a 120Hz, privacidade, design Material 3 e independência da Google Play Store através de um sistema nativo de auto-atualização conectado diretamente às **GitHub Releases**.
 
 ---
 
 ## ✨ Principais Funcionalidades
 
-- 📁 **Navegação de Arquivos Completa**: Gerenciamento de arquivos e pastas internos, cartão SD, OTG e partições de sistema com Root.
+- 📁 **Navegação Ultrarrápida de Arquivos**: Gerenciamento de arquivos e pastas internos, cartão SD, OTG e partições de sistema com Root com rolagem ultra suave (zero recomposição) e transições contextuais aceleradas por hardware.
 - ⚡ **Auto-Update via GitHub Releases**:
   - Consulta automática e silenciosa da versão mais recente via API oficial do GitHub.
   - Download em background com barra de progresso e cancelamento.
@@ -40,7 +40,8 @@ O **ArcBox** é um gerenciador de arquivos nativo para Android desenvolvido com 
 - 🎨 **Personalização Material Design 3**:
   - Tema Claro, Escuro e Dinâmico (Monet).
   - Cores de destaque customizáveis (Violeta, Esmeralda, Oceano, Rubi, Âmbar).
-  - Transições fluidas de pastas (Slide, Fade, Zoom, Efeito Pilha).
+  - Transições fluidas e dinâmicas de pastas com curvas M3 e profundidade de navegação (Slide, Fade, Zoom, Efeito Pilha).
+  - Barra de rolagem rápida suave com fading automático.
 - 🗑️ **Lixeira Inteligente**: Recuperação rápida de arquivos excluídos com limpeza automática configurável.
 - 📊 **Dashboard de Armazenamento**: Gráficos visuais de ocupação por tipo de mídia (Vídeos, Imagens, Áudios, Documentos, APKs).
 
