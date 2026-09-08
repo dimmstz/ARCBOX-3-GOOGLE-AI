@@ -35,7 +35,7 @@ class FileRepository(private val context: Context) {
     private val trashDao = db.trashDao()
     private val favoriteDao = db.favoriteDao()
     private val prefs = context.getSharedPreferences("arcbox_prefs", Context.MODE_PRIVATE)
-    private val cloudStorageService = com.example.data.cloud.CloudStorageService.getInstance(context)
+    val cloudStorageService = com.example.data.cloud.CloudStorageService.getInstance(context)
     val safCloudManager = com.example.data.cloud.SafCloudManager(context)
     private val dirCountCache = ConcurrentHashMap<String, Pair<Long, Int>>()
     private var cachedVolumes: List<StorageVolume>? = null
@@ -718,7 +718,7 @@ class FileRepository(private val context: Context) {
                         }
                     }
 
-                    if (items.isEmpty() && !directoryPath.startsWith("/cloud/")) {
+                    if (items.isEmpty()) {
                         val files = if (targetDir.exists() && targetDir.isDirectory) {
                             targetDir.listFiles()
                         } else null

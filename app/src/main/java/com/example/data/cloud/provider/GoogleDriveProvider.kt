@@ -120,7 +120,7 @@ class GoogleDriveProvider(
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
         val cacheKey = remoteSubPath.trim().removePrefix("/cloud/drive").removePrefix("/cloud/DRIVE").trim('/')
         val cached = directoryCache[cacheKey]
-        if (cached != null && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
+        if (cached != null && cached.items.isNotEmpty() && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
             return@withContext cached.items
         }
 
@@ -205,7 +205,9 @@ class GoogleDriveProvider(
             )
         }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
 
-        directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), result)
+        if (result.isNotEmpty()) {
+            directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), result)
+        }
         result
     }
 

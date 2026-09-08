@@ -1132,6 +1132,16 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             .putString(prefPassKey, passwordOrToken)
             .apply()
 
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.cloudStorageService.sessionManager.saveSession(
+                providerId = provider.id,
+                email = accountEmail,
+                serverUrl = serverUrl,
+                tokenOrPass = passwordOrToken,
+                isTemporary = false
+            )
+        }
+
         val targetPath = provider.path
         val currentTabs = _uiState.value.tabs.toMutableList()
         val currentTabIdx = currentTabs.indexOfFirst { it.id == _uiState.value.currentTabId }
@@ -1200,6 +1210,17 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 .putString("cloud_pass_${provider.id}", "direct_cloud_session")
                 .apply()
         }
+        viewModelScope.launch(Dispatchers.IO) {
+            providers.forEach { provider ->
+                repository.cloudStorageService.sessionManager.saveSession(
+                    providerId = provider.id,
+                    email = provider.defaultEmail,
+                    serverUrl = provider.defaultServerUrl,
+                    tokenOrPass = "direct_cloud_session",
+                    isTemporary = false
+                )
+            }
+        }
         _uiState.update {
             it.copy(
                 isMegaConnected = true,
@@ -1223,6 +1244,11 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     fun disconnectCloudProvider(provider: com.example.ui.components.CloudProvider) {
         val prefConnKey = "cloud_connected_${provider.id}"
         prefs.edit().putBoolean(prefConnKey, false).apply()
+
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.cloudStorageService.getProvider(provider.id)?.disconnect()
+            repository.cloudStorageService.sessionManager.removeSession(provider.id)
+        }
 
         _uiState.update {
             when (provider) {
