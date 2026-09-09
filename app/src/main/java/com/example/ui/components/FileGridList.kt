@@ -1543,25 +1543,14 @@ fun FileThumbnailImage(
             }
 
             LaunchedEffect(item.path, isFileReady) {
-                if (!isFileReady && item.path.startsWith("/cloud/")) {
+                if (!isFileReady && item.path.startsWith("/cloud/") && (item.size <= 0L || item.size <= 15_000_000L)) {
                     // Debounce rapid scrolling to save bandwidth and prevent lagging
                     kotlinx.coroutines.delay(150)
-                    // Limit thumbnail download size to 1MB to load quickly
                     try {
-                        val scope = this
-                            thumbnailDownloadSemaphore.withPermit {
-                                val repository = com.example.data.repository.FileRepository(context)
-                                val job = scope.launch {
-                                repository.downloadCloudFile(item.path) { _ -> }
-                            }
-                            while (job.isActive) {
-                                kotlinx.coroutines.delay(100)
-                                if (resolvedFile.exists() && resolvedFile.length() > 1_500_000L) {
-                                    job.cancel()
-                                    break
-                                }
-                            }
-                            if (resolvedFile.exists() && resolvedFile.length() > 0) {
+                        thumbnailDownloadSemaphore.withPermit {
+                            val repository = com.example.data.repository.FileRepository(context)
+                            val ok = repository.downloadCloudFile(item.path) { _ -> }
+                            if (ok && resolvedFile.exists() && resolvedFile.length() > 0) {
                                 isFileReady = true
                             }
                         }
@@ -1596,7 +1585,8 @@ fun FileThumbnailImage(
         }
         FileType.VIDEO -> {
             val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
-            var isFileReady by remember(item.path) { mutableStateOf(resolvedFile.exists() && resolvedFile.length() > 0) }
+            val isFileComplete = resolvedFile.exists() && (item.size <= 0L || resolvedFile.length() >= item.size)
+            var isFileReady by remember(item.path) { mutableStateOf(isFileComplete) }
 
             val cacheKey = remember(item.path, item.lastModified, isFileReady) {
                 "video_${item.path}_${item.lastModified}_$isFileReady"
@@ -1616,25 +1606,13 @@ fun FileThumbnailImage(
             }
 
             LaunchedEffect(item.path, isFileReady) {
-                if (!isFileReady && item.path.startsWith("/cloud/")) {
-                    // Debounce rapid scrolling to save bandwidth and prevent lagging
-                    kotlinx.coroutines.delay(150)
-                    // Limit thumbnail download size to 1MB to load quickly
+                if (!isFileReady && item.path.startsWith("/cloud/") && item.size in 1..15_000_000L) {
+                    kotlinx.coroutines.delay(200)
                     try {
-                        val scope = this
-                            thumbnailDownloadSemaphore.withPermit {
-                                val repository = com.example.data.repository.FileRepository(context)
-                                val job = scope.launch {
-                                repository.downloadCloudFile(item.path) { _ -> }
-                            }
-                            while (job.isActive) {
-                                kotlinx.coroutines.delay(100)
-                                if (resolvedFile.exists() && resolvedFile.length() > 1_500_000L) {
-                                    job.cancel()
-                                    break
-                                }
-                            }
-                            if (resolvedFile.exists() && resolvedFile.length() > 0) {
+                        thumbnailDownloadSemaphore.withPermit {
+                            val repository = com.example.data.repository.FileRepository(context)
+                            val ok = repository.downloadCloudFile(item.path) { _ -> }
+                            if (ok && resolvedFile.exists() && resolvedFile.length() > 0) {
                                 isFileReady = true
                             }
                         }

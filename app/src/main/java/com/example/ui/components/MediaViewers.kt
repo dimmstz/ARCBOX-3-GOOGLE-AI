@@ -111,12 +111,24 @@ fun ArcboxMediaViewerModal(
     val resolvedFile = remember(item.path, downloadVersion) { resolveMediaFile(context, item.path) }
     var showInfo by remember { mutableStateOf(false) }
 
+    val isFileComplete = remember(resolvedFile.length(), item.size, downloadVersion) {
+        resolvedFile.exists() && (item.size <= 0L || resolvedFile.length() >= item.size)
+    }
+
     var downloadJob by remember(item.path) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var isDownloadingCloudFile by remember(item.path) { mutableStateOf(item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() < item.size)) }
+    var isDownloadingCloudFile by remember(item.path, isFileComplete) {
+        mutableStateOf(item.path.startsWith("/cloud/") && !isFileComplete)
+    }
     var downloadProgress by remember(item.path) { mutableFloatStateOf(0f) }
 
-    LaunchedEffect(item.path) {
-        if (item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() < item.size)) {
+    LaunchedEffect(item.path, downloadVersion) {
+        val complete = resolvedFile.exists() && (item.size <= 0L || resolvedFile.length() >= item.size)
+        if (item.path.startsWith("/cloud/") && !complete) {
+            isDownloadingCloudFile = true
+            // If there's an old partial/corrupt file, delete it so clean download starts
+            if (resolvedFile.exists() && resolvedFile.length() < item.size) {
+                try { resolvedFile.delete() } catch (_: Exception) {}
+            }
             val repository = com.example.data.repository.FileRepository(context)
             downloadJob = launch {
                 try {
@@ -130,17 +142,20 @@ fun ArcboxMediaViewerModal(
                     isDownloadingCloudFile = false
                 }
             }
+        } else {
+            isDownloadingCloudFile = false
         }
     }
 
     BackHandler(enabled = true) {
+        downloadJob?.cancel()
         onClose()
     }
 
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        if (isDownloadingCloudFile && item.fileType == FileType.IMAGE) {
+        if (isDownloadingCloudFile && (item.fileType == FileType.IMAGE || item.fileType == FileType.VIDEO)) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -149,18 +164,41 @@ fun ArcboxMediaViewerModal(
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(24.dp)
                 ) {
                     CircularProgressIndicator(
                         progress = { downloadProgress },
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(56.dp)
+                        strokeWidth = 4.dp,
+                        modifier = Modifier.size(64.dp)
                     )
                     Text(
-                        text = "Baixando mídia da nuvem... ${(downloadProgress * 100).toInt()}%",
+                        text = if (item.fileType == FileType.VIDEO) "Carregando vídeo da nuvem..." else "Baixando imagem da nuvem...",
                         color = Color.White,
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
+                    Text(
+                        text = "${(downloadProgress * 100).toInt()}% concluído (${formatFileSize((downloadProgress * item.size.coerceAtLeast(1L)).toLong())} de ${formatFileSize(item.size)})",
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FilledTonalButton(
+                        onClick = {
+                            downloadJob?.cancel()
+                            onClose()
+                        },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Color.White.copy(alpha = 0.15f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cancelar", color = Color.White)
+                    }
                 }
             }
         } else if (item.fileType == FileType.AUDIO) {
@@ -472,15 +510,20 @@ fun ArcboxImageViewerScreen(
     var imageVersion by remember(item.path, item.safUriString) { mutableLongStateOf(file.lastModified()) }
     val coroutineScope = rememberCoroutineScope()
 
-    var isDownloadingCloudFile by remember(item.path) { mutableStateOf(item.path.startsWith("/cloud/") && (!file.exists() || file.length() == 0L)) }
+    val isImageComplete = remember(file.length(), item.size, imageVersion) {
+        file.exists() && file.length() > 0L && (item.size <= 0L || file.length() >= item.size)
+    }
+    var isDownloadingCloudFile by remember(item.path, isImageComplete) {
+        mutableStateOf(item.path.startsWith("/cloud/") && !isImageComplete)
+    }
     var downloadProgress by remember(item.path) { mutableFloatStateOf(0f) }
 
     HideSystemBarsEffect(showControls, isLightBackground = backgroundModeIndex == 2)
 
-    LaunchedEffect(item.path, item.safUriString) {
+    LaunchedEffect(item.path, item.safUriString, isImageComplete) {
         showControls = true
         lastTouchTime = System.currentTimeMillis()
-        if (item.path.startsWith("/cloud/") && (!file.exists() || file.length() == 0L)) {
+        if (item.path.startsWith("/cloud/") && !isImageComplete) {
             isDownloadingCloudFile = true
             val repository = com.example.data.repository.FileRepository(context)
             try {

@@ -2,19 +2,18 @@ import urllib.request, json, os
 
 token = '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'
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.20'
-name = 'Arcbox File Manager v1.0.20'
-body = """## 🚀 Novidades da Versão v1.0.20
+tag = 'v1.0.21'
+name = 'Arcbox File Manager v1.0.21'
+body = """## 🚀 Novidades da Versão v1.0.21
 
-- ☁️ **Vinculação de Nuvens em 1 Toque (Android SAF Nativo)**:
-  - Conexão e sincronização direta com **Google Drive**, **OneDrive** e **Dropbox** usando o seletor nativo do sistema Android, sem necessidade de tokens complexos.
-  - Navegação automática e contínua nos diretórios `/cloud/drive`, `/cloud/onedrive` e `/cloud/dropbox` com ponte para os diretórios SAF registrados.
-- 🛠️ **Padronização e Correção dos Provedores em Nuvem**:
-  - Resolução aprimorada de caminhos e normalização de subdiretórios (`cleanSub`) em **OneDrive**, **Dropbox** e **WebDAV**.
-  - Cache dinâmico inteligente com invalidação coordenada durante navegações em profundidade.
-- 🌐 **WebDAV Personalizado Avançado**:
-  - Suporte completo com requisições `PROPFIND` com profundidade 1 e tratamento de respostas HTTP `207 Multi-Status`.
-  - Streaming progressivo e compatibilidade com autenticação HTTP Basic.
+- 🎬 **Prevenção de Arquivos Parciais e Reprodução Segura no MEGA**:
+  - Implementado sistema atômico de download com arquivos temporários `.part`, garantindo que vídeos e imagens do **MEGA** sejam executados pelo player e decodificados apenas após 100% do download e descriptografia concluídos.
+  - Adicionada tela com barra de progresso em tempo real e opção de cancelamento para mídias em nuvem no visualizador.
+  - Otimização do semáforo de miniaturas com limites inteligentes de tamanho e debounce contra travamentos em rolagem rápida.
+- 📂 **Correção e Conexão Rápida para MediaFire**:
+  - Resolvido problema de sobrescrita e erro de leitura no cache local do MediaFire.
+  - Habilitada a **Conexão Rápida (Android SAF)** para o MediaFire em gerenciador de contas e menu lateral.
+  - Suporte completo a abertura de arquivos remotos via aplicativos externos e visualizador de documentos.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

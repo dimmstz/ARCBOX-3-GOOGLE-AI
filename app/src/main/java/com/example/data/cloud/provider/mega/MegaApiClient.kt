@@ -659,6 +659,8 @@ class MegaApiClient(
         val rawSid = sessionId ?: return@withContext false
         val sid = rawSid.substringBefore(":::")
 
+        var tempFile: File? = null
+
         try {
             var keyBytes = passedKeyBytes ?: nodeCacheMap[nodeHandle]?.keyBytes
             if (keyBytes == null || keyBytes.isEmpty()) {
@@ -721,7 +723,8 @@ class MegaApiClient(
 
             val parentDir = destinationFile.parentFile ?: destinationFile.absoluteFile.parentFile
             parentDir?.mkdirs()
-            val tempFile = destinationFile
+            val createdTempFile = File(parentDir, "${destinationFile.name}.${System.currentTimeMillis()}.part")
+            tempFile = createdTempFile
 
             val downloadClient = client.newBuilder()
                 .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
@@ -833,16 +836,26 @@ class MegaApiClient(
                 }
             }
 
-            if (tempFile.exists() && (tempFile.length() > 0 || (expectedSize == 0L || totalBytesRead == 0L))) {
+            val tf = tempFile
+            if (tf != null && tf.exists() && (tf.length() > 0 || (expectedSize == 0L || totalBytesRead == 0L))) {
+                if (destinationFile.exists()) destinationFile.delete()
+                val renamed = tf.renameTo(destinationFile)
+                if (!renamed) {
+                    tf.copyTo(destinationFile, overwrite = true)
+                    tf.delete()
+                }
                 onProgress(1f)
                 Log.d("MegaApiClient", "Download succeeded: ${destinationFile.absolutePath} (${destinationFile.length()} bytes)")
                 true
             } else {
-                tempFile.delete()
+                tf?.delete()
                 Log.e("MegaApiClient", "Download failed: temp file is empty or non-existent (read $totalBytesRead bytes, expected $expectedSize)")
                 false
             }
         } catch (e: Exception) {
+            try {
+                if (tempFile?.exists() == true) tempFile?.delete()
+            } catch (_: Exception) {}
             if (e is CancellationException) throw e
             Log.e("MegaApiClient", "Download failed with exception", e)
             false

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.20-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.20"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.21-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.21"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,8 +18,22 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.20
+## 🚀 Novidades da Versão v1.0.21
 
+- 🎬 **Prevenção de Arquivos Parciais e Reprodução Segura no MEGA**:
+  - Implementado sistema atômico de download com arquivos temporários `.part`, garantindo que vídeos e imagens do **MEGA** sejam executados pelo player e decodificados apenas após 100% do download e descriptografia concluídos.
+  - Adicionada tela com barra de progresso em tempo real e opção de cancelamento para mídias em nuvem no visualizador.
+  - Otimização do semáforo de miniaturas com limites inteligentes de tamanho e debounce contra travamentos em rolagem rápida.
+- 📂 **Correção e Conexão Rápida para MediaFire**:
+  - Resolvido problema de sobrescrita e erro de leitura no cache local do MediaFire.
+  - Habilitada a **Conexão Rápida (Android SAF)** para o MediaFire em gerenciador de contas e menu lateral.
+  - Suporte completo a abertura de arquivos remotos via aplicativos externos e visualizador de documentos.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.20
 - ☁️ **Vinculação de Nuvens em 1 Toque (Android SAF Nativo)**:
   - Integração facilitada com **Google Drive**, **OneDrive** e **Dropbox** usando o Storage Access Framework nativo do sistema Android.
   - Conexão e sincronização direta sem exigir criação manual de API keys ou credenciais de desenvolvedor.
@@ -30,10 +44,6 @@
 - 🌐 **Aprimoramentos no WebDAV Personalizado**:
   - Implementação completa do protocolo com suporte a requisições `PROPFIND` com profundidade 1 e tratamento de respostas HTTP `207 Multi-Status`.
   - Suporte a credenciais HTTP Basic, streaming de download e download direto.
-
----
-
-## 📋 Histórico de Versões
 
 ### v1.0.19
 - 🛠️ **Correção Crítica no Instalador de Atualizações Automáticas (Erro de Downgrade Bloqueado)**:

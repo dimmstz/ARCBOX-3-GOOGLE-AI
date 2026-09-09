@@ -424,22 +424,23 @@ fun ArcboxNavigationDrawerContent(
             }
 
             if (isMediafireConnected) {
-                val mfVolume = storageVolumes.find { it.id == "cloud_mediafire" || it.path == "/cloud/mediafire" }
-                    ?: StorageVolume(id = "cloud_mediafire", name = "MediaFire", path = "/cloud/mediafire", totalBytes = 10L * 1024 * 1024 * 1024L, freeBytes = 10L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+                val matchedSafMf = storageVolumes.find { it.isSaf && (it.name.contains("MediaFire", ignoreCase = true) || it.path.contains("mediafire", ignoreCase = true)) }
+                val mfVolume = matchedSafMf ?: (storageVolumes.find { it.id == "cloud_mediafire" || it.path == "/cloud/mediafire" }
+                    ?: StorageVolume(id = "cloud_mediafire", name = "MediaFire", path = "/cloud/mediafire", totalBytes = 10L * 1024 * 1024 * 1024L, freeBytes = 10L * 1024 * 1024 * 1024L, typeKey = "CLOUD"))
 
                 NavigationDrawerItem(
                     label = {
                         Column {
-                            Text("MediaFire", fontWeight = FontWeight.SemiBold)
+                            Text(if (matchedSafMf != null) matchedSafMf.name else "MediaFire", fontWeight = FontWeight.SemiBold)
                             Text(
-                                text = if (mediafireEmail.isNotBlank()) mediafireEmail else "Conectado • 10 GB",
+                                text = if (matchedSafMf != null) "Nativo Android • SAF" else if (mediafireEmail.isNotBlank()) mediafireEmail else "Conectado • 10 GB",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
                     },
-                    selected = selectedVolume?.path == "/cloud/mediafire",
+                    selected = selectedVolume?.path == mfVolume.path,
                     onClick = {
                         onSelectVolume(mfVolume)
                         onCloseDrawer()

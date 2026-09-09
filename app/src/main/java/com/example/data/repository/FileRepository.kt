@@ -563,6 +563,7 @@ class FileRepository(private val context: Context) {
                             "drive" -> it.providerType == "GOOGLE_DRIVE" || it.name.contains("Drive", ignoreCase = true)
                             "onedrive" -> it.providerType == "ONEDRIVE" || it.name.contains("OneDrive", ignoreCase = true)
                             "dropbox" -> it.providerType == "DROPBOX" || it.name.contains("Dropbox", ignoreCase = true)
+                            "mediafire" -> it.providerType == "MEDIAFIRE" || it.name.contains("MediaFire", ignoreCase = true) || it.name.contains("mediafire", ignoreCase = true)
                             else -> false
                         }
                     }?.uriString

@@ -622,12 +622,14 @@ fun CloudIntegrationManagerDialog(
                 CloudProvider.GOOGLE_DRIVE -> "GOOGLE_DRIVE"
                 CloudProvider.ONEDRIVE -> "ONEDRIVE"
                 CloudProvider.DROPBOX -> "DROPBOX"
+                CloudProvider.MEDIAFIRE -> "MEDIAFIRE"
                 else -> null
             }
             val label = when (pendingSafProvider) {
                 CloudProvider.GOOGLE_DRIVE -> "Google Drive (Android)"
                 CloudProvider.ONEDRIVE -> "OneDrive (Android)"
                 CloudProvider.DROPBOX -> "Dropbox (Android)"
+                CloudProvider.MEDIAFIRE -> "MediaFire (Android)"
                 else -> null
             }
             onRegisterSafDrive(it, label, providerType)
@@ -884,7 +886,7 @@ fun CloudIntegrationManagerDialog(
                             userEmail = userEmail,
                             onConnect = { onStartOAuthFlow(provider) },
                             onQuickConnect = {
-                                if (provider == CloudProvider.GOOGLE_DRIVE || provider == CloudProvider.ONEDRIVE || provider == CloudProvider.DROPBOX) {
+                                if (provider == CloudProvider.GOOGLE_DRIVE || provider == CloudProvider.ONEDRIVE || provider == CloudProvider.DROPBOX || provider == CloudProvider.MEDIAFIRE) {
                                     pendingSafProvider = provider
                                     safTreeLauncher.launch(null)
                                 } else {

@@ -802,36 +802,52 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openFileWithThirdParty(context: Context, item: FileItem) {
-        try {
-            val file = repository.resolveFile(item.path)
-            if (!file.exists()) {
-                Toast.makeText(context, "Arquivo não encontrado", Toast.LENGTH_SHORT).show()
-                return
+        viewModelScope.launch {
+            try {
+                if (item.path.startsWith("/cloud/")) {
+                    val resolved = repository.resolveFile(item.path)
+                    if (!resolved.exists() || (item.size > 0L && resolved.length() < item.size)) {
+                        _uiState.update { it.copy(operationStatusText = "Baixando ${item.name} da nuvem...", operationProgress = 0f) }
+                        val ok = repository.downloadCloudFile(item.path) { p ->
+                            _uiState.update { it.copy(operationProgress = p) }
+                        }
+                        _uiState.update { it.copy(operationStatusText = null, operationProgress = null) }
+                        if (!ok) {
+                            Toast.makeText(context, "Falha ao baixar arquivo da nuvem", Toast.LENGTH_SHORT).show()
+                            return@launch
+                        }
+                    }
+                }
+                val file = repository.resolveFile(item.path)
+                if (!file.exists()) {
+                    Toast.makeText(context, "Arquivo não encontrado", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val uri: Uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                val ext = item.extension.lowercase()
+                val mimeType = when (ext) {
+                    "pdf" -> "application/pdf"
+                    "doc", "docx" -> "application/msword"
+                    "xls", "xlsx" -> "application/vnd.ms-excel"
+                    "ppt", "pptx" -> "application/vnd.ms-powerpoint"
+                    else -> item.mimeType.ifEmpty { "*/*" }
+                }
+                val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mimeType)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                val chooserIntent = Intent.createChooser(viewIntent, "Abrir ${item.name} com").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(chooserIntent)
+            } catch (ex: Exception) {
+                Toast.makeText(context, "Nenhum aplicativo encontrado para abrir este arquivo", Toast.LENGTH_SHORT).show()
             }
-            val uri: Uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
-            val ext = item.extension.lowercase()
-            val mimeType = when (ext) {
-                "pdf" -> "application/pdf"
-                "doc", "docx" -> "application/msword"
-                "xls", "xlsx" -> "application/vnd.ms-excel"
-                "ppt", "pptx" -> "application/vnd.ms-powerpoint"
-                else -> item.mimeType.ifEmpty { "*/*" }
-            }
-            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, mimeType)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            val chooserIntent = Intent.createChooser(viewIntent, "Abrir ${item.name} com").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(chooserIntent)
-        } catch (ex: Exception) {
-            Toast.makeText(context, "Nenhum aplicativo encontrado para abrir este arquivo", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1661,7 +1677,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             checkAndSimulateLargeFileLoading(item)
             if (item.path.startsWith("/cloud/")) {
                 val resolved = repository.resolveFile(item.path)
-                if (!resolved.exists() || resolved.length() == 0L) {
+                if (!resolved.exists() || (item.size > 0L && resolved.length() < item.size)) {
                     _uiState.update { it.copy(operationStatusText = "Baixando ${item.name} da nuvem...", operationProgress = 0f) }
                     val ok = repository.downloadCloudFile(item.path) { progress ->
                         _uiState.update { it.copy(operationProgress = progress) }

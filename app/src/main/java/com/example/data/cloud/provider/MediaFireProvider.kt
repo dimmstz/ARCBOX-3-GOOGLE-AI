@@ -167,17 +167,31 @@ class MediaFireProvider(
     ): Boolean = withContext(Dispatchers.IO) {
         val cleanSub = remoteFilePath.trim('/').removePrefix("cloud/mediafire").removePrefix("cloud/MEDIAFIRE").trim('/')
         val srcFile = File(getCacheDir(), cleanSub)
+
+        // If destination points to the exact same file in the cloud cache, it is already ready to read!
+        try {
+            if (destinationFile.canonicalPath == srcFile.canonicalPath) {
+                if (srcFile.exists()) {
+                    onProgress(1f)
+                    return@withContext true
+                } else {
+                    return@withContext false
+                }
+            }
+        } catch (_: Exception) {}
+
         if (!srcFile.exists()) return@withContext false
 
         destinationFile.parentFile?.mkdirs()
         val totalBytes = srcFile.length()
         var bytesRead = 0L
 
+        val tempDest = File(destinationFile.parentFile ?: destinationFile.absoluteFile.parentFile, "${destinationFile.name}.${System.currentTimeMillis()}.part")
         try {
             var lastReportedProgress = -1f
             var lastReportedTime = 0L
             srcFile.inputStream().use { input ->
-                FileOutputStream(destinationFile).use { output ->
+                FileOutputStream(tempDest).use { output ->
                     val buffer = ByteArray(64 * 1024)
                     var read: Int
                     while (input.read(buffer).also { read = it } != -1) {
@@ -195,8 +209,20 @@ class MediaFireProvider(
                     }
                 }
             }
+            if (tempDest.exists()) {
+                if (destinationFile.exists()) destinationFile.delete()
+                val success = tempDest.renameTo(destinationFile)
+                if (!success) {
+                    tempDest.copyTo(destinationFile, overwrite = true)
+                    tempDest.delete()
+                }
+            }
+            onProgress(1f)
             true
         } catch (e: Exception) {
+            try {
+                if (tempDest.exists()) tempDest.delete()
+            } catch (_: Exception) {}
             if (e is CancellationException) throw e
             Log.e("MediaFireProvider", "Download error", e)
             false

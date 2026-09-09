@@ -60,7 +60,7 @@ fun ArcboxPdfViewerModal(
             val repository = com.example.data.repository.FileRepository(context)
             if (fileItem.path.startsWith("/cloud/")) {
                 val resolved = repository.resolveFile(fileItem.path)
-                if (!resolved.exists() || resolved.length() == 0L) {
+                if (!resolved.exists() || (fileItem.size > 0L && resolved.length() < fileItem.size)) {
                     repository.downloadCloudFile(fileItem.path)
                 }
             }
