@@ -256,16 +256,23 @@ class GitHubUpdateManager(private val context: Context) {
             var apkSizeBytes: Long = 0L
             var expectedSha256: String? = null
 
-            // First scan for .apk asset
+            // First scan for .apk asset, preferring release builds over debug builds
             for (i in 0 until assetsArray.length()) {
                 val asset = assetsArray.getJSONObject(i)
                 val assetName = asset.optString("name", "")
                 if (assetName.endsWith(".apk", ignoreCase = true)) {
+                    // Se já encontramos um release, não substituímos por um debug
+                    if (apkFileName.contains("release", ignoreCase = true) && assetName.contains("debug", ignoreCase = true)) {
+                        continue
+                    }
                     apkDownloadUrl = asset.optString("browser_download_url", "")
                     apiAssetUrl = asset.optString("url", "")
                     apkFileName = assetName
                     apkSizeBytes = asset.optLong("size", 0L)
-                    break
+                    // Se acharmos o release, quebramos o loop, caso contrário continuamos procurando
+                    if (assetName.contains("release", ignoreCase = true)) {
+                        break
+                    }
                 }
             }
 

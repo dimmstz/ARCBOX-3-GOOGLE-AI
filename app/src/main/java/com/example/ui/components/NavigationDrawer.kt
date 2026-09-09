@@ -283,8 +283,9 @@ fun ArcboxNavigationDrawerContent(
             }
 
             if (isDriveConnected) {
-                val driveVolume = storageVolumes.find { it.id == "cloud_drive" || it.path == "/cloud/drive" }
-                    ?: StorageVolume(id = "cloud_drive", name = "Google Drive", path = "/cloud/drive", totalBytes = 15L * 1024 * 1024 * 1024L, freeBytes = 15L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+                val matchedSafDrive = storageVolumes.find { it.isSaf && (it.name.contains("Drive", ignoreCase = true) || it.path.contains("drive", ignoreCase = true)) }
+                val driveVolume = matchedSafDrive ?: (storageVolumes.find { it.id == "cloud_drive" || it.path == "/cloud/drive" }
+                    ?: StorageVolume(id = "cloud_drive", name = "Google Drive", path = "/cloud/drive", totalBytes = 15L * 1024 * 1024 * 1024L, freeBytes = 15L * 1024 * 1024 * 1024L, typeKey = "CLOUD"))
 
                 NavigationDrawerItem(
                     label = {
@@ -298,7 +299,7 @@ fun ArcboxNavigationDrawerContent(
                             )
                         }
                     },
-                    selected = selectedVolume?.path == "/cloud/drive",
+                    selected = selectedVolume?.path == driveVolume.path || selectedVolume?.path == "/cloud/drive",
                     onClick = {
                         onSelectVolume(driveVolume)
                         onCloseDrawer()
@@ -329,8 +330,9 @@ fun ArcboxNavigationDrawerContent(
             }
 
             if (isOnedriveConnected) {
-                val odVolume = storageVolumes.find { it.id == "cloud_onedrive" || it.path == "/cloud/onedrive" }
-                    ?: StorageVolume(id = "cloud_onedrive", name = "OneDrive", path = "/cloud/onedrive", totalBytes = 5L * 1024 * 1024 * 1024L, freeBytes = 5L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+                val matchedSafOd = storageVolumes.find { it.isSaf && (it.name.contains("OneDrive", ignoreCase = true) || it.path.contains("onedrive", ignoreCase = true)) }
+                val odVolume = matchedSafOd ?: (storageVolumes.find { it.id == "cloud_onedrive" || it.path == "/cloud/onedrive" }
+                    ?: StorageVolume(id = "cloud_onedrive", name = "OneDrive", path = "/cloud/onedrive", totalBytes = 5L * 1024 * 1024 * 1024L, freeBytes = 5L * 1024 * 1024 * 1024L, typeKey = "CLOUD"))
 
                 NavigationDrawerItem(
                     label = {
@@ -344,7 +346,7 @@ fun ArcboxNavigationDrawerContent(
                             )
                         }
                     },
-                    selected = selectedVolume?.path == "/cloud/onedrive",
+                    selected = selectedVolume?.path == odVolume.path || selectedVolume?.path == "/cloud/onedrive",
                     onClick = {
                         onSelectVolume(odVolume)
                         onCloseDrawer()
@@ -375,8 +377,9 @@ fun ArcboxNavigationDrawerContent(
             }
 
             if (isDropboxConnected) {
-                val dbxVolume = storageVolumes.find { it.id == "cloud_dropbox" || it.path == "/cloud/dropbox" }
-                    ?: StorageVolume(id = "cloud_dropbox", name = "Dropbox", path = "/cloud/dropbox", totalBytes = 2L * 1024 * 1024 * 1024L, freeBytes = 2L * 1024 * 1024 * 1024L, typeKey = "CLOUD")
+                val matchedSafDbx = storageVolumes.find { it.isSaf && (it.name.contains("Dropbox", ignoreCase = true) || it.path.contains("dropbox", ignoreCase = true)) }
+                val dbxVolume = matchedSafDbx ?: (storageVolumes.find { it.id == "cloud_dropbox" || it.path == "/cloud/dropbox" }
+                    ?: StorageVolume(id = "cloud_dropbox", name = "Dropbox", path = "/cloud/dropbox", totalBytes = 2L * 1024 * 1024 * 1024L, freeBytes = 2L * 1024 * 1024 * 1024L, typeKey = "CLOUD"))
 
                 NavigationDrawerItem(
                     label = {
@@ -390,7 +393,7 @@ fun ArcboxNavigationDrawerContent(
                             )
                         }
                     },
-                    selected = selectedVolume?.path == "/cloud/dropbox",
+                    selected = selectedVolume?.path == dbxVolume.path || selectedVolume?.path == "/cloud/dropbox",
                     onClick = {
                         onSelectVolume(dbxVolume)
                         onCloseDrawer()

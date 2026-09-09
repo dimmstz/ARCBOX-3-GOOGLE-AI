@@ -46,10 +46,17 @@ class CloudStorageService private constructor(private val context: Context) {
     }
 
     val client: OkHttpClient by lazy {
+        val dispatcher = okhttp3.Dispatcher().apply {
+            maxRequests = 128
+            maxRequestsPerHost = 32
+        }
+        val connectionPool = okhttp3.ConnectionPool(32, 5, java.util.concurrent.TimeUnit.MINUTES)
         OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+            .dispatcher(dispatcher)
+            .connectionPool(connectionPool)
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()

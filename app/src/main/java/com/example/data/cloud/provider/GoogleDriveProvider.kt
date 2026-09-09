@@ -49,6 +49,7 @@ class GoogleDriveProvider(
     )
 
     private val directoryCache = java.util.concurrent.ConcurrentHashMap<String, CachedFolder>()
+    private val pathToIdMap = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val CACHE_TTL_MS = 600_000L
 
     private fun getCacheDir(): File = File(context.cacheDir, "cloud_storage/drive")
@@ -117,7 +118,8 @@ class GoogleDriveProvider(
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
-        val cacheKey = remoteSubPath.trim().removePrefix("/cloud/drive").removePrefix("/cloud/DRIVE").trim('/')
+        val cleanSub = remoteSubPath.trim().removePrefix("/cloud/drive").removePrefix("/cloud/DRIVE").trim('/')
+        val cacheKey = cleanSub
         val cached = directoryCache[cacheKey]
         if (cached != null && cached.items.isNotEmpty() && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
             return@withContext cached.items
@@ -125,12 +127,14 @@ class GoogleDriveProvider(
 
         val session = sessionManager.getSession(providerId)
         val cloudDir = getCacheDir()
-        val targetLocalDir = if (remoteSubPath.isBlank()) cloudDir else File(cloudDir, remoteSubPath)
+        val targetLocalDir = if (cleanSub.isBlank()) cloudDir else File(cloudDir, cleanSub)
         if (!targetLocalDir.exists()) targetLocalDir.mkdirs()
 
         // If session exists with token, query Google Drive API v3
         if (session != null && session.tokenOrPass.isNotBlank() && (session.tokenOrPass.startsWith("ya29.") || session.tokenOrPass.length >= 25)) {
-            val qParam = URLEncoder.encode("trashed = false", "UTF-8")
+            val parentId = if (cleanSub.isBlank()) "root" else (pathToIdMap[cleanSub] ?: "root")
+            val query = "'$parentId' in parents and trashed = false"
+            val qParam = URLEncoder.encode(query, "UTF-8")
             val url = "https://www.googleapis.com/drive/v3/files?q=$qParam&fields=files(id,name,mimeType,size,modifiedTime)&pageSize=100"
             val request = Request.Builder()
                 .url(url)
@@ -159,6 +163,9 @@ class GoogleDriveProvider(
                                 val lastMod = try { dateFormat.parse(modTimeStr)?.time ?: System.currentTimeMillis() } catch (_: Exception) { System.currentTimeMillis() }
 
                                 if (name.isNotBlank()) {
+                                    val relativePath = if (cleanSub.isBlank()) name else "$cleanSub/$name"
+                                    pathToIdMap[relativePath] = id
+
                                     val localFile = File(targetLocalDir, name)
                                     if (isDir && !localFile.exists()) {
                                         localFile.mkdirs()
@@ -169,7 +176,7 @@ class GoogleDriveProvider(
                                     items.add(
                                         RemoteCloudFile(
                                             name = name,
-                                            path = localFile.absolutePath,
+                                            path = "/cloud/drive/$relativePath",
                                             isDirectory = isDir,
                                             size = size,
                                             lastModified = lastMod,
@@ -194,9 +201,10 @@ class GoogleDriveProvider(
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
         val result = files.map { file ->
+            val relativePath = if (cleanSub.isBlank()) file.name else "$cleanSub/${file.name}"
             RemoteCloudFile(
                 name = file.name,
-                path = file.absolutePath,
+                path = "/cloud/drive/$relativePath",
                 isDirectory = file.isDirectory,
                 size = if (file.isDirectory) getFolderSize(file) else file.length(),
                 lastModified = file.lastModified(),
@@ -297,7 +305,56 @@ class GoogleDriveProvider(
         destinationFile: File,
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
-        val srcFile = File(getCacheDir(), remoteFilePath.trimStart('/'))
+        val cleanSub = remoteFilePath.trim('/').removePrefix("cloud/drive").removePrefix("cloud/DRIVE").trim('/')
+        val fileId = pathToIdMap[cleanSub]
+
+        val session = sessionManager.getSession(providerId)
+        if (session != null && session.tokenOrPass.isNotBlank() && (session.tokenOrPass.startsWith("ya29.") || session.tokenOrPass.length >= 25) && fileId != null) {
+            val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"
+            val request = Request.Builder()
+                .url(url)
+                .get()
+                .header("Authorization", "Bearer ${session.tokenOrPass}")
+                .header("User-Agent", "Arcbox-Drive-Client/2.4")
+                .build()
+
+            try {
+                client.newCall(request).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        destinationFile.parentFile?.mkdirs()
+                        val totalBytes = resp.body?.contentLength() ?: -1L
+                        var bytesRead = 0L
+                        var lastReportedProgress = -1f
+                        var lastReportedTime = 0L
+                        resp.body?.byteStream()?.use { input ->
+                            FileOutputStream(destinationFile).use { output ->
+                                val buffer = ByteArray(64 * 1024)
+                                var read: Int
+                                while (input.read(buffer).also { read = it } != -1) {
+                                    output.write(buffer, 0, read)
+                                    bytesRead += read
+                                    if (totalBytes > 0) {
+                                        val p = (bytesRead.toFloat() / totalBytes).coerceIn(0f, 1f)
+                                        val now = System.currentTimeMillis()
+                                        if (p >= 1f || p - lastReportedProgress >= 0.01f || now - lastReportedTime >= 100L) {
+                                            lastReportedProgress = p
+                                            lastReportedTime = now
+                                            onProgress(p)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return@withContext true
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w("GoogleDriveProvider", "Remote download error: ${e.message}")
+            }
+        }
+
+        val srcFile = File(getCacheDir(), cleanSub)
         if (!srcFile.exists()) return@withContext false
 
         destinationFile.parentFile?.mkdirs()

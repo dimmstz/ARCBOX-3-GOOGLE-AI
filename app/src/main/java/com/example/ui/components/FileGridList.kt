@@ -1,6 +1,9 @@
 package com.example.ui.components
 
+
+import kotlinx.coroutines.launch
 import androidx.compose.animation.*
+
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -60,6 +63,7 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.videoFrameMillis
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.example.ui.animation.getOptimizedFolderTransition
 import com.example.data.models.ClipboardMode
@@ -1485,7 +1489,7 @@ private fun formatDate(timestamp: Long): String {
     return dateFormatThreadLocal.get()?.format(Date(timestamp)) ?: "-"
 }
 
-private val thumbnailDownloadSemaphore = kotlinx.coroutines.sync.Semaphore(2)
+private val thumbnailDownloadSemaphore = kotlinx.coroutines.sync.Semaphore(6)
 
 @Composable
 fun FileThumbnailImage(
@@ -1538,6 +1542,33 @@ fun FileThumbnailImage(
                     .build()
             }
 
+            LaunchedEffect(item.path, isFileReady) {
+                if (!isFileReady && item.path.startsWith("/cloud/")) {
+                    // Debounce rapid scrolling to save bandwidth and prevent lagging
+                    kotlinx.coroutines.delay(150)
+                    // Limit thumbnail download size to 1MB to load quickly
+                    try {
+                        val scope = this
+                            thumbnailDownloadSemaphore.withPermit {
+                                val repository = com.example.data.repository.FileRepository(context)
+                                val job = scope.launch {
+                                repository.downloadCloudFile(item.path) { _ -> }
+                            }
+                            while (job.isActive) {
+                                kotlinx.coroutines.delay(100)
+                                if (resolvedFile.exists() && resolvedFile.length() > 1_500_000L) {
+                                    job.cancel()
+                                    break
+                                }
+                            }
+                            if (resolvedFile.exists() && resolvedFile.length() > 0) {
+                                isFileReady = true
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+
             Box(
                 modifier = modifier.clip(ListBadgeShape),
                 contentAlignment = Alignment.Center
@@ -1565,7 +1596,7 @@ fun FileThumbnailImage(
         }
         FileType.VIDEO -> {
             val resolvedFile = remember(item.path) { resolveMediaFile(context, item.path) }
-            val isFileReady = remember(item.path) { resolvedFile.exists() && resolvedFile.length() > 0 }
+            var isFileReady by remember(item.path) { mutableStateOf(resolvedFile.exists() && resolvedFile.length() > 0) }
 
             val cacheKey = remember(item.path, item.lastModified, isFileReady) {
                 "video_${item.path}_${item.lastModified}_$isFileReady"
@@ -1582,6 +1613,33 @@ fun FileThumbnailImage(
                     .diskCacheKey(cacheKey)
                     .crossfade(true)
                     .build()
+            }
+
+            LaunchedEffect(item.path, isFileReady) {
+                if (!isFileReady && item.path.startsWith("/cloud/")) {
+                    // Debounce rapid scrolling to save bandwidth and prevent lagging
+                    kotlinx.coroutines.delay(150)
+                    // Limit thumbnail download size to 1MB to load quickly
+                    try {
+                        val scope = this
+                            thumbnailDownloadSemaphore.withPermit {
+                                val repository = com.example.data.repository.FileRepository(context)
+                                val job = scope.launch {
+                                repository.downloadCloudFile(item.path) { _ -> }
+                            }
+                            while (job.isActive) {
+                                kotlinx.coroutines.delay(100)
+                                if (resolvedFile.exists() && resolvedFile.length() > 1_500_000L) {
+                                    job.cancel()
+                                    break
+                                }
+                            }
+                            if (resolvedFile.exists() && resolvedFile.length() > 0) {
+                                isFileReady = true
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
             }
 
             Box(

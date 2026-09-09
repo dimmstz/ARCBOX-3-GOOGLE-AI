@@ -89,20 +89,21 @@ class MediaFireProvider(
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
-        val cacheKey = remoteSubPath.trim().removePrefix("/cloud/mediafire").removePrefix("/cloud/MEDIAFIRE").trim('/')
-        val cached = directoryCache[cacheKey]
+        val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mediafire").removePrefix("/cloud/MEDIAFIRE").trim('/')
+        val cached = directoryCache[cleanSub]
         if (cached != null && cached.items.isNotEmpty() && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
             return@withContext cached.items
         }
 
-        val targetLocalDir = if (remoteSubPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteSubPath)
+        val targetLocalDir = if (cleanSub.isBlank()) getCacheDir() else File(getCacheDir(), cleanSub)
         if (!targetLocalDir.exists()) return@withContext emptyList()
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
         val result = files.map { file ->
+            val relativePath = if (cleanSub.isBlank()) file.name else "$cleanSub/${file.name}"
             RemoteCloudFile(
                 name = file.name,
-                path = file.absolutePath,
+                path = "/cloud/mediafire/$relativePath",
                 isDirectory = file.isDirectory,
                 size = if (file.isDirectory) getFolderSize(file) else file.length(),
                 lastModified = file.lastModified(),
@@ -111,7 +112,7 @@ class MediaFireProvider(
         }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
 
         if (result.isNotEmpty()) {
-            directoryCache[cacheKey] = CachedFolder(System.currentTimeMillis(), result)
+            directoryCache[cleanSub] = CachedFolder(System.currentTimeMillis(), result)
         }
         result
     }
@@ -164,7 +165,8 @@ class MediaFireProvider(
         destinationFile: File,
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
-        val srcFile = File(getCacheDir(), remoteFilePath.trimStart('/'))
+        val cleanSub = remoteFilePath.trim('/').removePrefix("cloud/mediafire").removePrefix("cloud/MEDIAFIRE").trim('/')
+        val srcFile = File(getCacheDir(), cleanSub)
         if (!srcFile.exists()) return@withContext false
 
         destinationFile.parentFile?.mkdirs()

@@ -113,7 +113,8 @@ class DropboxProvider(
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
-        val cacheKey = remoteSubPath.trim().removePrefix("/cloud/dropbox").removePrefix("/cloud/DROPBOX").trim('/')
+        val cleanSub = remoteSubPath.trim().removePrefix("/cloud/dropbox").removePrefix("/cloud/DROPBOX").removePrefix("cloud/dropbox").trim('/')
+        val cacheKey = cleanSub
         val cached = directoryCache[cacheKey]
         if (cached != null && cached.items.isNotEmpty() && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
             return@withContext cached.items
@@ -121,12 +122,12 @@ class DropboxProvider(
 
         val session = sessionManager.getSession(providerId)
         val cloudDir = getCacheDir()
-        val targetLocalDir = if (remoteSubPath.isBlank()) cloudDir else File(cloudDir, remoteSubPath)
+        val targetLocalDir = if (cleanSub.isBlank()) cloudDir else File(cloudDir, cleanSub)
         if (!targetLocalDir.exists()) targetLocalDir.mkdirs()
 
         // If session exists with token, query Dropbox API v2
         if (session != null && session.tokenOrPass.isNotBlank() && session.tokenOrPass.length >= 20) {
-            val dbxPath = if (remoteSubPath.isBlank()) "" else "/${remoteSubPath.trim('/')}"
+            val dbxPath = if (cleanSub.isBlank()) "" else "/$cleanSub"
             val jsonPayload = JSONObject().apply {
                 put("path", dbxPath)
                 put("recursive", false)
@@ -161,6 +162,7 @@ class DropboxProvider(
                                 val id = obj.optString("id")
 
                                 if (name.isNotBlank()) {
+                                    val relativePath = if (cleanSub.isBlank()) name else "$cleanSub/$name"
                                     val localFile = File(targetLocalDir, name)
                                     if (isDir && !localFile.exists()) {
                                         localFile.mkdirs()
@@ -171,7 +173,7 @@ class DropboxProvider(
                                     items.add(
                                         RemoteCloudFile(
                                             name = name,
-                                            path = localFile.absolutePath,
+                                            path = "/cloud/dropbox/$relativePath",
                                             isDirectory = isDir,
                                             size = size,
                                             lastModified = lastMod,
@@ -196,9 +198,10 @@ class DropboxProvider(
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
         val result = files.map { file ->
+            val relativePath = if (cleanSub.isBlank()) file.name else "$cleanSub/${file.name}"
             RemoteCloudFile(
                 name = file.name,
-                path = file.absolutePath,
+                path = "/cloud/dropbox/$relativePath",
                 isDirectory = file.isDirectory,
                 size = if (file.isDirectory) getFolderSize(file) else file.length(),
                 lastModified = file.lastModified(),
@@ -312,9 +315,10 @@ class DropboxProvider(
         destinationFile: File,
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
+        val cleanSub = remoteFilePath.trim('/').removePrefix("cloud/dropbox").removePrefix("cloud/DROPBOX").trim('/')
         val session = sessionManager.getSession(providerId)
         if (session != null && session.tokenOrPass.isNotBlank() && session.tokenOrPass.length >= 20) {
-            val dbxPath = if (remoteFilePath.startsWith("/")) remoteFilePath else "/$remoteFilePath"
+            val dbxPath = "/$cleanSub"
             val argJson = JSONObject().apply {
                 put("path", dbxPath)
             }.toString()
@@ -363,7 +367,7 @@ class DropboxProvider(
             }
         }
 
-        val srcFile = File(getCacheDir(), remoteFilePath.trimStart('/'))
+        val srcFile = File(getCacheDir(), cleanSub)
         if (!srcFile.exists()) return@withContext false
 
         destinationFile.parentFile?.mkdirs()

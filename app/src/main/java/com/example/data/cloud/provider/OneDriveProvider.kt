@@ -115,7 +115,8 @@ class OneDriveProvider(
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
-        val cacheKey = remoteSubPath.trim().removePrefix("/cloud/onedrive").removePrefix("/cloud/ONEDRIVE").trim('/')
+        val cleanSub = remoteSubPath.trim().removePrefix("/cloud/onedrive").removePrefix("/cloud/ONEDRIVE").removePrefix("cloud/onedrive").trim('/')
+        val cacheKey = cleanSub
         val cached = directoryCache[cacheKey]
         if (cached != null && cached.items.isNotEmpty() && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
             return@withContext cached.items
@@ -123,15 +124,15 @@ class OneDriveProvider(
 
         val session = sessionManager.getSession(providerId)
         val cloudDir = getCacheDir()
-        val targetLocalDir = if (remoteSubPath.isBlank()) cloudDir else File(cloudDir, remoteSubPath)
+        val targetLocalDir = if (cleanSub.isBlank()) cloudDir else File(cloudDir, cleanSub)
         if (!targetLocalDir.exists()) targetLocalDir.mkdirs()
 
         // If session exists with token, query MS Graph API
         if (session != null && session.tokenOrPass.isNotBlank() && (session.tokenOrPass.startsWith("Ew") || session.tokenOrPass.length >= 25)) {
-            val url = if (remoteSubPath.isBlank()) {
+            val url = if (cleanSub.isBlank()) {
                 "https://graph.microsoft.com/v1.0/me/drive/root/children"
             } else {
-                "https://graph.microsoft.com/v1.0/me/drive/root:/${remoteSubPath.trim('/')}:/children"
+                "https://graph.microsoft.com/v1.0/me/drive/root:/$cleanSub:/children"
             }
 
             val request = Request.Builder()
@@ -161,6 +162,7 @@ class OneDriveProvider(
                                 val downloadUrl = itemObj.optString("@microsoft.graph.downloadUrl")
 
                                 if (name.isNotBlank()) {
+                                    val relativePath = if (cleanSub.isBlank()) name else "$cleanSub/$name"
                                     val localFile = File(targetLocalDir, name)
                                     if (isFolder && !localFile.exists()) {
                                         localFile.mkdirs()
@@ -171,7 +173,7 @@ class OneDriveProvider(
                                     items.add(
                                         RemoteCloudFile(
                                             name = name,
-                                            path = localFile.absolutePath,
+                                            path = "/cloud/onedrive/$relativePath",
                                             isDirectory = isFolder,
                                             size = size,
                                             lastModified = lastMod,
@@ -197,9 +199,10 @@ class OneDriveProvider(
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
         val result = files.map { file ->
+            val relativePath = if (cleanSub.isBlank()) file.name else "$cleanSub/${file.name}"
             RemoteCloudFile(
                 name = file.name,
-                path = file.absolutePath,
+                path = "/cloud/onedrive/$relativePath",
                 isDirectory = file.isDirectory,
                 size = if (file.isDirectory) getFolderSize(file) else file.length(),
                 lastModified = file.lastModified(),
@@ -314,9 +317,9 @@ class OneDriveProvider(
         destinationFile: File,
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
+        val cleanPath = remoteFilePath.trim('/').removePrefix("cloud/onedrive").removePrefix("cloud/ONEDRIVE").trim('/')
         val session = sessionManager.getSession(providerId)
         if (session != null && session.tokenOrPass.isNotBlank() && (session.tokenOrPass.startsWith("Ew") || session.tokenOrPass.length >= 25)) {
-            val cleanPath = remoteFilePath.trimStart('/')
             val url = "https://graph.microsoft.com/v1.0/me/drive/root:/$cleanPath:/content"
             val request = Request.Builder()
                 .url(url)
@@ -361,7 +364,7 @@ class OneDriveProvider(
             }
         }
 
-        val srcFile = File(getCacheDir(), remoteFilePath.trimStart('/'))
+        val srcFile = File(getCacheDir(), cleanPath)
         if (!srcFile.exists()) return@withContext false
 
         destinationFile.parentFile?.mkdirs()

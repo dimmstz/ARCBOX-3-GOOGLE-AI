@@ -721,7 +721,7 @@ class MegaApiClient(
 
             val parentDir = destinationFile.parentFile ?: destinationFile.absoluteFile.parentFile
             parentDir?.mkdirs()
-            val tempFile = File(parentDir ?: destinationFile.parentFile, "${destinationFile.name}.tmp_${System.currentTimeMillis()}")
+            val tempFile = destinationFile
 
             val downloadClient = client.newBuilder()
                 .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
@@ -755,7 +755,7 @@ class MegaApiClient(
                 val isEncrypted = finalKeyBytes != null && finalKeyBytes.isNotEmpty()
                 rawInput.use { input ->
                     FileOutputStream(tempFile).use { fos ->
-                        java.io.BufferedOutputStream(fos, 256 * 1024).use { output ->
+                        java.io.BufferedOutputStream(fos, 64 * 1024).use { output ->
                             if (isEncrypted) {
                                 val aesKey = ByteArray(16) { i ->
                                     if (finalKeyBytes!!.size >= 32) (finalKeyBytes[i].toInt() xor finalKeyBytes[i + 16].toInt()).toByte()
@@ -768,15 +768,15 @@ class MegaApiClient(
                                 val cipher = Cipher.getInstance("AES/CTR/NoPadding")
                                 cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(aesKey, "AES"), IvParameterSpec(iv))
 
-                                val inBuffer = ByteArray(256 * 1024)
-                                val outBuffer = ByteArray(256 * 1024 + 16)
+                                val inBuffer = ByteArray(64 * 1024)
+                                val outBuffer = ByteArray(64 * 1024 + 16)
                                 var read: Int
                                 var transferred = 0L
 
                                 var lastReportedProgress = -1f
                                 var lastReportedTime = 0L
 
-                                java.io.BufferedInputStream(input, 256 * 1024).use { bis ->
+                                java.io.BufferedInputStream(input, 64 * 1024).use { bis ->
                                     while (bis.read(inBuffer).also { read = it } != -1) {
                                         if (read > 0) {
                                             totalBytesRead += read
@@ -802,13 +802,13 @@ class MegaApiClient(
                                     output.write(outBuffer, 0, finalLen)
                                 }
                             } else {
-                                val inBuffer = ByteArray(256 * 1024)
+                                val inBuffer = ByteArray(64 * 1024)
                                 var read: Int
                                 var transferred = 0L
                                 var lastReportedProgress = -1f
                                 var lastReportedTime = 0L
 
-                                java.io.BufferedInputStream(input, 256 * 1024).use { bis ->
+                                java.io.BufferedInputStream(input, 64 * 1024).use { bis ->
                                     while (bis.read(inBuffer).also { read = it } != -1) {
                                         if (read > 0) {
                                             totalBytesRead += read
@@ -834,17 +834,6 @@ class MegaApiClient(
             }
 
             if (tempFile.exists() && (tempFile.length() > 0 || (expectedSize == 0L || totalBytesRead == 0L))) {
-                if (destinationFile.exists()) destinationFile.delete()
-                val renamed = tempFile.renameTo(destinationFile)
-                if (!renamed) {
-                    tempFile.inputStream().use { input ->
-                        FileOutputStream(destinationFile).use { output ->
-                            input.copyTo(output)
-                            output.flush()
-                        }
-                    }
-                    tempFile.delete()
-                }
                 onProgress(1f)
                 Log.d("MegaApiClient", "Download succeeded: ${destinationFile.absolutePath} (${destinationFile.length()} bytes)")
                 true

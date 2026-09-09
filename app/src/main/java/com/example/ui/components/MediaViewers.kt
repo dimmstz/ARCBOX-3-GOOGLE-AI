@@ -1,5 +1,9 @@
 package com.example.ui.components
 
+
+import kotlinx.coroutines.launch
+import androidx.compose.animation.*
+
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.activity.compose.BackHandler
@@ -80,7 +84,6 @@ import com.example.data.models.FileItem
 import com.example.data.models.FileType
 import java.io.File
 import java.io.FileOutputStream
-import kotlinx.coroutines.launch
 import kotlin.math.sin
 
 fun resolveMediaFile(context: android.content.Context, path: String): File {
@@ -108,22 +111,24 @@ fun ArcboxMediaViewerModal(
     val resolvedFile = remember(item.path, downloadVersion) { resolveMediaFile(context, item.path) }
     var showInfo by remember { mutableStateOf(false) }
 
-    var isDownloadingCloudFile by remember(item.path) { mutableStateOf(item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() == 0L)) }
+    var downloadJob by remember(item.path) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var isDownloadingCloudFile by remember(item.path) { mutableStateOf(item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() < item.size)) }
     var downloadProgress by remember(item.path) { mutableFloatStateOf(0f) }
 
     LaunchedEffect(item.path) {
-        if (item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() == 0L)) {
-            isDownloadingCloudFile = true
+        if (item.path.startsWith("/cloud/") && (!resolvedFile.exists() || resolvedFile.length() < item.size)) {
             val repository = com.example.data.repository.FileRepository(context)
-            try {
-                repository.downloadCloudFile(item.path) { p ->
-                    downloadProgress = p
+            downloadJob = launch {
+                try {
+                    repository.downloadCloudFile(item.path) { p ->
+                        downloadProgress = p
+                    }
+                    downloadVersion++
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                } finally {
+                    isDownloadingCloudFile = false
                 }
-                downloadVersion++
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-            } finally {
-                isDownloadingCloudFile = false
             }
         }
     }
@@ -135,7 +140,7 @@ fun ArcboxMediaViewerModal(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        if (isDownloadingCloudFile) {
+        if (isDownloadingCloudFile && item.fileType == FileType.IMAGE) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -161,6 +166,8 @@ fun ArcboxMediaViewerModal(
         } else if (item.fileType == FileType.AUDIO) {
             AudioPlayerContent(
                 file = resolvedFile,
+                expectedSize = item.size,
+                downloadJob = downloadJob,
                 onNext = onNext,
                 onPrevious = onPrevious,
                 onClose = onClose
@@ -239,6 +246,8 @@ fun ArcboxMediaViewerModal(
                     ) {
                         VideoPlayerContent(
                             file = resolvedFile,
+                            expectedSize = item.size,
+                            downloadJob = downloadJob,
                             showControls = showControls,
                             onToggleControls = { toggleControls() },
                             onResetControlsTimer = { resetControlsTimer() }
@@ -2028,6 +2037,8 @@ private fun cropImageFile(file: File, aspectWidth: Float, aspectHeight: Float): 
 @Composable
 fun VideoPlayerContent(
     file: File,
+    expectedSize: Long = file.length(),
+    downloadJob: kotlinx.coroutines.Job? = null,
     showControls: Boolean = true,
     onToggleControls: () -> Unit = {},
     onResetControlsTimer: () -> Unit = {}
@@ -2082,7 +2093,11 @@ fun VideoPlayerContent(
         val mp = android.media.MediaPlayer()
         mediaPlayerRef = mp
         try {
-            mp.setDataSource(file.absolutePath)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && (downloadJob != null || file.length() < expectedSize)) {
+                mp.setDataSource(ProgressiveFileMediaDataSource(file, expectedSize, downloadJob))
+            } else {
+                mp.setDataSource(file.absolutePath)
+            }
             surfaceRef?.let { surf ->
                 if (surf.isValid) {
                     mp.setSurface(surf)
@@ -2491,6 +2506,8 @@ fun VideoPlayerContent(
 @Composable
 fun AudioPlayerContent(
     file: File,
+    expectedSize: Long = file.length(),
+    downloadJob: kotlinx.coroutines.Job? = null,
     onNext: () -> Unit = {},
     onPrevious: () -> Unit = {},
     onClose: () -> Unit = {}
@@ -2513,7 +2530,11 @@ fun AudioPlayerContent(
     DisposableEffect(file.path) {
         val mp = MediaPlayer().apply {
             try {
-                setDataSource(context, Uri.fromFile(file))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && (downloadJob != null || file.length() < expectedSize)) {
+                    setDataSource(ProgressiveFileMediaDataSource(file, expectedSize, downloadJob))
+                } else {
+                    setDataSource(context, Uri.fromFile(file))
+                }
                 setOnPreparedListener { player ->
                     isAudioPrepared = true
                     totalDurationMs = player.duration.toLong().coerceAtLeast(1L)

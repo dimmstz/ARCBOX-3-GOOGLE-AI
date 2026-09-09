@@ -64,7 +64,11 @@ class WebDavProvider(
             baseUrl
         }
         val baseWithoutTrailing = cleanBase.trimEnd('/')
-        val cleanSub = subPath.trim('/').split("/").filter { it.isNotBlank() }
+        val cleanSub = subPath.trim('/')
+            .removePrefix("cloud/webdav").removePrefix("cloud/WEBDAV")
+            .removePrefix("/cloud/webdav").removePrefix("/cloud/WEBDAV")
+            .trim('/')
+            .split("/").filter { it.isNotBlank() }
             .joinToString("/") { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
         return if (cleanSub.isEmpty()) "$baseWithoutTrailing/" else "$baseWithoutTrailing/$cleanSub"
     }
@@ -162,7 +166,8 @@ class WebDavProvider(
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
-        val cacheKey = remoteSubPath.trim().removePrefix("/cloud/webdav").removePrefix("/cloud/WEBDAV").trim('/')
+        val cleanSub = remoteSubPath.trim().removePrefix("/cloud/webdav").removePrefix("/cloud/WEBDAV").removePrefix("cloud/webdav").trim('/')
+        val cacheKey = cleanSub
         val cached = directoryCache[cacheKey]
         if (cached != null && cached.items.isNotEmpty() && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
             return@withContext cached.items
@@ -170,12 +175,12 @@ class WebDavProvider(
 
         val session = sessionManager.getSession(providerId)
         val cloudDir = getCacheDir()
-        val targetLocalDir = if (remoteSubPath.isBlank()) cloudDir else File(cloudDir, remoteSubPath)
+        val targetLocalDir = if (cleanSub.isBlank()) cloudDir else File(cloudDir, cleanSub)
         if (!targetLocalDir.exists()) targetLocalDir.mkdirs()
 
         // If session exists with serverUrl and token, try real PROPFIND over network
         if (session != null && session.serverUrl.isNotBlank() && session.tokenOrPass.isNotBlank()) {
-            val targetUrl = buildWebDavUrl(session.serverUrl, remoteSubPath)
+            val targetUrl = buildWebDavUrl(session.serverUrl, cleanSub)
             val credentials = Credentials.basic(session.email, session.tokenOrPass)
             val propfindXml = """<?xml version="1.0" encoding="utf-8" ?>
                 <d:propfind xmlns:d="DAV:">
@@ -199,7 +204,7 @@ class WebDavProvider(
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful || response.code == 207) {
                         val responseBody = response.body?.string() ?: ""
-                        val parsedItems = parseWebDavPropfindResponse(responseBody, targetUrl)
+                        val parsedItems = parseWebDavPropfindResponse(responseBody, targetUrl, cleanSub)
                         if (parsedItems.isNotEmpty()) {
                             // Synchronize remote files into local cache directory
                             for (item in parsedItems) {
@@ -225,9 +230,10 @@ class WebDavProvider(
         // Fallback to local cache files
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
         val result = files.map { file ->
+            val relativePath = if (cleanSub.isBlank()) file.name else "$cleanSub/${file.name}"
             RemoteCloudFile(
                 name = file.name,
-                path = file.absolutePath,
+                path = "/cloud/webdav/$relativePath",
                 isDirectory = file.isDirectory,
                 size = if (file.isDirectory) getFolderSize(file) else file.length(),
                 lastModified = file.lastModified(),
@@ -241,7 +247,7 @@ class WebDavProvider(
         result
     }
 
-    private fun parseWebDavPropfindResponse(xml: String, requestUrl: String): List<RemoteCloudFile> {
+    private fun parseWebDavPropfindResponse(xml: String, requestUrl: String, cleanSub: String): List<RemoteCloudFile> {
         val result = mutableListOf<RemoteCloudFile>()
         try {
             val factory = XmlPullParserFactory.newInstance()
@@ -310,14 +316,16 @@ class WebDavProvider(
                                     cleanHref.substringAfterLast('/')
                                 }
                                 if (name.isNotBlank()) {
+                                    val relativePath = if (cleanSub.isBlank()) name else "$cleanSub/$name"
                                     result.add(
                                         RemoteCloudFile(
                                             name = name,
-                                            path = currentHref,
+                                            path = "/cloud/webdav/$relativePath",
                                             isDirectory = isCollection,
                                             size = contentLength,
                                             lastModified = lastModified,
-                                            mimeType = if (isCollection) "resource/folder" else "application/octet-stream"
+                                            mimeType = if (isCollection) "resource/folder" else "application/octet-stream",
+                                            remoteId = currentHref
                                         )
                                     )
                                 }

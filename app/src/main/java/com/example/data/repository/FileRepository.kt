@@ -554,9 +554,25 @@ class FileRepository(private val context: Context) {
                 }
             }
         } else {
-            val isSafTarget = directoryPath.startsWith("content://") || (safUriString != null && safUriString.startsWith("content://"))
+            val matchedSafUri = if (directoryPath.startsWith("/cloud/") && safUriString == null) {
+                val providerSegment = directoryPath.removePrefix("/cloud/").substringBefore("/").lowercase()
+                val sub = directoryPath.removePrefix("/cloud/$providerSegment").trim('/')
+                if (sub.isEmpty()) {
+                    safCloudManager.getRegisteredDrives().find {
+                        when (providerSegment) {
+                            "drive" -> it.providerType == "GOOGLE_DRIVE" || it.name.contains("Drive", ignoreCase = true)
+                            "onedrive" -> it.providerType == "ONEDRIVE" || it.name.contains("OneDrive", ignoreCase = true)
+                            "dropbox" -> it.providerType == "DROPBOX" || it.name.contains("Dropbox", ignoreCase = true)
+                            else -> false
+                        }
+                    }?.uriString
+                } else null
+            } else null
+
+            val effectiveSafUri = safUriString ?: matchedSafUri
+            val isSafTarget = directoryPath.startsWith("content://") || (effectiveSafUri != null && effectiveSafUri.startsWith("content://"))
             if (isSafTarget) {
-                val safTargetUriStr = if (directoryPath.startsWith("content://")) directoryPath else (safUriString ?: "")
+                val safTargetUriStr = if (directoryPath.startsWith("content://")) directoryPath else (effectiveSafUri ?: "")
                 if (safTargetUriStr.isNotBlank()) {
                     val targetUri = Uri.parse(safTargetUriStr)
                     val rootDoc = try {

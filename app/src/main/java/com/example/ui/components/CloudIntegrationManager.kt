@@ -156,6 +156,7 @@ enum class CloudProvider(
 fun OAuthCloudConnectModal(
     provider: CloudProvider,
     onAuthorize: (email: String, serverUrl: String, passwordOrToken: String) -> Unit,
+    onConnectViaSaf: ((CloudProvider) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -277,6 +278,80 @@ fun OAuthCloudConnectModal(
                     }
                 }
 
+                val isSafSupported = (provider == CloudProvider.GOOGLE_DRIVE || provider == CloudProvider.ONEDRIVE || provider == CloudProvider.DROPBOX) && onConnectViaSaf != null
+                if (!isAuthenticating && isSafSupported) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = provider.primaryColor.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, provider.primaryColor.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.VerifiedUser,
+                                    contentDescription = null,
+                                    tint = provider.primaryColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Recomendado no Android (1 Toque)",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = provider.primaryColor
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Vincule diretamente sua conta do ${provider.displayName} através do seletor nativo do sistema Android, com acesso completo e sem senhas.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = {
+                                    onDismiss()
+                                    onConnectViaSaf(provider)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.CloudQueue, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Vincular no Android (1 Toque)", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        )
+                        Text(
+                            text = " OU CONECTAR COM CREDENCIAIS ",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        )
+                    }
+                }
+
                 if (!isAuthenticating) {
                     // Method selection tabs
                     TabRow(
@@ -308,6 +383,9 @@ fun OAuthCloudConnectModal(
                             label = { Text("URL do Servidor") },
                             leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null) },
                             singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                            ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -322,7 +400,10 @@ fun OAuthCloudConnectModal(
                             label = { Text("E-mail da conta ${provider.displayName}") },
                             placeholder = { Text("exemplo@email.com") },
                             leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Email),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = KeyboardType.Email,
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                            ),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -346,7 +427,16 @@ fun OAuthCloudConnectModal(
                                 }
                             },
                             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                            ),
+                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                                onDone = {
+                                    focusManager.clearFocus(force = true)
+                                    keyboardController?.hide()
+                                }
+                            ),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -514,7 +604,7 @@ fun CloudIntegrationManagerDialog(
     onedriveEmail: String,
     dropboxEmail: String,
     safCloudDrives: List<SafCloudDrive> = emptyList(),
-    onRegisterSafDrive: (Uri) -> Unit = {},
+    onRegisterSafDrive: (Uri, String?, String?) -> Unit = { _, _, _ -> },
     onRemoveSafDrive: (String) -> Unit = {},
     onStartOAuthFlow: (CloudProvider) -> Unit,
     onQuickConnectProvider: (CloudProvider) -> Unit = {},
@@ -523,10 +613,26 @@ fun CloudIntegrationManagerDialog(
     onOpenCloudPath: (String) -> Unit,
     onClose: () -> Unit
 ) {
+    var pendingSafProvider by remember { mutableStateOf<CloudProvider?>(null) }
     val safTreeLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
-        uri?.let { onRegisterSafDrive(it) }
+        uri?.let {
+            val providerType = when (pendingSafProvider) {
+                CloudProvider.GOOGLE_DRIVE -> "GOOGLE_DRIVE"
+                CloudProvider.ONEDRIVE -> "ONEDRIVE"
+                CloudProvider.DROPBOX -> "DROPBOX"
+                else -> null
+            }
+            val label = when (pendingSafProvider) {
+                CloudProvider.GOOGLE_DRIVE -> "Google Drive (Android)"
+                CloudProvider.ONEDRIVE -> "OneDrive (Android)"
+                CloudProvider.DROPBOX -> "Dropbox (Android)"
+                else -> null
+            }
+            onRegisterSafDrive(it, label, providerType)
+            pendingSafProvider = null
+        }
     }
 
     Dialog(
@@ -777,7 +883,14 @@ fun CloudIntegrationManagerDialog(
                             isConnected = isConnected,
                             userEmail = userEmail,
                             onConnect = { onStartOAuthFlow(provider) },
-                            onQuickConnect = { onQuickConnectProvider(provider) },
+                            onQuickConnect = {
+                                if (provider == CloudProvider.GOOGLE_DRIVE || provider == CloudProvider.ONEDRIVE || provider == CloudProvider.DROPBOX) {
+                                    pendingSafProvider = provider
+                                    safTreeLauncher.launch(null)
+                                } else {
+                                    onQuickConnectProvider(provider)
+                                }
+                            },
                             onDisconnect = { onDisconnectProvider(provider) },
                             onExplorePath = { onOpenCloudPath(provider.path) }
                         )
@@ -942,15 +1055,47 @@ fun CloudProviderCard(
             } else {
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Button(
-                    onClick = onConnect,
-                    colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.CloudQueue, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("CONECTAR", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                val isSafSupported = provider == CloudProvider.GOOGLE_DRIVE ||
+                        provider == CloudProvider.ONEDRIVE ||
+                        provider == CloudProvider.DROPBOX
+
+                if (isSafSupported) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onQuickConnect,
+                            colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.CloudQueue, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("VINCULAR (1 TOQUE)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = onConnect,
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, provider.primaryColor.copy(alpha = 0.4f))
+                        ) {
+                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(15.dp), tint = provider.primaryColor)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("LOGIN", fontWeight = FontWeight.SemiBold, fontSize = 11.sp, color = provider.primaryColor)
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = onConnect,
+                        colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.CloudQueue, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("CONECTAR", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
                 }
             }
         }

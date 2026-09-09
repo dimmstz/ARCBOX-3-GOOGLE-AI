@@ -48,7 +48,7 @@ class SafCloudManager(private val context: Context) {
         return list
     }
 
-    fun registerSafDrive(treeUri: Uri, customLabel: String? = null): SafCloudDrive? {
+    fun registerSafDrive(treeUri: Uri, customLabel: String? = null, forcedProviderType: String? = null): SafCloudDrive? {
         try {
             // Take persistable URI permissions so app can access cloud files across restarts
             val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -63,7 +63,7 @@ class SafCloudManager(private val context: Context) {
             val uriStr = treeUri.toString()
             val lowerUri = uriStr.lowercase()
 
-            val providerType = when {
+            val providerType = forcedProviderType ?: when {
                 lowerUri.contains("com.google.android.apps.docs.storage") || lowerUri.contains("googledrive") -> "GOOGLE_DRIVE"
                 lowerUri.contains("com.microsoft.skydrive") || lowerUri.contains("onedrive") -> "ONEDRIVE"
                 lowerUri.contains("com.dropbox.android") || lowerUri.contains("dropbox") -> "DROPBOX"

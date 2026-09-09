@@ -313,20 +313,46 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun registerSafCloudDrive(uri: Uri, customLabel: String? = null) {
+    fun registerSafCloudDrive(uri: Uri, customLabel: String? = null, forcedProviderType: String? = null) {
         viewModelScope.launch {
-            val drive = repository.safCloudManager.registerSafDrive(uri, customLabel)
+            val drive = repository.safCloudManager.registerSafDrive(uri, customLabel, forcedProviderType)
             if (drive != null) {
                 val updatedDrives = repository.safCloudManager.getRegisteredDrives()
                 val volumes = repository.getStorageVolumes()
+
+                // Link to standard cloud state if it matches
+                when (drive.providerType) {
+                    "GOOGLE_DRIVE" -> {
+                        prefs.edit()
+                            .putBoolean("cloud_connected_drive", true)
+                            .putString("cloud_email_drive", drive.name)
+                            .apply()
+                        _uiState.update { it.copy(isDriveConnected = true, driveAccountEmail = drive.name) }
+                    }
+                    "ONEDRIVE" -> {
+                        prefs.edit()
+                            .putBoolean("cloud_connected_onedrive", true)
+                            .putString("cloud_email_onedrive", drive.name)
+                            .apply()
+                        _uiState.update { it.copy(isOnedriveConnected = true, onedriveAccountEmail = drive.name) }
+                    }
+                    "DROPBOX" -> {
+                        prefs.edit()
+                            .putBoolean("cloud_connected_dropbox", true)
+                            .putString("cloud_email_dropbox", drive.name)
+                            .apply()
+                        _uiState.update { it.copy(isDropboxConnected = true, dropboxAccountEmail = drive.name) }
+                    }
+                }
+
                 _uiState.update {
                     it.copy(
                         safCloudDrives = updatedDrives,
                         storageVolumes = volumes,
-                        snackbarMessage = "Nuvem Real vinculada com sucesso: ${drive.name}"
+                        snackbarMessage = "Nuvem vinculada com sucesso: ${drive.name}"
                     )
                 }
-                refreshFiles()
+                navigateToDirectory(drive.uriString)
             } else {
                 showToast("Não foi possível vincular o armazenamento em nuvem SAF.")
             }

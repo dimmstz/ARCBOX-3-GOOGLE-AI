@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.15-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.15"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.20-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.20"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,20 +18,42 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.15
+## 🚀 Novidades da Versão v1.0.20
 
-- ⚡ **Carregamento Instantâneo sem Downloads Automáticos**:
-  - Removidos completamente todos os downloads automáticos em segundo plano de arquivos de mídia (imagens e fotos) no grid de arquivos da nuvem. Agora, a listagem de diretórios do MEGA é **instantânea e limpa**, sem lag de rede ou consumo indevido de banda para miniaturas.
-- ☁️ **Funcionamento Puro em Nuvem (Acesso sob Demanda)**:
-  - Arquivos abertos (fotos, vídeos, PDFs, etc.) são mantidos estritamente na memória temporária do sistema (`context.cacheDir`), funcionando de forma idêntica a um navegador web. Nenhum arquivo se acumula permanentemente no armazenamento interno offline do aparelho.
-  - O download definitivo de arquivos ocorre apenas quando o usuário clica explicitamente no ícone de "Download" na barra de ações, que salva o arquivo diretamente na pasta pública de *Downloads* do sistema.
-- 🧹 **Cálculo e Limpeza Inteligente de Cache**:
-  - A tela de Configurações agora calcula em tempo real o espaço exato ocupado pelo cache de miniaturas e arquivos temporários da nuvem.
-  - A opção "Limpar" agora esvazia completamente a pasta temporária `cacheDir/cloud_storage` e limpa dados legados, liberando espaço instantaneamente.
+- ☁️ **Vinculação de Nuvens em 1 Toque (Android SAF Nativo)**:
+  - Integração facilitada com **Google Drive**, **OneDrive** e **Dropbox** usando o Storage Access Framework nativo do sistema Android.
+  - Conexão e sincronização direta sem exigir criação manual de API keys ou credenciais de desenvolvedor.
+  - Navegação fluida e transparente pelas pastas `/cloud/drive`, `/cloud/onedrive` e `/cloud/dropbox` com ponte automática para os diretórios SAF registrados.
+- 🛠️ **Padronização e Correção dos Provedores em Nuvem**:
+  - Correção na resolução de caminhos e normalização de subpastas (`cleanSub`) no **OneDrive**, **Dropbox** e **WebDAV**.
+  - Cache dinâmico inteligente com invalidação adequada durante navegação profunda.
+- 🌐 **Aprimoramentos no WebDAV Personalizado**:
+  - Implementação completa do protocolo com suporte a requisições `PROPFIND` com profundidade 1 e tratamento de respostas HTTP `207 Multi-Status`.
+  - Suporte a credenciais HTTP Basic, streaming de download e download direto.
 
 ---
 
 ## 📋 Histórico de Versões
+
+### v1.0.19
+- 🛠️ **Correção Crítica no Instalador de Atualizações Automáticas (Erro de Downgrade Bloqueado)**:
+  - Corrigido um problema onde o ArcBox baixava erroneamente uma build temporária de debug do GitHub Action (`app-debug.apk`) em vez da release de produção oficial (`Arcbox-v1.X.X-release.apk`).
+  - O uso do APK de debug resultava em um código de versão desatualizado, ativando indevidamente a trava de segurança "Downgrades são impedidos por segurança" (Ex: `A versão baixada (16) é inferior à versão instalada (18)`).
+  - O gerenciador de atualizações OTA do ArcBox foi reprogramado para ignorar os arquivos de debug e exigir, com prioridade máxima, as builds nominais de lançamento.
+
+### v1.0.18
+- ⚡ **Super Otimização de Velocidade e Download Concorrente**: Dispatcher (OkHttp) ampliado para 128 requisições simultâneas (32 por host), pool de sockets aprimorado, e buffers refinados (64 KB). Semáforo de processamento ampliado (Semaphore=6).
+
+### v1.0.17
+- ⚡ **Pré-Carregamento de Miniaturas e Debounce (150ms)**: Introduzido o pré-carregamento assíncrono condicionado por tamanho de mídias (imagens < 12MB, vídeos < 8MB) para visualização rápida.
+
+### v1.0.16
+- ⌨️ **Otimização de Foco e Transições do Teclado (IME Insets)**: Correção de timeouts de animação do Android FrameTracker (`IME_INSETS_HIDE_ANIMATION`) adicionando ações "Done" em todos os formulários e caixas de diálogo.
+
+### v1.0.15
+- ⚡ **Carregamento Instantâneo sem Downloads Automáticos**: Removidos completamente os downloads automáticos em segundo plano de imagens e fotos para miniaturas de mídias em nuvem.
+- ☁️ **Funcionamento Puro em Nuvem**: Arquivos visualizados sob demanda salvos em memória temporária (`cacheDir/cloud_storage`), sem acumular memória permanentemente.
+- 🧹 **Limpeza Inteligente de Cache**: Tela de Configurações calcula o espaço de cache e limpa diretórios temporários instantaneamente.
 
 ### v1.0.14
 - ⚡ **Navegação Instantânea de Pastas na Nuvem (Cache de 10 min)**: Expansão do TTL de cache das listagens de diretórios de todos os provedores em nuvem de 1 para 10 minutos.

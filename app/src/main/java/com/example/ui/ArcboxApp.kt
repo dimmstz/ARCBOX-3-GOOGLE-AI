@@ -924,6 +924,10 @@ fun ArcboxApp(
                 onAuthorize = { email, serverUrl, passwordOrToken ->
                     viewModel.completeOAuthConnect(oauthProvider, email, serverUrl, passwordOrToken)
                 },
+                onConnectViaSaf = { provider ->
+                    viewModel.closeOAuthFlow()
+                    viewModel.openCloudManager()
+                },
                 onDismiss = { viewModel.closeOAuthFlow() }
             )
         }
@@ -943,7 +947,7 @@ fun ArcboxApp(
                 onedriveEmail = uiState.onedriveAccountEmail,
                 dropboxEmail = uiState.dropboxAccountEmail,
                 safCloudDrives = uiState.safCloudDrives,
-                onRegisterSafDrive = { uri -> viewModel.registerSafCloudDrive(uri) },
+                onRegisterSafDrive = { uri, label, type -> viewModel.registerSafCloudDrive(uri, label, type) },
                 onRemoveSafDrive = { id -> viewModel.removeSafCloudDrive(id) },
                 onStartOAuthFlow = { provider -> viewModel.startOAuthFlow(provider) },
                 onQuickConnectProvider = { provider -> viewModel.quickConnectCloudProvider(provider) },
@@ -983,6 +987,15 @@ fun ArcboxApp(
                         label = { Text("Nome da Pasta") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = {
+                                localFocusManager.clearFocus(force = true)
+                                localKeyboardController?.hide()
+                            }
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
@@ -1031,6 +1044,15 @@ fun ArcboxApp(
                         label = { Text("Nome do Arquivo (ex: nota.txt)") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = {
+                                localFocusManager.clearFocus(force = true)
+                                localKeyboardController?.hide()
+                            }
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
@@ -1079,6 +1101,15 @@ fun ArcboxApp(
                         label = { Text("Novo Nome") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = {
+                                localFocusManager.clearFocus(force = true)
+                                localKeyboardController?.hide()
+                            }
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
@@ -1129,6 +1160,15 @@ fun ArcboxApp(
                         label = { Text("Nome do arquivo ZIP") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = {
+                                localFocusManager.clearFocus(force = true)
+                                localKeyboardController?.hide()
+                            }
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
