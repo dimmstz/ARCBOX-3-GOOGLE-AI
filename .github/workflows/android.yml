@@ -68,17 +68,19 @@ jobs:
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         if: success()
+        continue-on-error: true
         with:
-          name: Arcbox-debug-apk
+          name: Arcbox-debug-apk-${{ github.run_id }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
       - name: Upload Test Reports
         uses: actions/upload-artifact@v4
-        if: always()
+        if: failure() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+        continue-on-error: true
         with:
-          name: unit-test-reports
+          name: unit-test-reports-${{ github.run_id }}
           path: app/build/reports/tests/testDebugUnitTest/
           if-no-files-found: ignore
           retention-days: 7

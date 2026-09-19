@@ -41,9 +41,11 @@ jobs:
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
-          name: arcbox-apk
+          name: arcbox-apk-${{ github.run_id }}
           path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
