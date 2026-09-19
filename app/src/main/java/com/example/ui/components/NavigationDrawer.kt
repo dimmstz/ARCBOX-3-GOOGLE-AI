@@ -652,44 +652,6 @@ fun ArcboxNavigationDrawerContent(
                 )
             }
 
-            // Always present option to Add Cloud Storage
-            NavigationDrawerItem(
-                label = {
-                    Text(
-                        text = "Adicionar Nuvem",
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                },
-                selected = false,
-                onClick = {
-                    onOpenCloudManager()
-                    onCloseDrawer()
-                },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Adicionar Nuvem",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                },
-                badge = {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = CircleShape
-                    ) {
-                        Text(
-                            text = "+",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-            )
-
             // Navigation Item: Favoritos
             NavigationDrawerItem(
                 label = { Text("Favoritos", fontWeight = FontWeight.SemiBold) },

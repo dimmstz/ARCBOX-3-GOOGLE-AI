@@ -1,6 +1,11 @@
 package com.example.ui.components
 
+import android.annotation.SuppressLint
 import android.net.Uri
+import android.webkit.CookieManager
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -20,8 +25,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.AutofillNode
+import androidx.compose.ui.autofill.AutofillType
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalAutofill
+import androidx.compose.ui.platform.LocalAutofillTree
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,6 +42,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.cloud.CloudStorageService
@@ -44,6 +57,7 @@ enum class CloudProvider(
     val displayName: String,
     val defaultEmail: String,
     val defaultServerUrl: String,
+    val webLoginUrl: String,
     val path: String,
     val defaultTotalBytes: Long,
     val defaultFreeBytes: Long,
@@ -56,6 +70,7 @@ enum class CloudProvider(
         displayName = "MEGA",
         defaultEmail = "",
         defaultServerUrl = "https://g.api.mega.co.nz/cs",
+        webLoginUrl = "https://mega.nz/login",
         path = "/cloud/mega",
         defaultTotalBytes = 50L * 1024 * 1024 * 1024,
         defaultFreeBytes = 37L * 1024 * 1024 * 1024,
@@ -73,6 +88,7 @@ enum class CloudProvider(
         displayName = "Google Drive",
         defaultEmail = "",
         defaultServerUrl = "https://www.googleapis.com/drive/v3",
+        webLoginUrl = "https://accounts.google.com/signin",
         path = "/cloud/drive",
         defaultTotalBytes = 15L * 1024 * 1024 * 1024,
         defaultFreeBytes = 8L * 1024 * 1024 * 1024,
@@ -90,6 +106,7 @@ enum class CloudProvider(
         displayName = "Microsoft OneDrive",
         defaultEmail = "",
         defaultServerUrl = "https://graph.microsoft.com/v1.0",
+        webLoginUrl = "https://login.live.com/",
         path = "/cloud/onedrive",
         defaultTotalBytes = 5L * 1024 * 1024 * 1024,
         defaultFreeBytes = 2L * 1024 * 1024 * 1024,
@@ -106,6 +123,7 @@ enum class CloudProvider(
         displayName = "Dropbox",
         defaultEmail = "",
         defaultServerUrl = "https://api.dropboxapi.com/2",
+        webLoginUrl = "https://www.dropbox.com/login",
         path = "/cloud/dropbox",
         defaultTotalBytes = 2L * 1024 * 1024 * 1024,
         defaultFreeBytes = 1200L * 1024 * 1024,
@@ -122,6 +140,7 @@ enum class CloudProvider(
         displayName = "MediaFire",
         defaultEmail = "",
         defaultServerUrl = "https://www.mediafire.com/api",
+        webLoginUrl = "https://www.mediafire.com/login/",
         path = "/cloud/mediafire",
         defaultTotalBytes = 10L * 1024 * 1024 * 1024,
         defaultFreeBytes = 9L * 1024 * 1024 * 1024,
@@ -138,6 +157,7 @@ enum class CloudProvider(
         displayName = "WebDAV / Servidor",
         defaultEmail = "",
         defaultServerUrl = "https://cloud.nextcloud.com/remote.php/dav/files/usuario/",
+        webLoginUrl = "https://cloud.nextcloud.com/login",
         path = "/cloud/webdav",
         defaultTotalBytes = 100L * 1024 * 1024 * 1024,
         defaultFreeBytes = 85L * 1024 * 1024 * 1024,
@@ -153,16 +173,189 @@ enum class CloudProvider(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun CloudWebAutofillLoginDialog(
+    provider: CloudProvider,
+    onLoginSuccess: (email: String, tokenOrPassword: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var detectedEmail by remember { mutableStateOf("") }
+    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                text = "Login ${provider.displayName}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Usar a senha salva do Google / Android",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = "Fechar")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { webViewInstance?.reload() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Recarregar")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                )
+
+                if (isLoading) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = provider.primaryColor
+                    )
+                }
+
+                Box(modifier = Modifier.weight(1f)) {
+                    AndroidView(
+                        factory = { context ->
+                            WebView(context).apply {
+                                layoutParams = android.view.ViewGroup.LayoutParams(
+                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                                @SuppressLint("SetJavaScriptEnabled")
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
+                                settings.databaseEnabled = true
+                                settings.saveFormData = true
+                                settings.useWideViewPort = true
+                                settings.loadWithOverviewMode = true
+
+                                val cookieManager = CookieManager.getInstance()
+                                cookieManager.setAcceptCookie(true)
+                                cookieManager.setAcceptThirdPartyCookies(this, true)
+
+                                webViewClient = object : WebViewClient() {
+                                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                        isLoading = true
+                                    }
+                                    override fun onPageFinished(view: WebView?, url: String?) {
+                                        isLoading = false
+                                        view?.evaluateJavascript(
+                                            "(function() { var el = document.querySelector('input[type=\"email\"], input[type=\"text\"][name*=\"user\"], input[name*=\"email\"], input[name*=\"login\"]'); return el ? el.value : ''; })()"
+                                        ) { value ->
+                                            val clean = value?.replace("\"", "")?.trim() ?: ""
+                                            if (clean.isNotBlank() && clean.contains("@")) {
+                                                detectedEmail = clean
+                                            }
+                                        }
+                                    }
+                                }
+
+                                webViewInstance = this
+                                loadUrl(provider.webLoginUrl)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 6.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = provider.primaryColor.copy(alpha = 0.12f),
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.VpnKey,
+                                        contentDescription = null,
+                                        tint = provider.primaryColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (detectedEmail.isNotBlank()) "Conta: $detectedEmail" else "Após preencher ou fazer login:",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "Toque abaixo para vincular sua conta ao ArcBox",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                val emailToUse = detectedEmail.ifBlank { "${provider.id.lowercase()}@account" }
+                                onLoginSuccess(emailToUse, "web_auth_token_${System.currentTimeMillis()}")
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Concluir e Conectar ao ArcBox", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun OAuthCloudConnectModal(
     provider: CloudProvider,
     onAuthorize: (email: String, serverUrl: String, passwordOrToken: String) -> Unit,
-    onConnectViaSaf: ((CloudProvider) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val cloudService = remember(context) { CloudStorageService.getInstance(context) }
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Email/Password, 1 = Token/Session
+    var showWebAutofillLogin by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Email/Password, 1 = Token/Key/Passkey
     var serverUrlInput by remember { mutableStateOf(provider.defaultServerUrl) }
     var emailInput by remember { mutableStateOf(provider.defaultEmail) }
     var passwordInput by remember { mutableStateOf("") }
@@ -175,6 +368,34 @@ fun OAuthCloudConnectModal(
     val coroutineScope = rememberCoroutineScope()
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+
+    if (showWebAutofillLogin) {
+        CloudWebAutofillLoginDialog(
+            provider = provider,
+            onLoginSuccess = { email, token ->
+                showWebAutofillLogin = false
+                isAuthenticating = true
+                authError = null
+                authStepText = "Conectando conta autenticada do ${provider.displayName}..."
+                coroutineScope.launch {
+                    val result = cloudService.authenticateAndConnect(
+                        providerId = provider.id,
+                        serverUrl = provider.defaultServerUrl,
+                        usernameOrEmail = email,
+                        passwordOrToken = token,
+                        isTemporary = false
+                    )
+                    isAuthenticating = false
+                    if (result.success) {
+                        onAuthorize(result.accountDisplayName.ifBlank { email }, provider.defaultServerUrl, token)
+                    } else {
+                        authError = result.errorMessage ?: "Falha ao conectar com a conta."
+                    }
+                }
+            },
+            onDismiss = { showWebAutofillLogin = false }
+        )
+    }
 
     Dialog(
         onDismissRequest = {
@@ -278,81 +499,60 @@ fun OAuthCloudConnectModal(
                     }
                 }
 
-                val isSafSupported = (provider == CloudProvider.GOOGLE_DRIVE || provider == CloudProvider.ONEDRIVE || provider == CloudProvider.DROPBOX) && onConnectViaSaf != null
-                if (!isAuthenticating && isSafSupported) {
+                if (!isAuthenticating) {
+                    // Google Autofill / Saved Password Action Card
                     Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = provider.primaryColor.copy(alpha = 0.12f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, provider.primaryColor.copy(alpha = 0.35f)),
+                        shape = RoundedCornerShape(16.dp),
+                        color = provider.primaryColor.copy(alpha = 0.10f),
+                        border = androidx.compose.foundation.BorderStroke(1.2.dp, provider.primaryColor.copy(alpha = 0.45f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 14.dp)
+                            .clickable { showWebAutofillLogin = true }
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.VerifiedUser,
-                                    contentDescription = null,
-                                    tint = provider.primaryColor,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Recomendado no Android (1 Toque)",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = provider.primaryColor
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Vincule diretamente sua conta do ${provider.displayName} através do seletor nativo do sistema Android, com acesso completo e sem senhas.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Button(
-                                onClick = {
-                                    onDismiss()
-                                    onConnectViaSaf(provider)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.fillMaxWidth()
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = provider.primaryColor,
+                                modifier = Modifier.size(38.dp)
                             ) {
-                                Icon(Icons.Default.CloudQueue, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Vincular no Android (1 Toque)", fontWeight = FontWeight.Bold)
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.VpnKey,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.surface,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Usar a Senha Salva do Google",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Preenchimento automático do Android",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = provider.primaryColor,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = provider.primaryColor
+                            )
                         }
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp)
-                    ) {
-                        HorizontalDivider(
-                            modifier = Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                        )
-                        Text(
-                            text = " OU CONECTAR COM CREDENCIAIS ",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                        )
-                    }
-                }
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                if (!isAuthenticating) {
                     // Method selection tabs
                     TabRow(
                         selectedTabIndex = selectedTab,
@@ -370,7 +570,7 @@ fun OAuthCloudConnectModal(
                         Tab(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1; authError = null },
-                            text = { Text("Token / Chave", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
+                            text = { Text("Chave / Token", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
                         )
                     }
 
@@ -415,7 +615,7 @@ fun OAuthCloudConnectModal(
                         OutlinedTextField(
                             value = passwordInput,
                             onValueChange = { passwordInput = it; authError = null },
-                            label = { Text("Senha da conta") },
+                            label = { Text("Senha da conta ou Senha de App") },
                             placeholder = { Text("Digite sua senha") },
                             leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                             trailingIcon = {
@@ -442,12 +642,21 @@ fun OAuthCloudConnectModal(
                             modifier = Modifier.fillMaxWidth()
                         )
                     } else {
-                        // Token field
+                        // Key / Token / Passkey field
+                        val tokenLabel = when (provider) {
+                            CloudProvider.GOOGLE_DRIVE -> "Token OAuth2 (ya29...) ou Chave de Acesso"
+                            CloudProvider.ONEDRIVE -> "Access Token ou Chave Microsoft Graph"
+                            CloudProvider.DROPBOX -> "Token de Acesso / App Key"
+                            CloudProvider.MEGA -> "Chave de Sessão (sid) / Token"
+                            CloudProvider.MEDIAFIRE -> "Chave de Acesso / API Key"
+                            CloudProvider.WEBDAV -> "Token de Aplicação / Senha de App"
+                        }
+
                         OutlinedTextField(
                             value = tokenInput,
                             onValueChange = { tokenInput = it; authError = null },
-                            label = { Text("Chave de Sessão / Token (sid)") },
-                            placeholder = { Text("Cole o token ou sid aqui") },
+                            label = { Text(tokenLabel) },
+                            placeholder = { Text("Cole aqui sua chave de acesso ou token") },
                             leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
                             singleLine = false,
                             maxLines = 3,
@@ -456,7 +665,7 @@ fun OAuthCloudConnectModal(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Recomendado se a sua conta possuir verificação em duas etapas (2FA) ativada.",
+                            text = "Autenticação direta com chave de API, access token ou credencial permanente.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp
@@ -480,7 +689,7 @@ fun OAuthCloudConnectModal(
 
                         Button(
                             onClick = {
-                                val email = emailInput.trim()
+                                val email = if (selectedTab == 1 && emailInput.isBlank()) "${provider.id.lowercase()}@cloud.storage" else emailInput.trim()
                                 val passOrToken = if (selectedTab == 0) passwordInput.trim() else tokenInput.trim()
 
                                 if (selectedTab == 0 && email.isBlank()) {
@@ -488,7 +697,7 @@ fun OAuthCloudConnectModal(
                                     return@Button
                                 }
                                 if (passOrToken.isBlank()) {
-                                    authError = if (selectedTab == 0) "Por favor, digite sua senha." else "Por favor, cole seu token de sessão."
+                                    authError = if (selectedTab == 0) "Por favor, digite sua senha." else "Por favor, cole sua chave ou token de acesso."
                                     return@Button
                                 }
 
@@ -613,30 +822,6 @@ fun CloudIntegrationManagerDialog(
     onOpenCloudPath: (String) -> Unit,
     onClose: () -> Unit
 ) {
-    var pendingSafProvider by remember { mutableStateOf<CloudProvider?>(null) }
-    val safTreeLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        uri?.let {
-            val providerType = when (pendingSafProvider) {
-                CloudProvider.GOOGLE_DRIVE -> "GOOGLE_DRIVE"
-                CloudProvider.ONEDRIVE -> "ONEDRIVE"
-                CloudProvider.DROPBOX -> "DROPBOX"
-                CloudProvider.MEDIAFIRE -> "MEDIAFIRE"
-                else -> null
-            }
-            val label = when (pendingSafProvider) {
-                CloudProvider.GOOGLE_DRIVE -> "Google Drive (Android)"
-                CloudProvider.ONEDRIVE -> "OneDrive (Android)"
-                CloudProvider.DROPBOX -> "Dropbox (Android)"
-                CloudProvider.MEDIAFIRE -> "MediaFire (Android)"
-                else -> null
-            }
-            onRegisterSafDrive(it, label, providerType)
-            pendingSafProvider = null
-        }
-    }
-
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -657,18 +842,6 @@ fun CloudIntegrationManagerDialog(
                             Text("Armazenamento em Nuvem", fontWeight = FontWeight.Bold)
                         }
                     },
-                    navigationIcon = {
-                        IconButton(onClick = onClose) {
-                            Icon(Icons.Default.Close, contentDescription = "Fechar")
-                        }
-                    },
-                    actions = {
-                        TextButton(onClick = onConnectAll) {
-                            Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Conectar Todas", fontWeight = FontWeight.Bold)
-                        }
-                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
                 )
 
@@ -679,184 +852,6 @@ fun CloudIntegrationManagerDialog(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    item {
-                        Card(
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(42.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            Icons.Default.Storage,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Column {
-                                    Text(
-                                        text = "Unidades de Armazenamento em Nuvem",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "MEGA, Google Drive, Microsoft OneDrive, Dropbox e MediaFire montados diretamente no explorador nativo do ArcBox.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Native SAF Real Cloud Section
-                    item {
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 2.dp,
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                Icons.Default.CloudQueue,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(12.dp))
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Vincular Pasta do Sistema (SAF)",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "Pastas de nuvens instaladas no Android com acesso persistente.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                OutlinedButton(
-                                    onClick = { safTreeLauncher.launch(null) },
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Selecionar Pasta no Android (SAF)")
-                                }
-
-                                if (safCloudDrives.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    Text(
-                                        text = "Pastas Vinculadas (${safCloudDrives.size}):",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    safCloudDrives.forEach { drive ->
-                                        Surface(
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 3.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(10.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.FolderShared,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(10.dp))
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = drive.name,
-                                                        fontWeight = FontWeight.Bold,
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        maxLines = 1
-                                                    )
-                                                    Text(
-                                                        text = drive.uriString,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        fontSize = 11.sp,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                }
-
-                                                IconButton(
-                                                    onClick = { onOpenCloudPath(drive.uriString) },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(Icons.Default.FolderOpen, contentDescription = "Abrir", tint = MaterialTheme.colorScheme.primary)
-                                                }
-
-                                                IconButton(
-                                                    onClick = { onRemoveSafDrive(drive.id) },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(Icons.Default.DeleteOutline, contentDescription = "Desvincular", tint = MaterialTheme.colorScheme.error)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     // Section title for Providers
                     item {
                         Text(
@@ -885,14 +880,6 @@ fun CloudIntegrationManagerDialog(
                             isConnected = isConnected,
                             userEmail = userEmail,
                             onConnect = { onStartOAuthFlow(provider) },
-                            onQuickConnect = {
-                                if (provider == CloudProvider.GOOGLE_DRIVE || provider == CloudProvider.ONEDRIVE || provider == CloudProvider.DROPBOX || provider == CloudProvider.MEDIAFIRE) {
-                                    pendingSafProvider = provider
-                                    safTreeLauncher.launch(null)
-                                } else {
-                                    onQuickConnectProvider(provider)
-                                }
-                            },
                             onDisconnect = { onDisconnectProvider(provider) },
                             onExplorePath = { onOpenCloudPath(provider.path) }
                         )
@@ -909,7 +896,6 @@ fun CloudProviderCard(
     isConnected: Boolean,
     userEmail: String,
     onConnect: () -> Unit,
-    onQuickConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onExplorePath: () -> Unit
 ) {
@@ -950,12 +936,14 @@ fun CloudProviderCard(
 
                     Spacer(modifier = Modifier.width(14.dp))
 
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = provider.displayName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         if (isConnected) {
@@ -969,10 +957,12 @@ fun CloudProviderCard(
                             )
                         } else {
                             Text(
-                                text = "Não conectado • Toque para vincular direto",
+                                text = "Não conectado",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -1057,47 +1047,15 @@ fun CloudProviderCard(
             } else {
                 Spacer(modifier = Modifier.height(12.dp))
 
-                val isSafSupported = provider == CloudProvider.GOOGLE_DRIVE ||
-                        provider == CloudProvider.ONEDRIVE ||
-                        provider == CloudProvider.DROPBOX
-
-                if (isSafSupported) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = onQuickConnect,
-                            colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.CloudQueue, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("VINCULAR (1 TOQUE)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                        }
-
-                        OutlinedButton(
-                            onClick = onConnect,
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, provider.primaryColor.copy(alpha = 0.4f))
-                        ) {
-                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(15.dp), tint = provider.primaryColor)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("LOGIN", fontWeight = FontWeight.SemiBold, fontSize = 11.sp, color = provider.primaryColor)
-                        }
-                    }
-                } else {
-                    Button(
-                        onClick = onConnect,
-                        colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.CloudQueue, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("CONECTAR", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    }
+                Button(
+                    onClick = onConnect,
+                    colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.CloudQueue, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("CONECTAR", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
         }

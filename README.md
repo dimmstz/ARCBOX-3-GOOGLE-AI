@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.25-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.25"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.26-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.26"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,18 +18,26 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.25
+## 🚀 Novidades da Versão v1.0.26
 
+- 🔑 **Integração com Senhas Salvas do Google / Android**:
+  - Suporte a preenchimento automático pelo Gerenciador de Senhas do Google / Android no modal de conexão de nuvens (MediaFire, MEGA, Google Drive, Microsoft OneDrive, Dropbox e WebDAV).
+  - Autenticação web integrada com detecção de credenciais para login rápido em 1 toque.
+- 🧹 **Interface Limpa e Direta de Armazenamento em Nuvem**:
+  - Remoção de banners redundantes e do seletor SAF antigo da tela principal de nuvens.
+  - Acesso direto aos cartões de cada provedor com layout intuitivo e padronizado.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.25
 - ☁️ **Botão "Adicionar Nuvem" Visível no Menu Lateral Desde o Primeiro Acesso**:
   - Exibição de card interativo com botão de conexão em destaque logo abaixo da seção Nuvem & Armazenamento no primeiro acesso ao app, facilitando vincular MEGA, Google Drive, OneDrive ou WebDAV rapidamente.
 - 🔄 **Atualização do Token de Releases e Tratamento Elegante de Erros**:
   - Novo token de autenticação oficial integrado para verificação de atualizações.
   - Migração e substituição automática do token nos dispositivos que continham o token antigo salvo em cache.
   - Sanitização de mensagens de erro: removidos jargões e referências internas ao GitHub em caso de falha, apresentando comunicados amigáveis e transparentes ao usuário final.
-
----
-
-## 📋 Histórico de Versões
 
 ### v1.0.24
 - ☁️ **Atualização e Recarregamento Automático de Arquivos e Pastas no MEGA**:

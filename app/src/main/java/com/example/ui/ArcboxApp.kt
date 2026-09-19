@@ -924,10 +924,6 @@ fun ArcboxApp(
                 onAuthorize = { email, serverUrl, passwordOrToken ->
                     viewModel.completeOAuthConnect(oauthProvider, email, serverUrl, passwordOrToken)
                 },
-                onConnectViaSaf = { provider ->
-                    viewModel.closeOAuthFlow()
-                    viewModel.openCloudManager()
-                },
                 onDismiss = { viewModel.closeOAuthFlow() }
             )
         }
