@@ -67,6 +67,7 @@ class SafCloudManager(private val context: Context) {
                 lowerUri.contains("com.google.android.apps.docs.storage") || lowerUri.contains("googledrive") -> "GOOGLE_DRIVE"
                 lowerUri.contains("com.microsoft.skydrive") || lowerUri.contains("onedrive") -> "ONEDRIVE"
                 lowerUri.contains("com.dropbox.android") || lowerUri.contains("dropbox") -> "DROPBOX"
+                lowerUri.contains("mediafire") -> "MEDIAFIRE"
                 lowerUri.contains("org.nextcloud") || lowerUri.contains("nextcloud") -> "NEXTCLOUD"
                 lowerUri.contains("owncloud") -> "OWNCLOUD"
                 lowerUri.contains("box.android") -> "BOX"
@@ -77,6 +78,7 @@ class SafCloudManager(private val context: Context) {
                 "GOOGLE_DRIVE" -> if (customLabel.isNullOrBlank()) "Google Drive (Nuvem Real)" else customLabel
                 "ONEDRIVE" -> if (customLabel.isNullOrBlank()) "Microsoft OneDrive (Nuvem Real)" else customLabel
                 "DROPBOX" -> if (customLabel.isNullOrBlank()) "Dropbox (Nuvem Real)" else customLabel
+                "MEDIAFIRE" -> if (customLabel.isNullOrBlank()) "MediaFire (Nuvem Real)" else customLabel
                 "NEXTCLOUD" -> if (customLabel.isNullOrBlank()) "Nextcloud (Nuvem Real)" else customLabel
                 "OWNCLOUD" -> if (customLabel.isNullOrBlank()) "ownCloud (Nuvem Real)" else customLabel
                 "BOX" -> if (customLabel.isNullOrBlank()) "Box (Nuvem Real)" else customLabel

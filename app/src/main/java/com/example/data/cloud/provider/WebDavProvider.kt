@@ -55,13 +55,17 @@ class WebDavProvider(
 
     private fun getCacheDir(): File = File(context.cacheDir, "cloud_storage/webdav")
 
-    private fun buildWebDavUrl(baseUrl: String, subPath: String): String {
-        val cleanBase = if (baseUrl.isBlank()) {
-            "https://cloud.nextcloud.com/remote.php/dav/files/"
+    private fun buildWebDavUrl(baseUrl: String, subPath: String, userEmail: String = ""): String {
+        var cleanBase = if (baseUrl.isBlank()) {
+            "https://cloud.nextcloud.com/remote.php/dav/files/${userEmail.ifBlank { "usuario" }}"
         } else if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
             "https://$baseUrl"
         } else {
             baseUrl
+        }
+        if (cleanBase.contains("nextcloud", ignoreCase = true) && !cleanBase.contains("/remote.php/dav/files/")) {
+            val user = userEmail.ifBlank { "usuario" }
+            cleanBase = "${cleanBase.trimEnd('/')}/remote.php/dav/files/$user"
         }
         val baseWithoutTrailing = cleanBase.trimEnd('/')
         val cleanSub = subPath.trim('/')
@@ -80,7 +84,7 @@ class WebDavProvider(
         isTemporary: Boolean
     ): CloudAuthResult = withContext(Dispatchers.IO) {
         val cleanEmail = email.trim()
-        val targetUrl = buildWebDavUrl(serverUrl, "")
+        val targetUrl = buildWebDavUrl(serverUrl, "", cleanEmail)
         val credentials = Credentials.basic(cleanEmail, tokenOrPass)
         val propfindXml = """<?xml version="1.0" encoding="utf-8" ?>
             <d:propfind xmlns:d="DAV:">

@@ -1,19 +1,17 @@
 import urllib.request, json, os
 
-token = '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'
+token = os.environ.get('GITHUB_TOKEN', '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')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.21'
-name = 'Arcbox File Manager v1.0.21'
-body = """## 🚀 Novidades da Versão v1.0.21
+tag = 'v1.0.22'
+name = 'Arcbox File Manager v1.0.22'
+body = """## 🚀 Novidades da Versão v1.0.22
 
-- 🎬 **Prevenção de Arquivos Parciais e Reprodução Segura no MEGA**:
-  - Implementado sistema atômico de download com arquivos temporários `.part`, garantindo que vídeos e imagens do **MEGA** sejam executados pelo player e decodificados apenas após 100% do download e descriptografia concluídos.
-  - Adicionada tela com barra de progresso em tempo real e opção de cancelamento para mídias em nuvem no visualizador.
-  - Otimização do semáforo de miniaturas com limites inteligentes de tamanho e debounce contra travamentos em rolagem rápida.
-- 📂 **Correção e Conexão Rápida para MediaFire**:
-  - Resolvido problema de sobrescrita e erro de leitura no cache local do MediaFire.
-  - Habilitada a **Conexão Rápida (Android SAF)** para o MediaFire em gerenciador de contas e menu lateral.
-  - Suporte completo a abertura de arquivos remotos via aplicativos externos e visualizador de documentos.
+- 📱 **Aprimoramento Visual e Redimensionamento do Splash Screen (160dp)**:
+  - Splash Screen configurado especificamente para **160dp** (`splash_icon_large`), garantindo abertura limpa, impactante e sem interferência da camada do launcher.
+  - Ícone principal adaptativo fixado em **80dp**, centralizado e sem distorções nem recortes da arte original.
+- ⚙️ **Configuração Completa de CI/CD para Codemagic (`codemagic.yaml`)**:
+  - Implementação de pipelines automatizados de build para Android: `android-ci` (testes e build de PR), `android-release` (publicação automática de APKs e AAB com GitHub Releases) e `android-nightly` (verificação periódica de qualidade).
+  - Suporte completo a keystores de produção e variáveis de ambiente seguras.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

@@ -1543,7 +1543,8 @@ fun FileThumbnailImage(
             }
 
             LaunchedEffect(item.path, isFileReady) {
-                if (!isFileReady && item.path.startsWith("/cloud/") && (item.size <= 0L || item.size <= 15_000_000L)) {
+                val sizeLimit = if (item.fileType == FileType.VIDEO) 250_000_000L else 15_000_000L
+                if (!isFileReady && item.path.startsWith("/cloud/") && (item.size <= 0L || item.size <= sizeLimit)) {
                     // Debounce rapid scrolling to save bandwidth and prevent lagging
                     kotlinx.coroutines.delay(150)
                     try {
@@ -1606,7 +1607,8 @@ fun FileThumbnailImage(
             }
 
             LaunchedEffect(item.path, isFileReady) {
-                if (!isFileReady && item.path.startsWith("/cloud/") && item.size in 1..15_000_000L) {
+                val sizeLimit = if (item.fileType == FileType.VIDEO) 250_000_000L else 15_000_000L
+                if (!isFileReady && item.path.startsWith("/cloud/") && item.size in 1..sizeLimit) {
                     kotlinx.coroutines.delay(200)
                     try {
                         thumbnailDownloadSemaphore.withPermit {

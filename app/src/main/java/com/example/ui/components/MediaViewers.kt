@@ -155,7 +155,7 @@ fun ArcboxMediaViewerModal(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        if (isDownloadingCloudFile && (item.fileType == FileType.IMAGE || item.fileType == FileType.VIDEO)) {
+        if (isDownloadingCloudFile && item.fileType == FileType.IMAGE) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -174,7 +174,7 @@ fun ArcboxMediaViewerModal(
                         modifier = Modifier.size(64.dp)
                     )
                     Text(
-                        text = if (item.fileType == FileType.VIDEO) "Carregando vídeo da nuvem..." else "Baixando imagem da nuvem...",
+                        text = "Baixando imagem da nuvem...",
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold

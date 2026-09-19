@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.21-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.21"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.22-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.22"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,8 +18,20 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.21
+## 🚀 Novidades da Versão v1.0.22
 
+- 📱 **Aprimoramento Visual e Redimensionamento do Splash Screen (160dp)**:
+  - Splash Screen configurado especificamente para **160dp** (`splash_icon_large`), garantindo abertura limpa, impactante e sem interferência da camada do launcher.
+  - Ícone principal adaptativo fixado em **80dp**, centralizado e sem distorções nem recortes da arte original.
+- ⚙️ **Configuração Completa de CI/CD para Codemagic (`codemagic.yaml`)**:
+  - Implementação de pipelines automatizados de build para Android: `android-ci` (testes e build de PR), `android-release` (publicação automática de APKs e AAB com GitHub Releases) e `android-nightly` (verificação periódica de qualidade).
+  - Suporte completo a keystores de produção e variáveis de ambiente seguras.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.21
 - 🎬 **Prevenção de Arquivos Parciais e Reprodução Segura no MEGA**:
   - Implementado sistema atômico de download com arquivos temporários `.part`, garantindo que vídeos e imagens do **MEGA** sejam executados pelo player e decodificados apenas após 100% do download e descriptografia concluídos.
   - Adicionada tela com barra de progresso em tempo real e opção de cancelamento para mídias em nuvem no visualizador.
@@ -28,10 +40,6 @@
   - Resolvido problema de sobrescrita e erro de leitura no cache local do MediaFire.
   - Habilitada a **Conexão Rápida (Android SAF)** para o MediaFire em gerenciador de contas e menu lateral.
   - Suporte completo a abertura de arquivos remotos via aplicativos externos e visualizador de documentos.
-
----
-
-## 📋 Histórico de Versões
 
 ### v1.0.20
 - ☁️ **Vinculação de Nuvens em 1 Toque (Android SAF Nativo)**:
