@@ -1,6 +1,6 @@
 import urllib.request, json, os
 
-token = os.environ.get('GITHUB_TOKEN', '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')
+token = os.environ.get('GITHUB_TOKEN', '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')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
 tag = 'v1.0.25'
 name = 'Arcbox File Manager v1.0.25'
