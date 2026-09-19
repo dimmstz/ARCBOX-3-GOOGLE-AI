@@ -2,14 +2,15 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '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')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.23'
-name = 'Arcbox File Manager v1.0.23'
-body = """## 🚀 Novidades da Versão v1.0.23
+tag = 'v1.0.24'
+name = 'Arcbox File Manager v1.0.24'
+body = """## 🚀 Novidades da Versão v1.0.24
 
-- 🛠️ **Correção da Validação do Schema do Codemagic (`codemagic.yaml`)**:
-  - Ajustada a estrutura de publicação no pipeline do Codemagic CI/CD, eliminando chaves incompatíveis e garantindo conformidade estrita com o schema oficial.
-  - Implementada etapa de publicação segura via script para GitHub Releases.
-  - Suporte completo a build de CI, Release (APK + AAB) e Nightly QA.
+- ☁️ **Atualização e Recarregamento Automático de Arquivos e Pastas no MEGA**:
+  - Resolvido o problema de sincronização/cache ao retornar para a pasta do MEGA ou ao voltar do plano de fundo.
+  - Implementada invalidação de cache em `onResume()` e atualização em tempo real ao navegar ou puxar para recarregar.
+  - Reduzido o TTL de cache in-memory do MEGA de 10 minutos para 15 segundos, garantindo sincronia ágil com a nuvem.
+  - Adicionado suporte a estrutura local espelhada como fallback para reconexão rápida.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

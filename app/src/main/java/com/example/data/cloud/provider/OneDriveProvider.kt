@@ -114,6 +114,10 @@ class OneDriveProvider(
         sessionManager.removeSession(providerId)
     }
 
+    override fun invalidateCache() {
+        directoryCache.clear()
+    }
+
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
         val cleanSub = remoteSubPath.trim().removePrefix("/cloud/onedrive").removePrefix("/cloud/ONEDRIVE").removePrefix("cloud/onedrive").trim('/')
         val cacheKey = cleanSub

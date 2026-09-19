@@ -88,6 +88,10 @@ class MediaFireProvider(
         sessionManager.removeSession(providerId)
     }
 
+    override fun invalidateCache() {
+        directoryCache.clear()
+    }
+
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
         val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mediafire").removePrefix("/cloud/MEDIAFIRE").trim('/')
         val cached = directoryCache[cleanSub]

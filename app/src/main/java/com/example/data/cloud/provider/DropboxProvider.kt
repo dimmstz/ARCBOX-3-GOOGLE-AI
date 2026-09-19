@@ -112,6 +112,10 @@ class DropboxProvider(
         sessionManager.removeSession(providerId)
     }
 
+    override fun invalidateCache() {
+        directoryCache.clear()
+    }
+
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
         val cleanSub = remoteSubPath.trim().removePrefix("/cloud/dropbox").removePrefix("/cloud/DROPBOX").removePrefix("cloud/dropbox").trim('/')
         val cacheKey = cleanSub

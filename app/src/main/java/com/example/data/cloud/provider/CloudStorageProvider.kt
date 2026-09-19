@@ -40,6 +40,11 @@ interface CloudStorageProvider {
     suspend fun disconnect()
 
     /**
+     * Invalidate any in-memory directory or node caches.
+     */
+    fun invalidateCache() {}
+
+    /**
      * List remote items in the specified relative subpath (e.g. "Documentos" or "" for root).
      */
     suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile>

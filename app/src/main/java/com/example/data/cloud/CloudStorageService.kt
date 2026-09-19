@@ -129,6 +129,14 @@ class CloudStorageService private constructor(private val context: Context) {
         getProvider(providerId)?.disconnect()
     }
 
+    fun invalidateCache(providerId: String? = null) {
+        if (providerId != null) {
+            getProvider(providerId)?.invalidateCache()
+        } else {
+            providers.values.forEach { it.invalidateCache() }
+        }
+    }
+
     suspend fun fetchRemoteDirectory(providerId: String, subPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
         getProvider(providerId)?.listFiles(subPath) ?: emptyList()
     }

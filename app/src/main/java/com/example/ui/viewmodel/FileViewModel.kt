@@ -460,12 +460,35 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshFiles() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
+            val currentPath = _uiState.value.currentPath
+            if (currentPath.startsWith("/cloud/")) {
+                val providerSegment = currentPath.removePrefix("/cloud/").substringBefore("/").lowercase()
+                repository.cloudStorageService.invalidateCache(providerSegment)
+            } else {
+                repository.cloudStorageService.invalidateCache()
+            }
+            fetchFilesInternal()
+        }
+    }
+
+    fun refreshFilesOnResume() {
+        viewModelScope.launch {
+            val currentPath = _uiState.value.currentPath
+            if (currentPath.startsWith("/cloud/")) {
+                val providerSegment = currentPath.removePrefix("/cloud/").substringBefore("/").lowercase()
+                repository.cloudStorageService.invalidateCache(providerSegment)
+            }
             fetchFilesInternal()
         }
     }
 
     fun navigateToDirectory(path: String) {
         viewModelScope.launch {
+            if (path.startsWith("/cloud/")) {
+                val providerSegment = path.removePrefix("/cloud/").substringBefore("/").lowercase()
+                repository.cloudStorageService.invalidateCache(providerSegment)
+            }
+
             val currentTabs = _uiState.value.tabs.toMutableList()
             val currentTabIdx = currentTabs.indexOfFirst { it.id == _uiState.value.currentTabId }
             val context = getApplication<Application>().applicationContext

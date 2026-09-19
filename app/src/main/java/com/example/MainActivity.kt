@@ -60,6 +60,11 @@ class MainActivity : FragmentActivity() {
         setIntent(intent)
         viewModel.handleIncomingIntent(intent, this)
     }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.refreshFilesOnResume()
+    }
 }
 
 

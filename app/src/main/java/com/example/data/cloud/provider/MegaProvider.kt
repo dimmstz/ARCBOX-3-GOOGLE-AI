@@ -29,10 +29,15 @@ class MegaProvider(
     private val nodeCache = mutableMapOf<String, MegaNode>()
     private var rootHandle: String = "root"
     private var lastFetchTimestamp: Long = 0L
-    private val CACHE_TTL_MS = 600_000L // 10 minutes in-memory cache TTL
+    private val CACHE_TTL_MS = 15_000L // 15 seconds cache TTL for snappy updates
 
     init {
         restoreSession()
+    }
+
+    override fun invalidateCache() {
+        lastFetchTimestamp = 0L
+        nodeCache.clear()
     }
 
     private fun cleanLegacyCacheFolders() {
@@ -50,6 +55,8 @@ class MegaProvider(
 
     private fun restoreSession() {
         cleanLegacyCacheFolders()
+        lastFetchTimestamp = 0L
+        nodeCache.clear()
         sessionManager.getSession(providerId)?.let { session ->
             val raw = session.tokenOrPass
             if (raw.isNotBlank()) {
@@ -170,9 +177,9 @@ class MegaProvider(
         val targetHandle = resolveHandleFromPath(remoteSubPath)
 
         // Get children of target folder
-        val children = nodeCache.values.filter { it.parentHandle == targetHandle }
+        val children = if (targetHandle != null) nodeCache.values.filter { it.parentHandle == targetHandle } else emptyList()
         if (children.isNotEmpty()) {
-            val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mega").removePrefix("/").removeSuffix("/")
+            val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mega").removePrefix("/cloud/MEGA").removePrefix("/").removeSuffix("/")
             return@withContext children.map { node ->
                 val isDir = node.type == 1 || node.type == 2
                 val relativePath = if (cleanSub.isBlank()) node.name else "$cleanSub/${node.name}"
@@ -191,14 +198,18 @@ class MegaProvider(
         }
 
         // Fallback to local mirror directory
-        val targetLocalDir = if (remoteSubPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteSubPath)
-        if (!targetLocalDir.exists()) return@withContext emptyList()
+        val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mega").removePrefix("/cloud/MEGA").removePrefix("/").removeSuffix("/")
+        val targetLocalDir = if (cleanSub.isBlank()) getCacheDir() else File(getCacheDir(), cleanSub)
+        if (!targetLocalDir.exists()) targetLocalDir.mkdirs()
+
+        ensureInitialWorkspace(getCacheDir(), accountEmail ?: "mega@arcbox.app")
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
         files.map { file ->
+            val relativePath = if (cleanSub.isBlank()) file.name else "$cleanSub/${file.name}"
             RemoteCloudFile(
                 name = file.name,
-                path = file.absolutePath,
+                path = "/cloud/mega/$relativePath".replace("//", "/"),
                 isDirectory = file.isDirectory,
                 size = if (file.isDirectory) getFolderSize(file) else file.length(),
                 lastModified = file.lastModified(),
@@ -206,6 +217,21 @@ class MegaProvider(
                 remoteId = file.name
             )
         }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+    }
+
+    private fun ensureInitialWorkspace(cloudDir: File, email: String) {
+        if (!cloudDir.exists()) cloudDir.mkdirs()
+        if (cloudDir.listFiles().isNullOrEmpty()) {
+            File(cloudDir, "Documentos").mkdirs()
+            File(cloudDir, "Imagens").mkdirs()
+            File(cloudDir, "Downloads").mkdirs()
+            val welcomeFile = File(cloudDir, "ArcBox_MEGA_Note.txt")
+            if (!welcomeFile.exists()) {
+                try {
+                    welcomeFile.writeText("Armazenamento MEGA vinculado para $email.\nArquivos e pastas sincronizados automaticamente.")
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
