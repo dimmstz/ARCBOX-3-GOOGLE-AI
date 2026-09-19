@@ -198,8 +198,12 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             val updateLastChecked = updatePrefs.getLong(UpdateConfig.PREF_LAST_UPDATE_CHECK, 0L)
             val updateRepoOwner = updatePrefs.getString(UpdateConfig.PREF_CUSTOM_REPO_OWNER, UpdateConfig.DEFAULT_GITHUB_OWNER) ?: UpdateConfig.DEFAULT_GITHUB_OWNER
             val updateRepoName = updatePrefs.getString(UpdateConfig.PREF_CUSTOM_REPO_NAME, UpdateConfig.DEFAULT_GITHUB_REPO) ?: UpdateConfig.DEFAULT_GITHUB_REPO
-            val updateGithubPat = updatePrefs.getString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN)
-                ?: UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
+            val rawToken = updatePrefs.getString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, "") ?: ""
+            val updateGithubPat = if (rawToken.isNotBlank() && !rawToken.contains("O4kiFPemK1Cx") && !rawToken.contains("2bIeZv7")) {
+                rawToken
+            } else {
+                UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
+            }
 
             return FileUiState(
                 isWelcomeOnboardingOpen = shouldShowOnboarding,
@@ -2606,7 +2610,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             }.onFailure { err ->
                 _uiState.update {
                     it.copy(
-                        updateStatus = UpdateStatus.Error(err.message ?: "Erro ao consultar o GitHub Releases"),
+                        updateStatus = UpdateStatus.Error(err.message ?: "Não foi possível verificar atualizações"),
                         updateLastCheckedTime = updatedLastCheck
                     )
                 }

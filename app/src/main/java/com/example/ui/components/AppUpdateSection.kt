@@ -141,12 +141,12 @@ fun AppUpdateSection(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = when (updateStatus) {
-                            is UpdateStatus.Checking -> "Consultando GitHub Releases..."
+                            is UpdateStatus.Checking -> "Verificando se há atualizações..."
                             is UpdateStatus.UpdateAvailable -> "Nova versão v${updateStatus.releaseInfo.targetVersionName} disponível!"
                             is UpdateStatus.Downloading -> "Baixando atualização: ${updateStatus.progressPercent}%"
-                            is UpdateStatus.DownloadCompleted -> "Download concluído e verificado (SHA-256 válido)"
+                            is UpdateStatus.DownloadCompleted -> "Download concluído e verificado"
                             is UpdateStatus.NoUpdateAvailable -> "O ArcBox está atualizado para a versão mais recente."
-                            is UpdateStatus.Error -> "Falha: ${updateStatus.message}"
+                            is UpdateStatus.Error -> "Falha: ${sanitizeUpdateErrorMessage(updateStatus.message)}"
                             else -> "Nenhuma verificação pendente"
                         },
                         style = MaterialTheme.typography.bodySmall,
@@ -516,4 +516,13 @@ fun AppUpdateSection(
             }
         )
     }
+}
+
+private fun sanitizeUpdateErrorMessage(raw: String): String {
+    if (raw.isBlank()) return "Não foi possível verificar atualizações."
+    if (raw.contains("Token", ignoreCase = true) || raw.contains("não autorizado", ignoreCase = true) || raw.contains("401") || raw.contains("403")) {
+        return "Serviço de atualizações temporariamente indisponível. Tente novamente mais tarde."
+    }
+    return raw.replace("GitHub Releases", "servidor de atualizações", ignoreCase = true)
+        .replace("GitHub", "servidor", ignoreCase = true)
 }

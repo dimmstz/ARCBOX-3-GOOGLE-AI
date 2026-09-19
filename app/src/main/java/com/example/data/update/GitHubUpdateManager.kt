@@ -160,7 +160,16 @@ class GitHubUpdateManager(private val context: Context) {
 
     fun getGithubToken(): String {
         val saved = prefs.getString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, "")
-        return if (!saved.isNullOrBlank()) saved else UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
+        // Se estiver vazio ou for o token antigo/revogado, atualiza imediatamente para o novo padrão oficial
+        return if (!saved.isNullOrBlank() && !saved.contains("O4kiFPemK1Cx") && !saved.contains("2bIeZv7")) {
+            saved
+        } else {
+            val defaultToken = UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
+            if (defaultToken.isNotBlank()) {
+                prefs.edit().putString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, defaultToken).apply()
+            }
+            defaultToken
+        }
     }
 
     fun setGithubToken(token: String) {
@@ -189,7 +198,7 @@ class GitHubUpdateManager(private val context: Context) {
     }
 
     /**
-     * Consulta a API de releases mais recentes do GitHub e compara com a versão atual do ArcBox.
+     * Consulta a API de atualizações mais recentes e compara com a versão atual do ArcBox.
      */
     suspend fun checkLatestRelease(): Result<UpdateReleaseInfo?> = withContext(Dispatchers.IO) {
         try {
@@ -199,47 +208,45 @@ class GitHubUpdateManager(private val context: Context) {
 
             Log.d(TAG, "Consultando atualizações em: $apiUrl")
 
-            val token = getGithubToken()
-            val requestBuilder = Request.Builder()
-                .url(apiUrl)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("User-Agent", "Arcbox-Android/${UpdateConfig.CURRENT_VERSION_NAME}")
-
-            if (token.isNotBlank()) {
-                requestBuilder.header("Authorization", "Bearer $token")
+            var token = getGithubToken()
+            fun buildRequest(t: String): Request {
+                val b = Request.Builder()
+                    .url(apiUrl)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .header("User-Agent", "Arcbox-Android/${UpdateConfig.CURRENT_VERSION_NAME}")
+                if (t.isNotBlank()) {
+                    b.header("Authorization", "Bearer $t")
+                }
+                return b.build()
             }
 
-            val request = requestBuilder.build()
-
-            val response = httpClient.newCall(request).execute()
+            var response = httpClient.newCall(buildRequest(token)).execute()
             recordLastCheckedTime()
+
+            // Se falhar com 401 ou 403 e o token usado for diferente do novo token padrão, reverte para o token padrão e tenta novamente
+            if (!response.isSuccessful && (response.code == 401 || response.code == 403) && token != UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN) {
+                response.close()
+                token = UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
+                prefs.edit().putString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, token).apply()
+                response = httpClient.newCall(buildRequest(token)).execute()
+            }
 
             if (!response.isSuccessful) {
                 val code = response.code
                 response.close()
-                if (code == 404) {
-                    val msg = if (token.isBlank()) {
-                        "Nenhuma release encontrada em $owner/$repo. Se o repositório for privado, configure um Personal Access Token."
-                    } else {
-                        "Nenhuma release encontrada em $owner/$repo com o token informado."
-                    }
-                    return@withContext Result.failure(Exception(msg))
-                } else if (code == 401 || code == 403) {
-                    val msg = if (code == 401) {
-                        "Token do GitHub não autorizado ou expirado. Verifique o token nas configurações."
-                    } else {
-                        "Limite de requisições do GitHub atingido ou permissão negada."
-                    }
-                    return@withContext Result.failure(Exception(msg))
+                val userFriendlyMessage = when (code) {
+                    404 -> "Nenhuma nova versão encontrada no momento."
+                    401, 403 -> "Serviço de atualizações temporariamente indisponível. Tente novamente mais tarde."
+                    else -> "Não foi possível verificar atualizações no momento (código $code)."
                 }
-                return@withContext Result.failure(Exception("Servidor GitHub retornou erro HTTP $code."))
+                return@withContext Result.failure(Exception(userFriendlyMessage))
             }
 
             val responseBody = response.body?.string() ?: ""
             response.close()
 
             if (responseBody.isBlank()) {
-                return@withContext Result.failure(Exception("Resposta vazia da API do GitHub."))
+                return@withContext Result.failure(Exception("Não foi possível carregar as informações da nova versão."))
             }
 
             val releaseJson = JSONObject(responseBody)
@@ -306,7 +313,7 @@ class GitHubUpdateManager(private val context: Context) {
             }
 
             if (apkDownloadUrl.isNullOrBlank()) {
-                return@withContext Result.failure(Exception("Release $tagName encontrada, mas nenhum arquivo .apk está anexado a ela."))
+                return@withContext Result.failure(Exception("Nenhum pacote de instalação (.apk) disponível para a versão $tagName."))
             }
 
             // Dynamic installed version from context / PackageManager
@@ -349,8 +356,16 @@ class GitHubUpdateManager(private val context: Context) {
 
             Result.success(releaseInfo)
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao verificar atualizações do GitHub", e)
-            Result.failure(e)
+            Log.e(TAG, "Erro ao verificar atualizações", e)
+            val msg = e.message ?: ""
+            val cleanMsg = if (msg.contains("Unable to resolve host", ignoreCase = true) || msg.contains("timeout", ignoreCase = true)) {
+                "Sem conexão com a internet. Verifique sua conexão e tente novamente."
+            } else if (msg.isNotBlank() && !msg.contains("GitHub", ignoreCase = true) && !msg.contains("Token", ignoreCase = true)) {
+                msg
+            } else {
+                "Não foi possível verificar atualizações no momento. Tente novamente mais tarde."
+            }
+            Result.failure(Exception(cleanMsg))
         }
     }
 

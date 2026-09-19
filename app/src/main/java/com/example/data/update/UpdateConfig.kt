@@ -15,7 +15,7 @@ object UpdateConfig {
     const val DEFAULT_GITHUB_REPO = "ARCBOX-3-GOOGLE-AI"
     val DEFAULT_GITHUB_PAT_TOKEN: String by lazy {
         try {
-            val encoded = "Z2l0aHViX3BhdF8xMUI0UVJFRkkwTzRraUZQZW1LMUN4X3A3MENiVXJlRFU3NjZrWjk5SjVMTEhSNWpGY3hmZVdJclpIdVlEM3puSElZUFFTWUZNN3JNeUpMVkh5"
+            val encoded = "Z2l0aHViX3BhdF8xMUI0UVJFRkkweGR5aXNoYVZqYUVsX09Cc1hOY1g0QVFmcldYWVNMdHBWY2l5dTRDRFpDTVkwOUNjbElGRkNLWnY2T1JWSUxFNTVOMU5obTNED"
             String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT), Charsets.UTF_8).trim()
         } catch (_: Exception) {
             ""
