@@ -206,6 +206,13 @@ workflows:
 
           echo "Building Release Bundle (.aab)..."
           $BUILD_CMD bundleRelease --no-daemon --stacktrace || $BUILD_CMD bundleDebug --no-daemon --stacktrace || echo "Bundle step optional"
+
+      - name: Publish to GitHub Releases (Optional)
+        script: |
+          if [ -n "$GITHUB_TOKEN" ] && [ -f "publish_release.py" ]; then
+            echo "Publishing release via GitHub API..."
+            python3 publish_release.py || true
+          fi
     artifacts:
       - app/build/outputs/apk/**/*.apk
       - app/build/outputs/bundle/**/*.aab
@@ -218,14 +225,6 @@ workflows:
         notify:
           success: true
           failure: true
-      github_releases:
-        prerelease: false
-        add_artifacts: true
-      # Google Play publishing (Optional: activates when GPLAY_SERVICE_ACCOUNT_KEY is configured in Codemagic environment)
-      # google_play:
-      #   credentials: $GPLAY_SERVICE_ACCOUNT_KEY
-      #   track: internal
-      #   in_app_update_priority: 0
 
   # ----------------------------------------------------------------------------
   # 3. Nightly / Manual Full QA Build

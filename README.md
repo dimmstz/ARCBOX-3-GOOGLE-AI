@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.22-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.22"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.23-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.23"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,14 +18,23 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.22
+## 🚀 Novidades da Versão v1.0.23
 
+- 🛠️ **Correção da Validação do Schema do Codemagic (`codemagic.yaml`)**:
+  - Ajustada a estrutura de publicação no pipeline do Codemagic CI/CD, eliminando chaves incompatíveis e garantindo conformidade estrita com o schema oficial.
+  - Implementada etapa de publicação segura via script para GitHub Releases.
+  - Suporte completo a build de CI, Release (APK + AAB) e Nightly QA.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.22
 - 📱 **Aprimoramento Visual e Redimensionamento do Splash Screen (160dp)**:
   - Splash Screen configurado especificamente para **160dp** (`splash_icon_large`), garantindo abertura limpa, impactante e sem interferência da camada do launcher.
   - Ícone principal adaptativo fixado em **80dp**, centralizado e sem distorções nem recortes da arte original.
 - ⚙️ **Configuração Completa de CI/CD para Codemagic (`codemagic.yaml`)**:
-  - Implementação de pipelines automatizados de build para Android: `android-ci` (testes e build de PR), `android-release` (publicação automática de APKs e AAB com GitHub Releases) e `android-nightly` (verificação periódica de qualidade).
-  - Suporte completo a keystores de produção e variáveis de ambiente seguras.
+  - Implementação de pipelines automatizados de build para Android.
 
 ---
 

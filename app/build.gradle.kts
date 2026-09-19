@@ -18,8 +18,8 @@ android {
     applicationId = "com.aistudio.arcbox.filemgr"
     minSdk = 24
     targetSdk = 36
-    versionCode = 23
-    versionName = "1.0.22"
+    versionCode = 24
+    versionName = "1.0.23"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

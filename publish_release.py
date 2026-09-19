@@ -2,16 +2,14 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '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')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.22'
-name = 'Arcbox File Manager v1.0.22'
-body = """## 🚀 Novidades da Versão v1.0.22
+tag = 'v1.0.23'
+name = 'Arcbox File Manager v1.0.23'
+body = """## 🚀 Novidades da Versão v1.0.23
 
-- 📱 **Aprimoramento Visual e Redimensionamento do Splash Screen (160dp)**:
-  - Splash Screen configurado especificamente para **160dp** (`splash_icon_large`), garantindo abertura limpa, impactante e sem interferência da camada do launcher.
-  - Ícone principal adaptativo fixado em **80dp**, centralizado e sem distorções nem recortes da arte original.
-- ⚙️ **Configuração Completa de CI/CD para Codemagic (`codemagic.yaml`)**:
-  - Implementação de pipelines automatizados de build para Android: `android-ci` (testes e build de PR), `android-release` (publicação automática de APKs e AAB com GitHub Releases) e `android-nightly` (verificação periódica de qualidade).
-  - Suporte completo a keystores de produção e variáveis de ambiente seguras.
+- 🛠️ **Correção da Validação do Schema do Codemagic (`codemagic.yaml`)**:
+  - Ajustada a estrutura de publicação no pipeline do Codemagic CI/CD, eliminando chaves incompatíveis e garantindo conformidade estrita com o schema oficial.
+  - Implementada etapa de publicação segura via script para GitHub Releases.
+  - Suporte completo a build de CI, Release (APK + AAB) e Nightly QA.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'
