@@ -18,40 +18,75 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-36
+            platforms;android-35
+            build-tools;36.0.0
+            build-tools;35.0.0
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses >/dev/null 2>&1 || true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
 
-      - name: Build APK
+      - name: Setup Environment and Keystore
         run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew assembleDebug --stacktrace
-          else
-            gradle assembleDebug --stacktrace
+          touch .env
+          touch .env.example
+          if [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || base64 -d -i debug.keystore.base64 > debug.keystore 2>/dev/null || true
+          fi
+          if [ -f "debug.keystore" ] && [ -s "debug.keystore" ]; then
+            keytool -list -keystore debug.keystore -storepass android > /dev/null 2>&1 || rm -f debug.keystore
+          fi
+          if [ ! -f "debug.keystore" ]; then
+            keytool -genkeypair -v -keystore debug.keystore \
+              -storetype PKCS12 \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias androiddebugkey -keypass android -storepass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          mkdir -p ~/.android
+          cp -f debug.keystore ~/.android/debug.keystore 2>/dev/null || true
+
+      - name: Build APKs
+        run: |
+          gradle assembleRelease assembleDebug --no-daemon --stacktrace
+          TAG_NAME="${{ github.ref_name }}"
+          if [ -n "$TAG_NAME" ] && [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            cp app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/Arcbox-${TAG_NAME}-release.apk"
           fi
 
-      - name: Upload APK Artifact
+      - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
-          name: arcbox-apk-${{ github.run_id }}
-          path: app/build/outputs/apk/debug/*.apk
+          name: arcbox-apks-${{ github.run_id }}
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
           retention-days: 7
 
-      - name: Create GitHub Release
+      - name: Create or Update GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/debug/*.apk
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
