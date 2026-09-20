@@ -159,12 +159,12 @@ class GitHubUpdateManager(private val context: Context) {
     }
 
     fun getGithubToken(): String {
-        val saved = prefs.getString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, "")
-        // Se estiver vazio ou for o token antigo/revogado, atualiza imediatamente para o novo padrão oficial
-        return if (!saved.isNullOrBlank() && !saved.contains("O4kiFPemK1Cx") && !saved.contains("2bIeZv7")) {
+        val saved = prefs.getString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, "")?.trim()
+        val defaultToken = UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
+        // Se estiver vazio ou for token revogado, utiliza o token oficial configurado
+        return if (!saved.isNullOrBlank() && !saved.contains("O4kiFPemK1Cx")) {
             saved
         } else {
-            val defaultToken = UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
             if (defaultToken.isNotBlank()) {
                 prefs.edit().putString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, defaultToken).apply()
             }

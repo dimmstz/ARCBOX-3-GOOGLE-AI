@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.26-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.26"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.27-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.27"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,8 +18,18 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.26
+## 🚀 Novidades da Versão v1.0.27
 
+- 🔄 **Correção e Estabilização das Atualizações In-App via GitHub**:
+  - Ajuste na codificação e autenticação do token para busca e download direto de APKs em repositórios privados.
+  - Correção no redirecionamento do download de releases protegidas para garantir instalação sem erros.
+  - Sincronização e validação resiliente de credenciais no fluxo de verificação de atualizações.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.26
 - 🔑 **Integração com Senhas Salvas do Google / Android**:
   - Suporte a preenchimento automático pelo Gerenciador de Senhas do Google / Android no modal de conexão de nuvens (MediaFire, MEGA, Google Drive, Microsoft OneDrive, Dropbox e WebDAV).
   - Autenticação web integrada com detecção de credenciais para login rápido em 1 toque.
