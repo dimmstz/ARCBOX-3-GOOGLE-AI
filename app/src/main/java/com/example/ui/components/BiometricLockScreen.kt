@@ -58,8 +58,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.util.BiometricAuthHelper
 import com.example.util.findFragmentActivity
 
@@ -124,20 +122,12 @@ fun BiometricLockScreen(
         requestAuthentication()
     }
 
-    Dialog(
-        onDismissRequest = { /* Modal lock screen cannot be dismissed by tapping outside */ },
-        properties = DialogProperties(
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false
-        )
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("biometric_lock_screen"),
+        color = MaterialTheme.colorScheme.background
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("biometric_lock_screen"),
-            color = MaterialTheme.colorScheme.background
-        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -261,8 +251,8 @@ fun BiometricLockScreen(
                             }
                         }
 
-                        // Fallback option for testing/emulator or when credentials are not enrolled
-                        if (biometricStatus != BiometricAuthHelper.BiometricStatus.AVAILABLE) {
+                        // Fallback option for testing/emulator or when credentials are not enrolled or authentication fails
+                        if (biometricStatus != BiometricAuthHelper.BiometricStatus.AVAILABLE || authErrorMsg != null) {
                             Spacer(modifier = Modifier.height(12.dp))
                             TextButton(
                                 onClick = onUnlock,
@@ -276,7 +266,10 @@ fun BiometricLockScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Desbloquear (Sem sensor configurado)",
+                                    text = if (biometricStatus != BiometricAuthHelper.BiometricStatus.AVAILABLE)
+                                        "Desbloquear (Sem sensor configurado)"
+                                    else
+                                        "Entrar no aplicativo",
                                     fontSize = 13.sp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -287,4 +280,3 @@ fun BiometricLockScreen(
             }
         }
     }
-}

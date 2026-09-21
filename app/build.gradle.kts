@@ -18,8 +18,8 @@ android {
     applicationId = "com.aistudio.arcbox.filemgr"
     minSdk = 24
     targetSdk = 36
-    versionCode = 28
-    versionName = "1.0.27"
+    versionCode = 29
+    versionName = "1.0.28"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -164,5 +164,4 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
-  "ksp"(libs.moshi.kotlin.codegen)
 }

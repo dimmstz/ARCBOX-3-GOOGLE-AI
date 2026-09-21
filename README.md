@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.27-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.27"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.28-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.28"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,8 +18,23 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.27
+## 🚀 Novidades da Versão v1.0.28
 
+- ☁️ **Card "Adicionar Nuvem" Contínuo e Inteligente no Menu Lateral**:
+  - O card de adicionar nuvem permanece visível enquanto houver provedores disponíveis para conexão (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV).
+  - Listagem dinâmica no subtítulo dos serviços restantes para conexão rápida.
+  - Ocultação automática quando todos os serviços estiverem vinculados e reaparecimento instantâneo caso qualquer nuvem seja desconectada.
+- 🛡️ **Compatibilidade de Tema e Estabilidade de Inicialização**:
+  - Tema base atualizado para `Theme.AppCompat.DayNight.NoActionBar`, eliminando crashes de inicialização com `FragmentActivity` e biometria.
+  - Renderização nativa da tela de bloqueio e tratamento de fallback seguro sem travar a interface.
+- ⚡ **Otimização do Processamento de Build**:
+  - Limpeza de dependências desnecessárias do processador de anotações KSP, acelerando e estabilizando a compilação do projeto.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.27
 - 🔄 **Correção e Estabilização das Atualizações In-App via GitHub**:
   - Ajuste na codificação e autenticação do token para busca e download direto de APKs em repositórios privados.
   - Correção no redirecionamento do download de releases protegidas para garantir instalação sem erros.

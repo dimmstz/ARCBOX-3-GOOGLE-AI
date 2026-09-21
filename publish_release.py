@@ -2,16 +2,19 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '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')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.25'
-name = 'Arcbox File Manager v1.0.25'
-body = """## 🚀 Novidades da Versão v1.0.25
+tag = 'v1.0.28'
+name = 'Arcbox File Manager v1.0.28'
+body = """## 🚀 Novidades da Versão v1.0.28
 
-- ☁️ **Botão "Adicionar Nuvem" Visível no Menu Lateral Desde o Primeiro Acesso**:
-  - Exibição de card interativo com botão de conexão em destaque logo abaixo da seção Nuvem & Armazenamento no primeiro acesso ao app, facilitando vincular MEGA, Google Drive, OneDrive ou WebDAV rapidamente.
-- 🔄 **Atualização do Token de Releases e Tratamento Elegante de Erros**:
-  - Novo token de autenticação oficial integrado para verificação de atualizações.
-  - Migração e substituição automática do token nos dispositivos que continham o token antigo salvo em cache.
-  - Sanitização de mensagens de erro: removidos jargões e referências internas ao GitHub em caso de falha, apresentando comunicados amigáveis e transparentes ao usuário final.
+- ☁️ **Card "Adicionar Nuvem" Contínuo e Inteligente no Menu Lateral**:
+  - O card de adicionar nuvem permanece visível enquanto houver provedores disponíveis para conexão (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV).
+  - Listagem dinâmica no subtítulo dos serviços restantes para conexão rápida.
+  - Ocultação automática quando todos os serviços estiverem vinculados e reaparecimento instantâneo caso qualquer nuvem seja desconectada.
+- 🛡️ **Compatibilidade de Tema e Estabilidade de Inicialização**:
+  - Tema base atualizado para `Theme.AppCompat.DayNight.NoActionBar`, eliminando crashes de inicialização com `FragmentActivity` e biometria.
+  - Renderização nativa da tela de bloqueio e tratamento de fallback seguro sem travar a interface.
+- ⚡ **Otimização do Processamento de Build**:
+  - Limpeza de dependências desnecessárias do processador de anotações KSP, acelerando e estabilizando a compilação do projeto.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

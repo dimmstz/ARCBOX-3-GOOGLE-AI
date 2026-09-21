@@ -37,8 +37,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.util.PermissionHelper
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
 
 // Backward-compatible delegators
 fun isStoragePermissionGranted(context: Context): Boolean = PermissionHelper.hasAllFilesAccess(context)
@@ -47,7 +45,6 @@ fun isNotificationPermissionGranted(context: Context): Boolean = PermissionHelpe
 fun requestStoragePermission(context: Context) { PermissionHelper.requestAllFilesAccess(context) }
 fun requestInstallPackagesPermission(context: Context) { PermissionHelper.requestInstallPackagesPermission(context) }
 
-@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun PermissionWelcomeScreen(
     onDismiss: () -> Unit

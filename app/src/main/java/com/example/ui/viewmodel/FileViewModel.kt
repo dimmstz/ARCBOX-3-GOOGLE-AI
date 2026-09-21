@@ -166,6 +166,8 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             val loadedFolderTransition = try { FolderTransitionType.valueOf(savedFolderTransitionName) } catch (_: Exception) { FolderTransitionType.MATERIAL_SLIDE }
             val compressionLevel = prefs.getString("compression_level", "Normal") ?: "Normal"
             val biometricLock = prefs.getBoolean("biometric_lock", false)
+            val biometricStatus = com.example.util.BiometricAuthHelper.getBiometricStatus(app)
+            val canActuallyLock = biometricLock && (biometricStatus == com.example.util.BiometricAuthHelper.BiometricStatus.AVAILABLE)
             val autoLockVault = prefs.getBoolean("auto_lock_vault", true)
             val keepHistory = prefs.getBoolean("keep_history", true)
             val trashAutoCleanDays = prefs.getString("trash_auto_clean_days", "30 dias") ?: "30 dias"
@@ -220,7 +222,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 folderTransition = loadedFolderTransition,
                 compressionLevel = compressionLevel,
                 biometricLock = biometricLock,
-                isAppLocked = biometricLock,
+                isAppLocked = canActuallyLock,
                 autoLockVault = autoLockVault,
                 keepHistory = keepHistory,
                 trashAutoCleanDays = trashAutoCleanDays,

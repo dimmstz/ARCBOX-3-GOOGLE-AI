@@ -197,9 +197,7 @@ fun ArcboxApp(
             BiometricLockScreen(
                 onUnlock = { viewModel.unlockApp() }
             )
-        }
-
-        if (uiState.isWelcomeOnboardingOpen) {
+        } else if (uiState.isWelcomeOnboardingOpen) {
             PermissionWelcomeScreen(
                 onDismiss = {
                     scope.launch { drawerState.snapTo(DrawerValue.Closed) }
