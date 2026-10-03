@@ -19,8 +19,8 @@ android {
     applicationId = "com.aistudio.arcbox.filemgr"
     minSdk = 24
     targetSdk = 35
-    versionCode = 30
-    versionName = "1.0.29"
+    versionCode = 31
+    versionName = "1.0.30"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -122,6 +122,7 @@ dependencies {
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
+  implementation("androidx.media:media:1.7.0")
   implementation("androidx.documentfile:documentfile:1.0.1")
   // implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.lifecycle.runtime.compose)

@@ -16,6 +16,8 @@
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
@@ -106,6 +108,19 @@
                 <data android:mimeType="text/*" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".media.MediaNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ACTION_MEDIA_PLAY_PAUSE" />
+                <action android:name="com.example.ACTION_MEDIA_PREV" />
+                <action android:name="com.example.ACTION_MEDIA_NEXT" />
+                <action android:name="com.example.ACTION_MEDIA_STOP" />
+                <action android:name="com.example.ACTION_MEDIA_REWIND" />
+                <action android:name="com.example.ACTION_MEDIA_FORWARD" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

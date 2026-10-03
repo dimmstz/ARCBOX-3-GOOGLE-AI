@@ -22,6 +22,8 @@ object UpdateConfig {
         }
     }
 
+    const val FALLBACK_GITHUB_TOKEN: String = "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"
+
     /**
      * URL base da API do GitHub Releases para buscar a versão mais recente.
      */

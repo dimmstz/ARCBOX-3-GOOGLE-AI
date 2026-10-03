@@ -1,6 +1,7 @@
 package com.example.ui.components
 
-
+import com.example.media.ArcboxMediaNotificationManager
+import com.example.media.MediaPlaybackController
 import kotlinx.coroutines.launch
 import androidx.compose.animation.*
 
@@ -2199,6 +2200,72 @@ fun VideoPlayerContent(
         }
     }
 
+    DisposableEffect(file.path, isPlaying, isVideoPrepared) {
+        if (isVideoPrepared && !videoError) {
+            ArcboxMediaNotificationManager.showPlaybackNotification(
+                context = context,
+                title = file.nameWithoutExtension,
+                subtitle = "ArcBox Video Player",
+                isPlaying = isPlaying,
+                isAudio = false
+            )
+
+            MediaPlaybackController.updatePlayback(
+                MediaPlaybackController.MediaInfo(
+                    title = file.nameWithoutExtension,
+                    subtitle = "ArcBox Video Player",
+                    isAudio = false,
+                    isPlaying = isPlaying,
+                    currentPositionMs = currentPositionMs,
+                    totalDurationMs = totalDurationMs
+                )
+            )
+
+            MediaPlaybackController.onTogglePlayPause = {
+                val nextState = !isPlaying
+                isPlaying = nextState
+                try {
+                    mediaPlayerRef?.let { mp ->
+                        if (isVideoPrepared && !videoError) {
+                            if (nextState && !mp.isPlaying) mp.start()
+                            else if (!nextState && mp.isPlaying) mp.pause()
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            MediaPlaybackController.onRewind = {
+                val newPos = (currentPositionMs - 10000L).coerceAtLeast(0L)
+                currentPositionMs = newPos
+                try {
+                    mediaPlayerRef?.seekTo(newPos.toInt())
+                } catch (_: Exception) {}
+            }
+
+            MediaPlaybackController.onForward = {
+                val newPos = (currentPositionMs + 10000L).coerceAtMost(totalDurationMs)
+                currentPositionMs = newPos
+                try {
+                    mediaPlayerRef?.seekTo(newPos.toInt())
+                } catch (_: Exception) {}
+            }
+
+            MediaPlaybackController.onStop = {
+                try {
+                    mediaPlayerRef?.let { if (it.isPlaying) it.pause() }
+                    isPlaying = false
+                } catch (_: Exception) {}
+                ArcboxMediaNotificationManager.hideNotification(context)
+                MediaPlaybackController.clear()
+            }
+        }
+
+        onDispose {
+            ArcboxMediaNotificationManager.hideNotification(context)
+            MediaPlaybackController.clear()
+        }
+    }
+
     fun performSeek(targetMs: Long) {
         val boundedMs = targetMs.coerceIn(0L, totalDurationMs.coerceAtLeast(1L))
         currentPositionMs = boundedMs
@@ -2565,10 +2632,88 @@ fun AudioPlayerContent(
 
     var isLooping by remember { mutableStateOf(false) }
     var isAutoPlayNext by remember { mutableStateOf(true) }
-    var showControls by remember { mutableStateOf(true) }
-    var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
-    HideSystemBarsEffect(showControls)
+    // Media Notification & Controller synchronization
+    DisposableEffect(file.path, isPlaying) {
+        ArcboxMediaNotificationManager.showPlaybackNotification(
+            context = context,
+            title = file.nameWithoutExtension,
+            subtitle = "ArcBox Audio Player",
+            isPlaying = isPlaying,
+            isAudio = true
+        )
+
+        MediaPlaybackController.updatePlayback(
+            MediaPlaybackController.MediaInfo(
+                title = file.nameWithoutExtension,
+                subtitle = "ArcBox Audio Player",
+                isAudio = true,
+                isPlaying = isPlaying,
+                currentPositionMs = currentPositionMs,
+                totalDurationMs = totalDurationMs
+            )
+        )
+
+        MediaPlaybackController.onTogglePlayPause = {
+            val nextState = !isPlaying
+            isPlaying = nextState
+            try {
+                mediaPlayerState?.let { mp ->
+                    if (isAudioPrepared) {
+                        if (nextState && !mp.isPlaying) mp.start()
+                        else if (!nextState && mp.isPlaying) mp.pause()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        MediaPlaybackController.onNext = {
+            progress = 0f
+            currentPositionMs = 0L
+            onNext()
+        }
+
+        MediaPlaybackController.onPrevious = {
+            progress = 0f
+            currentPositionMs = 0L
+            onPrevious()
+        }
+
+        MediaPlaybackController.onRewind = {
+            try {
+                mediaPlayerState?.let { mp ->
+                    val newPos = (mp.currentPosition - 10000).coerceAtLeast(0)
+                    mp.seekTo(newPos)
+                    currentPositionMs = newPos.toLong()
+                }
+            } catch (_: Exception) {}
+        }
+
+        MediaPlaybackController.onForward = {
+            try {
+                mediaPlayerState?.let { mp ->
+                    val newPos = (mp.currentPosition + 10000).coerceAtMost(mp.duration)
+                    mp.seekTo(newPos)
+                    currentPositionMs = newPos.toLong()
+                }
+            } catch (_: Exception) {}
+        }
+
+        MediaPlaybackController.onStop = {
+            try {
+                mediaPlayerState?.let { if (it.isPlaying) it.pause() }
+                isPlaying = false
+            } catch (_: Exception) {}
+            ArcboxMediaNotificationManager.hideNotification(context)
+            MediaPlaybackController.clear()
+            onClose()
+        }
+
+        onDispose {
+            ArcboxMediaNotificationManager.hideNotification(context)
+            MediaPlaybackController.clear()
+        }
+    }
 
     DisposableEffect(file.path) {
         val mp = MediaPlayer().apply {
@@ -2611,18 +2756,6 @@ fun AudioPlayerContent(
         }
     }
 
-    LaunchedEffect(showControls, isPlaying, lastInteractionTime) {
-        if (showControls && isPlaying) {
-            kotlinx.coroutines.delay(5000L)
-            showControls = false
-        }
-    }
-
-    val resetTimer: () -> Unit = {
-        showControls = true
-        lastInteractionTime = System.currentTimeMillis()
-    }
-
     LaunchedEffect(isPlaying, isAudioPrepared) {
         while (isPlaying && isAudioPrepared) {
             kotlinx.coroutines.delay(250L)
@@ -2652,19 +2785,7 @@ fun AudioPlayerContent(
     )
 
     Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = {
-                        if (showControls) {
-                            showControls = false
-                        } else {
-                            resetTimer()
-                        }
-                    }
-                )
-            },
+        modifier = Modifier.fillMaxSize(),
         color = Color(0xFF0F172A)
     ) {
         Column(
@@ -2672,42 +2793,33 @@ fun AudioPlayerContent(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                .padding(20.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header Row
-            AnimatedVisibility(
-                visible = showControls,
-                enter = fadeIn(),
-                exit = fadeOut()
+            // Header Row (Always visible)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    IconButton(onClick = {
-                        resetTimer()
-                        onClose()
-                    }) {
-                        Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Reprodutor de Áudio",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "Áudio MP3 / WAV",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.6f)
-                        )
-                    }
-                    Box(modifier = Modifier.size(48.dp))
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
                 }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Reprodutor de Áudio",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Áudio MP3 / WAV",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                }
+                Box(modifier = Modifier.size(48.dp))
             }
 
             // Center Hero Artwork
@@ -2742,7 +2854,7 @@ fun AudioPlayerContent(
                 )
             }
 
-            // Waveform & Progress Slider
+            // Waveform & Progress Slider (Always visible)
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -2774,145 +2886,127 @@ fun AudioPlayerContent(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                AnimatedVisibility(
-                    visible = showControls,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Slider(
-                            value = progress,
-                            onValueChange = { newProgress ->
-                                resetTimer()
-                                progress = newProgress
-                                val targetMs = (newProgress * totalDurationMs).toLong()
-                                currentPositionMs = targetMs
-                                try {
-                                    if (isAudioPrepared) {
-                                        mediaPlayerState?.seekTo(targetMs.toInt())
-                                    }
-                                } catch (_: Exception) {}
-                            },
-                            colors = SliderDefaults.colors(
-                                thumbColor = MaterialTheme.colorScheme.primary,
-                                activeTrackColor = MaterialTheme.colorScheme.primary,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.2f)
-                            )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Slider(
+                        value = progress,
+                        onValueChange = { newProgress ->
+                            progress = newProgress
+                            val targetMs = (newProgress * totalDurationMs).toLong()
+                            currentPositionMs = targetMs
+                            try {
+                                if (isAudioPrepared) {
+                                    mediaPlayerState?.seekTo(targetMs.toInt())
+                                }
+                            } catch (_: Exception) {}
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.2f)
                         )
+                    )
 
-                        val curSec = (currentPositionMs / 1000L).toInt()
-                        val totSec = (totalDurationMs / 1000L).toInt()
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(formatTime(curSec), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                            Text(formatTime(totSec), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                        }
+                    val curSec = (currentPositionMs / 1000L).toInt()
+                    val totSec = (totalDurationMs / 1000L).toInt()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(formatTime(curSec), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                        Text(formatTime(totSec), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                     }
                 }
             }
 
-            // Controls Row (Loop, Previous, Play/Pause, Next, AutoPlay)
-            AnimatedVisibility(
-                visible = showControls,
-                enter = fadeIn(),
-                exit = fadeOut()
+            // Controls Row (Always visible - Loop, Previous, Play/Pause, Next, AutoPlay)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    // Leftmost: Infinite Loop / Repeat
-                    IconButton(onClick = {
-                        resetTimer()
-                        val newLoop = !isLooping
-                        isLooping = newLoop
+                // Leftmost: Infinite Loop / Repeat
+                IconButton(onClick = {
+                    val newLoop = !isLooping
+                    isLooping = newLoop
+                    try {
+                        mediaPlayerState?.isLooping = newLoop
+                    } catch (_: Exception) {}
+                }) {
+                    Icon(
+                        imageVector = if (isLooping) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                        contentDescription = "Loop Infinito",
+                        tint = if (isLooping) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.4f),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                // Previous
+                IconButton(onClick = {
+                    progress = 0f
+                    currentPositionMs = 0L
+                    onPrevious()
+                }) {
+                    Icon(
+                        Icons.Default.SkipPrevious,
+                        contentDescription = "Anterior",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
+                // Play / Pause
+                IconButton(
+                    onClick = {
+                        val nextState = !isPlaying
+                        isPlaying = nextState
                         try {
-                            mediaPlayerState?.isLooping = newLoop
-                        } catch (_: Exception) {}
-                    }) {
-                        Icon(
-                            imageVector = if (isLooping) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                            contentDescription = "Loop Infinito",
-                            tint = if (isLooping) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.4f),
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-
-                    // Previous
-                    IconButton(onClick = {
-                        resetTimer()
-                        progress = 0f
-                        currentPositionMs = 0L
-                        onPrevious()
-                    }) {
-                        Icon(
-                            Icons.Default.SkipPrevious,
-                            contentDescription = "Anterior",
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
-
-                    // Play / Pause
-                    IconButton(
-                        onClick = {
-                            resetTimer()
-                            val nextState = !isPlaying
-                            isPlaying = nextState
-                            try {
-                                mediaPlayerState?.let { mp ->
-                                    if (isAudioPrepared) {
-                                        if (nextState && !mp.isPlaying) mp.start()
-                                        else if (!nextState && mp.isPlaying) mp.pause()
-                                    }
+                            mediaPlayerState?.let { mp ->
+                                if (isAudioPrepared) {
+                                    if (nextState && !mp.isPlaying) mp.start()
+                                    else if (!nextState && mp.isPlaying) mp.pause()
                                 }
-                            } catch (_: Exception) {}
-                        },
-                        modifier = Modifier
-                            .size(60.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pausar" else "Tocar",
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
+                            }
+                        } catch (_: Exception) {}
+                    },
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pausar" else "Tocar",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
 
-                    // Next
-                    IconButton(onClick = {
-                        resetTimer()
-                        progress = 0f
-                        currentPositionMs = 0L
-                        onNext()
-                    }) {
-                        Icon(
-                            Icons.Default.SkipNext,
-                            contentDescription = "Próximo",
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
+                // Next
+                IconButton(onClick = {
+                    progress = 0f
+                    currentPositionMs = 0L
+                    onNext()
+                }) {
+                    Icon(
+                        Icons.Default.SkipNext,
+                        contentDescription = "Próximo",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
 
-                    // Rightmost: Continuous Playback (Auto-advance to next track)
-                    IconButton(onClick = {
-                        resetTimer()
-                        isAutoPlayNext = !isAutoPlayNext
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.PlaylistPlay,
-                            contentDescription = "Reprodução Contínua",
-                            tint = if (isAutoPlayNext) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.4f),
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
+                // Rightmost: Continuous Playback (Auto-advance to next track)
+                IconButton(onClick = {
+                    isAutoPlayNext = !isAutoPlayNext
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.PlaylistPlay,
+                        contentDescription = "Reprodução Contínua",
+                        tint = if (isAutoPlayNext) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.4f),
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
             }
         }

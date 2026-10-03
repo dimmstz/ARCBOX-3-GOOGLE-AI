@@ -223,19 +223,36 @@ class GitHubUpdateManager(private val context: Context) {
             var response = httpClient.newCall(buildRequest(token)).execute()
             recordLastCheckedTime()
 
-            // Se falhar com 401 ou 403 e o token usado for diferente do novo token padrão, reverte para o token padrão e tenta novamente
-            if (!response.isSuccessful && (response.code == 401 || response.code == 403) && token != UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN) {
+            // Tentativas resilientes de autenticação e fallback para repositório público:
+            // 1. Tenta com token padrão configurado se o token atual falhar
+            if (!response.isSuccessful && token != UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN) {
                 response.close()
                 token = UpdateConfig.DEFAULT_GITHUB_PAT_TOKEN
                 prefs.edit().putString(UpdateConfig.PREF_GITHUB_PAT_TOKEN, token).apply()
                 response = httpClient.newCall(buildRequest(token)).execute()
             }
 
+            // 2. Tenta com token clássico (ghp) se ainda assim falhar
+            if (!response.isSuccessful && token != UpdateConfig.FALLBACK_GITHUB_TOKEN) {
+                response.close()
+                token = UpdateConfig.FALLBACK_GITHUB_TOKEN
+                response = httpClient.newCall(buildRequest(token)).execute()
+            }
+
+            // 3. Tenta sem token (para repositórios públicos) se os tokens retornarem 401, 403 ou 404
+            if (!response.isSuccessful && (response.code == 401 || response.code == 403 || response.code == 404)) {
+                response.close()
+                response = httpClient.newCall(buildRequest("")).execute()
+            }
+
             if (!response.isSuccessful) {
                 val code = response.code
                 response.close()
+                if (code == 404) {
+                    // 404 em releases/latest significa que não há releases publicadas no repositório ainda
+                    return@withContext Result.success(null)
+                }
                 val userFriendlyMessage = when (code) {
-                    404 -> "Nenhuma nova versão encontrada no momento."
                     401, 403 -> "Serviço de atualizações temporariamente indisponível. Tente novamente mais tarde."
                     else -> "Não foi possível verificar atualizações no momento (código $code)."
                 }
@@ -407,7 +424,18 @@ class GitHubUpdateManager(private val context: Context) {
 
             val request = requestBuilder.build()
 
-            val response = httpClient.newCall(request).execute()
+            var response = httpClient.newCall(request).execute()
+            if (!response.isSuccessful && isPrivateAsset) {
+                // Se a API de asset privada falhar, tenta o link direto de download público
+                response.close()
+                Log.d(TAG, "Tentando download público direto via browser download URL: ${releaseInfo.apkDownloadUrl}")
+                val fallbackRequest = Request.Builder()
+                    .url(releaseInfo.apkDownloadUrl)
+                    .header("User-Agent", "Arcbox-Android/${UpdateConfig.CURRENT_VERSION_NAME}")
+                    .build()
+                response = httpClient.newCall(fallbackRequest).execute()
+            }
+
             if (!response.isSuccessful) {
                 val code = response.code
                 response.close()

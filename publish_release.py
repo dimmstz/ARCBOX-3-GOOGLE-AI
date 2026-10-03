@@ -2,18 +2,19 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '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')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.29'
-name = 'Arcbox File Manager v1.0.29'
-body = """## 🚀 Novidades da Versão v1.0.29
+tag = 'v1.0.30'
+name = 'Arcbox File Manager v1.0.30'
+body = """## 🚀 Novidades da Versão v1.0.30
 
-- 🎴 **Detecção Resiliente e Conexão de Cartão SD Externo (Android 11 a 15)**:
-  - Eliminação da trava preliminar de leitura restritiva na inicialização de volumes externos, garantindo que o Cartão SD seja prontamente listado e reconhecido pelo aplicativo.
-  - Exibição de orientações contextuais claras em caso de necessidade de concessão da permissão especial "Acesso a todos os arquivos" (`MANAGE_EXTERNAL_STORAGE`).
-- ⚡ **Estabilidade na Análise de Espaço e Prevenção de Bloqueios**:
-  - Implementação de tempo limite seguro de 8 segundos no escaneamento detalhado de armazenamento, evitando que o painel fique em carregamento contínuo em mídias lentas ou protegidas.
-  - Finalização garantida do estado de progresso com blocos de tratamento de exceção resilientes no ViewModel.
-- 🛠️ **Estabilização da Compilação e Suporte KSP**:
-  - Ajuste nas configurações do Gradle e alinhamento do Kotlin 2.1.0 com KSP, solucionando falhas no processamento de símbolos e build do Android 15 (Target SDK 35).
+- 🎵 **Interface Fixa e Acessível no Reprodutor de Música**:
+  - Removida a transição automática para tela cheia / modo escuro imersivo durante a reprodução de áudio. Todos os controles (Play, Pause, Avançar, Voltar, Loop, Barra de Progresso, Tempo e Botão Fechar) permanecem visíveis e acessíveis sem ocultação repentina.
+- 🔔 **Widget de Controle de Mídia nas Notificações do Android**:
+  - Adicionado player interativo na barra de notificações com botões de ação: Reproduzir/Pausar, Próxima Faixa, Faixa Anterior / Retrocesso e Fechar.
+  - Suporte completo tanto para músicas quanto para vídeos em segundo plano, com estilo de mídia nativo do Android e integração fluida.
+- 🔄 **Correção Definitiva da Verificação de Atualizações via GitHub**:
+  - Resolução da falha "Nenhuma nova versão encontrada no momento" ao verificar atualizações: o repositório oficial de releases agora possui visibilidade pública, permitindo que todas as versões instaladas (incluindo v1.0.26) localizem e baixem as novas versões instantaneamente.
+  - Implementado sistema de fallback multi-token e download direto via link CDN público (`browser_download_url`), garantindo que downloads de atualizações nunca falhem por expiração de credencial.
+  - Ajuste na interface do painel de atualizações: mensagens de status quando o app já está atualizado agora exibem confirmação com ícone de sucesso em vez de indicar falha indevida.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

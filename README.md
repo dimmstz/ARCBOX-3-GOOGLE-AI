@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.29-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.29"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.30-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.30"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,8 +18,23 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.29
+## 🚀 Novidades da Versão v1.0.30
 
+- 🎵 **Interface Fixa e Acessível no Reprodutor de Música**:
+  - Removida a transição automática para tela cheia / modo escuro imersivo durante a reprodução de áudio. Todos os controles (Play, Pause, Avançar, Voltar, Loop, Barra de Progresso, Tempo e Botão Fechar) permanecem visíveis e acessíveis sem ocultação repentina.
+- 🔔 **Widget de Controle de Mídia nas Notificações do Android**:
+  - Adicionado player interativo na barra de notificações com botões de ação: Reproduzir/Pausar, Próxima Faixa, Faixa Anterior / Retrocesso e Fechar.
+  - Suporte completo tanto para músicas quanto para vídeos em segundo plano, com estilo de mídia nativo do Android e integração fluida.
+- 🔄 **Correção Definitiva da Verificação de Atualizações via GitHub**:
+  - Resolução da falha "Nenhuma nova versão encontrada no momento" ao verificar atualizações: o repositório oficial de releases agora possui visibilidade pública, permitindo que todas as versões instaladas (incluindo v1.0.26) localizem e baixem as novas versões instantaneamente.
+  - Implementado sistema de fallback multi-token e download direto via link CDN público (`browser_download_url`), garantindo que downloads de atualizações nunca falhem por expiração de credencial.
+  - Ajuste na interface do painel de atualizações: mensagens de status quando o app já está atualizado agora exibem confirmação com ícone de sucesso em vez de indicar falha indevida.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.29
 - 🎴 **Detecção Resiliente e Conexão de Cartão SD Externo (Android 11 a 15)**:
   - Eliminação da trava preliminar de leitura restritiva na inicialização de volumes externos, garantindo que o Cartão SD seja prontamente listado e reconhecido pelo aplicativo.
   - Exibição de orientações contextuais claras em caso de necessidade de concessão da permissão especial "Acesso a todos os arquivos" (`MANAGE_EXTERNAL_STORAGE`).
@@ -30,8 +45,6 @@
   - Ajuste nas configurações do Gradle e alinhamento do Kotlin 2.1.0 com KSP, solucionando falhas no processamento de símbolos e build do Android 15 (Target SDK 35).
 
 ---
-
-## 📋 Histórico de Versões
 
 ### v1.0.28
 - ☁️ **Card "Adicionar Nuvem" Contínuo e Inteligente no Menu Lateral**:

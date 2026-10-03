@@ -2643,11 +2643,22 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }.onFailure { err ->
-                _uiState.update {
-                    it.copy(
-                        updateStatus = UpdateStatus.Error(err.message ?: "Não foi possível verificar atualizações"),
-                        updateLastCheckedTime = updatedLastCheck
-                    )
+                val msg = err.message ?: ""
+                if (msg.contains("Nenhuma nova versão", ignoreCase = true) || msg.contains("atualizado", ignoreCase = true)) {
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = UpdateStatus.NoUpdateAvailable(currentVersion, updatedLastCheck),
+                            updateLastCheckedTime = updatedLastCheck,
+                            snackbarMessage = "Você já está utilizando a versão mais recente do ArcBox (v$currentVersion)."
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = UpdateStatus.Error(err.message ?: "Não foi possível verificar atualizações"),
+                            updateLastCheckedTime = updatedLastCheck
+                        )
+                    }
                 }
             }
         }
