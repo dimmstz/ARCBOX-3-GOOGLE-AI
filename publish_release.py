@@ -2,19 +2,18 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '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')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.28'
-name = 'Arcbox File Manager v1.0.28'
-body = """## 🚀 Novidades da Versão v1.0.28
+tag = 'v1.0.29'
+name = 'Arcbox File Manager v1.0.29'
+body = """## 🚀 Novidades da Versão v1.0.29
 
-- ☁️ **Card "Adicionar Nuvem" Contínuo e Inteligente no Menu Lateral**:
-  - O card de adicionar nuvem permanece visível enquanto houver provedores disponíveis para conexão (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV).
-  - Listagem dinâmica no subtítulo dos serviços restantes para conexão rápida.
-  - Ocultação automática quando todos os serviços estiverem vinculados e reaparecimento instantâneo caso qualquer nuvem seja desconectada.
-- 🛡️ **Compatibilidade de Tema e Estabilidade de Inicialização**:
-  - Tema base atualizado para `Theme.AppCompat.DayNight.NoActionBar`, eliminando crashes de inicialização com `FragmentActivity` e biometria.
-  - Renderização nativa da tela de bloqueio e tratamento de fallback seguro sem travar a interface.
-- ⚡ **Otimização do Processamento de Build**:
-  - Limpeza de dependências desnecessárias do processador de anotações KSP, acelerando e estabilizando a compilação do projeto.
+- 🎴 **Detecção Resiliente e Conexão de Cartão SD Externo (Android 11 a 15)**:
+  - Eliminação da trava preliminar de leitura restritiva na inicialização de volumes externos, garantindo que o Cartão SD seja prontamente listado e reconhecido pelo aplicativo.
+  - Exibição de orientações contextuais claras em caso de necessidade de concessão da permissão especial "Acesso a todos os arquivos" (`MANAGE_EXTERNAL_STORAGE`).
+- ⚡ **Estabilidade na Análise de Espaço e Prevenção de Bloqueios**:
+  - Implementação de tempo limite seguro de 8 segundos no escaneamento detalhado de armazenamento, evitando que o painel fique em carregamento contínuo em mídias lentas ou protegidas.
+  - Finalização garantida do estado de progresso com blocos de tratamento de exceção resilientes no ViewModel.
+- 🛠️ **Estabilização da Compilação e Suporte KSP**:
+  - Ajuste nas configurações do Gradle e alinhamento do Kotlin 2.1.0 com KSP, solucionando falhas no processamento de símbolos e build do Android 15 (Target SDK 35).
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

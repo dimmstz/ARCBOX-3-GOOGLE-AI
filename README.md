@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.28-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.28"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.29-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.29"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,8 +18,22 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.28
+## 🚀 Novidades da Versão v1.0.29
 
+- 🎴 **Detecção Resiliente e Conexão de Cartão SD Externo (Android 11 a 15)**:
+  - Eliminação da trava preliminar de leitura restritiva na inicialização de volumes externos, garantindo que o Cartão SD seja prontamente listado e reconhecido pelo aplicativo.
+  - Exibição de orientações contextuais claras em caso de necessidade de concessão da permissão especial "Acesso a todos os arquivos" (`MANAGE_EXTERNAL_STORAGE`).
+- ⚡ **Estabilidade na Análise de Espaço e Prevenção de Bloqueios**:
+  - Implementação de tempo limite seguro de 8 segundos no escaneamento detalhado de armazenamento, evitando que o painel fique em carregamento contínuo em mídias lentas ou protegidas.
+  - Finalização garantida do estado de progresso com blocos de tratamento de exceção resilientes no ViewModel.
+- 🛠️ **Estabilização da Compilação e Suporte KSP**:
+  - Ajuste nas configurações do Gradle e alinhamento do Kotlin 2.1.0 com KSP, solucionando falhas no processamento de símbolos e build do Android 15 (Target SDK 35).
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.28
 - ☁️ **Card "Adicionar Nuvem" Contínuo e Inteligente no Menu Lateral**:
   - O card de adicionar nuvem permanece visível enquanto houver provedores disponíveis para conexão (MEGA, Google Drive, OneDrive, Dropbox, MediaFire, WebDAV).
   - Listagem dinâmica no subtítulo dos serviços restantes para conexão rápida.
@@ -31,8 +45,6 @@
   - Limpeza de dependências desnecessárias do processador de anotações KSP, acelerando e estabilizando a compilação do projeto.
 
 ---
-
-## 📋 Histórico de Versões
 
 ### v1.0.27
 - 🔄 **Correção e Estabilização das Atualizações In-App via GitHub**:

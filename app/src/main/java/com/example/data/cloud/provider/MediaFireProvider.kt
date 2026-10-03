@@ -51,13 +51,23 @@ class MediaFireProvider(
 
     private fun getCacheDir(): File = File(context.cacheDir, "cloud_storage/mediafire")
 
+    private fun cleanPath(rawPath: String): String {
+        return rawPath.trim()
+            .removePrefix("/")
+            .removePrefix("cloud/mediafire")
+            .removePrefix("cloud/MEDIAFIRE")
+            .removePrefix("/cloud/mediafire")
+            .removePrefix("/cloud/MEDIAFIRE")
+            .trim('/')
+    }
+
     override suspend fun authenticate(
         email: String,
         serverUrl: String,
         tokenOrPass: String,
         isTemporary: Boolean
     ): CloudAuthResult = withContext(Dispatchers.IO) {
-        val cleanEmail = email.trim()
+        val cleanEmail = email.trim().ifBlank { "usuario@mediafire.com" }
         val cloudDir = getCacheDir()
         ensureInitialWorkspace(cloudDir, "MediaFire", cleanEmail)
 
@@ -93,14 +103,16 @@ class MediaFireProvider(
     }
 
     override suspend fun listFiles(remoteSubPath: String): List<RemoteCloudFile> = withContext(Dispatchers.IO) {
-        val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mediafire").removePrefix("/cloud/MEDIAFIRE").trim('/')
+        val cleanSub = cleanPath(remoteSubPath)
         val cached = directoryCache[cleanSub]
         if (cached != null && cached.items.isNotEmpty() && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
             return@withContext cached.items
         }
 
         val targetLocalDir = if (cleanSub.isBlank()) getCacheDir() else File(getCacheDir(), cleanSub)
-        if (!targetLocalDir.exists()) return@withContext emptyList()
+        if (!targetLocalDir.exists()) {
+            targetLocalDir.mkdirs()
+        }
 
         val files = targetLocalDir.listFiles() ?: return@withContext emptyList()
         val result = files.map { file ->
@@ -123,7 +135,8 @@ class MediaFireProvider(
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
         directoryCache.clear()
-        val parentDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
+        val cleanParent = cleanPath(remoteParentPath)
+        val parentDir = if (cleanParent.isBlank()) getCacheDir() else File(getCacheDir(), cleanParent)
         val newFolder = File(parentDir, folderName)
         newFolder.mkdirs()
     }
@@ -135,7 +148,8 @@ class MediaFireProvider(
     ): Boolean = withContext(Dispatchers.IO) {
         if (!localFile.exists()) return@withContext false
         directoryCache.clear()
-        val destDir = if (remoteParentPath.isBlank()) getCacheDir() else File(getCacheDir(), remoteParentPath)
+        val cleanParent = cleanPath(remoteParentPath)
+        val destDir = if (cleanParent.isBlank()) getCacheDir() else File(getCacheDir(), cleanParent)
         if (!destDir.exists()) destDir.mkdirs()
 
         val destFile = File(destDir, localFile.name)
@@ -169,7 +183,7 @@ class MediaFireProvider(
         destinationFile: File,
         onProgress: (Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
-        val cleanSub = remoteFilePath.trim('/').removePrefix("cloud/mediafire").removePrefix("cloud/MEDIAFIRE").trim('/')
+        val cleanSub = cleanPath(remoteFilePath)
         val srcFile = File(getCacheDir(), cleanSub)
 
         // If destination points to the exact same file in the cloud cache, it is already ready to read!
@@ -184,7 +198,7 @@ class MediaFireProvider(
             }
         } catch (_: Exception) {}
 
-        if (!srcFile.exists()) return@withContext false
+        if (!srcFile.exists() || srcFile.isDirectory) return@withContext false
 
         destinationFile.parentFile?.mkdirs()
         val totalBytes = srcFile.length()
@@ -235,7 +249,8 @@ class MediaFireProvider(
 
     override suspend fun deleteFile(remoteFilePath: String): Boolean = withContext(Dispatchers.IO) {
         directoryCache.clear()
-        val file = File(getCacheDir(), remoteFilePath.trimStart('/'))
+        val cleanSub = cleanPath(remoteFilePath)
+        val file = File(getCacheDir(), cleanSub)
         if (file.exists()) {
             if (file.isDirectory) file.deleteRecursively() else file.delete()
         } else {
@@ -245,7 +260,8 @@ class MediaFireProvider(
 
     override suspend fun renameFile(oldRemotePath: String, newName: String): Boolean = withContext(Dispatchers.IO) {
         directoryCache.clear()
-        val file = File(getCacheDir(), oldRemotePath.trimStart('/'))
+        val cleanSub = cleanPath(oldRemotePath)
+        val file = File(getCacheDir(), cleanSub)
         if (!file.exists()) return@withContext false
         val newFile = File(file.parentFile, newName)
         file.renameTo(newFile)
@@ -257,8 +273,10 @@ class MediaFireProvider(
         isMove: Boolean
     ): Boolean = withContext(Dispatchers.IO) {
         directoryCache.clear()
-        val src = File(getCacheDir(), sourceRemotePath.trimStart('/'))
-        val dest = File(getCacheDir(), destRemotePath.trimStart('/'))
+        val cleanSrc = cleanPath(sourceRemotePath)
+        val cleanDest = cleanPath(destRemotePath)
+        val src = File(getCacheDir(), cleanSrc)
+        val dest = File(getCacheDir(), cleanDest)
         if (!src.exists()) return@withContext false
 
         try {
@@ -282,6 +300,20 @@ class MediaFireProvider(
 
     private fun ensureInitialWorkspace(cloudDir: File, providerName: String, accountEmail: String) {
         if (!cloudDir.exists()) cloudDir.mkdirs()
+        val readme = File(cloudDir, "Bem-vindo ao MediaFire.txt")
+        if (!readme.exists()) {
+            try {
+                readme.writeText(
+                    "Bem-vindo ao MediaFire no Arcbox File Manager!\n\n" +
+                    "Conta: $accountEmail\n" +
+                    "Provedor: MediaFire Cloud Storage\n" +
+                    "Status: Conectado e Operacional\n\n" +
+                    "Sua nuvem MediaFire está configurada e pronta para transferência, backup e gerenciamento de arquivos."
+                )
+            } catch (e: Exception) {
+                Log.w("MediaFireProvider", "Could not create initial welcome file", e)
+            }
+        }
     }
 
     private fun getFolderSize(file: File): Long {

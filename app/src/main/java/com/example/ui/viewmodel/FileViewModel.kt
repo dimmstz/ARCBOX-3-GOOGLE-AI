@@ -670,6 +670,12 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectStorageVolume(volume: StorageVolume) {
+        val app = getApplication<Application>()
+        if (volume.typeKey == "SDCARD" && !com.example.util.PermissionHelper.hasAllFilesAccess(app)) {
+            _uiState.update { 
+                it.copy(snackbarMessage = "Para ler todo o conteúdo do Cartão SD, conceda 'Acesso a todos os arquivos' em Permissões.") 
+            }
+        }
         _uiState.update { it.copy(selectedVolume = volume) }
         navigateToDirectory(volume.path)
     }
@@ -2134,51 +2140,78 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshStorageDashboard() {
         viewModelScope.launch(Dispatchers.IO) {
-            val targetPath = _uiState.value.selectedVolume?.path ?: _uiState.value.currentPath
-            val stats = repository.analyzeStorage(targetPath, forceRefresh = true)
-            val large = repository.findLargeFiles(targetPath)
-            val dups = repository.findDuplicateFiles(targetPath)
-            _uiState.update {
-                it.copy(
-                    storageCategoryStats = stats,
-                    largeFiles = large,
-                    duplicateGroups = dups
-                )
+            try {
+                val targetPath = _uiState.value.selectedVolume?.path ?: _uiState.value.currentPath
+                val stats = repository.analyzeStorage(targetPath, forceRefresh = true)
+                val large = repository.findLargeFiles(targetPath)
+                val dups = repository.findDuplicateFiles(targetPath)
+                _uiState.update {
+                    it.copy(
+                        storageCategoryStats = stats,
+                        largeFiles = large,
+                        duplicateGroups = dups
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FileViewModel", "Error refreshing dashboard", e)
             }
         }
     }
 
     fun selectDashboardVolume(volume: StorageVolume) {
         viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            if (volume.typeKey == "SDCARD" && !com.example.util.PermissionHelper.hasAllFilesAccess(app)) {
+                _uiState.update { 
+                    it.copy(snackbarMessage = "Para analisar o Cartão SD completo, ative a permissão 'Acesso a todos os arquivos'.") 
+                }
+            }
             _uiState.update { it.copy(selectedVolume = volume, isLoading = true) }
-            val stats = repository.analyzeStorage(volume.path)
-            val large = repository.findLargeFiles(volume.path)
-            val dups = repository.findDuplicateFiles(volume.path)
-            _uiState.update {
-                it.copy(
-                    storageCategoryStats = stats,
-                    largeFiles = large,
-                    duplicateGroups = dups,
-                    isLoading = false
-                )
+            try {
+                val stats = repository.analyzeStorage(volume.path)
+                val large = repository.findLargeFiles(volume.path)
+                val dups = repository.findDuplicateFiles(volume.path)
+                _uiState.update {
+                    it.copy(
+                        storageCategoryStats = stats,
+                        largeFiles = large,
+                        duplicateGroups = dups
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FileViewModel", "Error selecting dashboard volume", e)
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
 
     fun openStorageDashboard() {
         viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val selectedVol = _uiState.value.selectedVolume
+            if (selectedVol?.typeKey == "SDCARD" && !com.example.util.PermissionHelper.hasAllFilesAccess(app)) {
+                _uiState.update { 
+                    it.copy(snackbarMessage = "Conceda a permissão 'Acesso a todos os arquivos' para ler todo o Cartão SD.") 
+                }
+            }
             _uiState.update { it.copy(isStorageDashboardOpen = true, isLoading = true) }
-            val targetPath = _uiState.value.selectedVolume?.path ?: _uiState.value.currentPath
-            val stats = repository.analyzeStorage(targetPath)
-            val large = repository.findLargeFiles(targetPath)
-            val dups = repository.findDuplicateFiles(targetPath)
-            _uiState.update {
-                it.copy(
-                    storageCategoryStats = stats,
-                    largeFiles = large,
-                    duplicateGroups = dups,
-                    isLoading = false
-                )
+            try {
+                val targetPath = selectedVol?.path ?: _uiState.value.currentPath
+                val stats = repository.analyzeStorage(targetPath)
+                val large = repository.findLargeFiles(targetPath)
+                val dups = repository.findDuplicateFiles(targetPath)
+                _uiState.update {
+                    it.copy(
+                        storageCategoryStats = stats,
+                        largeFiles = large,
+                        duplicateGroups = dups
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FileViewModel", "Error opening storage dashboard", e)
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }

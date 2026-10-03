@@ -198,23 +198,21 @@ class FileRepository(private val context: Context) {
                         dir.absolutePath
                     }
                     val rootFile = File(rootPath)
-                    if (rootFile.exists() && rootFile.canRead()) {
+                    if (rootFile.exists() && list.none { it.path == rootPath }) {
                         val stat = try { StatFs(rootPath) } catch (e: Exception) { null }
                         val total = stat?.totalBytes ?: 0L
                         val free = stat?.availableBytes ?: 0L
-                        if (total > 0L && list.none { it.path == rootPath }) {
-                            val volumeLabel = if (externalDirs.size > 2) "Cartão SD $i" else "Cartão SD"
-                            list.add(
-                                StorageVolume(
-                                    id = "sdcard_$i",
-                                    name = volumeLabel,
-                                    path = rootPath,
-                                    totalBytes = total,
-                                    freeBytes = free,
-                                    typeKey = "SDCARD"
-                                )
+                        val volumeLabel = if (externalDirs.size > 2) "Cartão SD $i" else "Cartão SD"
+                        list.add(
+                            StorageVolume(
+                                id = "sdcard_$i",
+                                name = volumeLabel,
+                                path = rootPath,
+                                totalBytes = total,
+                                freeBytes = free,
+                                typeKey = "SDCARD"
                             )
-                        }
+                        )
                     }
                 }
             }
@@ -224,30 +222,28 @@ class FileRepository(private val context: Context) {
         try {
             val storageDir = File("/storage")
             if (storageDir.exists() && storageDir.isDirectory) {
-                val files = storageDir.listFiles()
+                val files = try { storageDir.listFiles() } catch (_: Exception) { null }
                 if (files != null) {
                     for (file in files) {
                         val name = file.name
                         if (file.isDirectory && name != "emulated" && name != "self" && name != "knox" && !name.startsWith(".")) {
                             val path = file.absolutePath
-                            if (file.canRead() && list.none { it.path == path }) {
+                            if (list.none { it.path == path }) {
                                 val stat = try { StatFs(path) } catch (e: Exception) { null }
                                 val total = stat?.totalBytes ?: 0L
                                 val free = stat?.availableBytes ?: 0L
-                                if (total > 0L) {
-                                    val isOtg = name.lowercase().contains("otg") || name.lowercase().contains("usb")
-                                    val volumeName = if (isOtg) "Armazenamento OTG" else "Cartão SD"
-                                    list.add(
-                                        StorageVolume(
-                                            id = "ext_${name.lowercase()}",
-                                            name = volumeName,
-                                            path = path,
-                                            totalBytes = total,
-                                            freeBytes = free,
-                                            typeKey = if (isOtg) "OTG" else "SDCARD"
-                                        )
+                                val isOtg = name.lowercase().contains("otg") || name.lowercase().contains("usb")
+                                val volumeName = if (isOtg) "Armazenamento OTG" else "Cartão SD ($name)"
+                                list.add(
+                                    StorageVolume(
+                                        id = "ext_${name.lowercase()}",
+                                        name = volumeName,
+                                        path = path,
+                                        totalBytes = total,
+                                        freeBytes = free,
+                                        typeKey = if (isOtg) "OTG" else "SDCARD"
                                     )
-                                }
+                                )
                             }
                         }
                     }
@@ -1960,7 +1956,27 @@ class FileRepository(private val context: Context) {
     }
 
     suspend fun analyzeStorage(rootPath: String, forceRefresh: Boolean = false): List<StorageCategoryStats> = withContext(Dispatchers.IO) {
-        getOrComputeStorageSnapshot(rootPath, forceRefresh).stats
+        try {
+            val stats = kotlinx.coroutines.withTimeoutOrNull(8000L) {
+                getOrComputeStorageSnapshot(rootPath, forceRefresh).stats
+            }
+            if (stats != null) {
+                stats
+            } else {
+                val stat = try { StatFs(rootPath) } catch (_: Exception) { null }
+                val total = stat?.totalBytes ?: 0L
+                val free = stat?.availableBytes ?: 0L
+                val used = (total - free).coerceAtLeast(0L)
+                listOf(StorageCategoryStats(FileType.OTHER, "Geral", used, 0))
+            }
+        } catch (e: Exception) {
+            Log.e("FileRepository", "Storage analysis error for $rootPath", e)
+            val stat = try { StatFs(rootPath) } catch (_: Exception) { null }
+            val total = stat?.totalBytes ?: 0L
+            val free = stat?.availableBytes ?: 0L
+            val used = (total - free).coerceAtLeast(0L)
+            listOf(StorageCategoryStats(FileType.OTHER, "Geral", used, 0))
+        }
     }
 
     suspend fun getCategoryDetails(rootPath: String, fileType: FileType): CategoryDetailInfo = withContext(Dispatchers.IO) {
