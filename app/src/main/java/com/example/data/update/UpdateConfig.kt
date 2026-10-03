@@ -13,16 +13,8 @@ object UpdateConfig {
      */
     const val DEFAULT_GITHUB_OWNER = "dimmstz"
     const val DEFAULT_GITHUB_REPO = "ARCBOX-3-GOOGLE-AI"
-    val DEFAULT_GITHUB_PAT_TOKEN: String by lazy {
-        try {
-            val encoded = "Z2l0aHViX3BhdF8xMUI0UVJFRkkweGR5aXNoYVZqYUVsX09Cc1hOY1g0QVFmcldYWVNMdHBWY2l5dTRDRFpDTVkwOUNjbElGRkNLWnY2T1JWSUxFNTVOMU5obTNk"
-            String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT), Charsets.UTF_8).trim()
-        } catch (_: Exception) {
-            "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"
-        }
-    }
-
-    const val FALLBACK_GITHUB_TOKEN: String = "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"
+    val DEFAULT_GITHUB_PAT_TOKEN: String = ""
+    const val FALLBACK_GITHUB_TOKEN: String = ""
 
     /**
      * URL base da API do GitHub Releases para buscar a versão mais recente.
