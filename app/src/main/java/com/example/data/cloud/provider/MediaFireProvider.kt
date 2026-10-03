@@ -301,18 +301,8 @@ class MediaFireProvider(
     private fun ensureInitialWorkspace(cloudDir: File, providerName: String, accountEmail: String) {
         if (!cloudDir.exists()) cloudDir.mkdirs()
         val readme = File(cloudDir, "Bem-vindo ao MediaFire.txt")
-        if (!readme.exists()) {
-            try {
-                readme.writeText(
-                    "Bem-vindo ao MediaFire no Arcbox File Manager!\n\n" +
-                    "Conta: $accountEmail\n" +
-                    "Provedor: MediaFire Cloud Storage\n" +
-                    "Status: Conectado e Operacional\n\n" +
-                    "Sua nuvem MediaFire está configurada e pronta para transferência, backup e gerenciamento de arquivos."
-                )
-            } catch (e: Exception) {
-                Log.w("MediaFireProvider", "Could not create initial welcome file", e)
-            }
+        if (readme.exists()) {
+            try { readme.delete() } catch (_: Exception) {}
         }
     }
 

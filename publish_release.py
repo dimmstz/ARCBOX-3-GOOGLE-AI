@@ -2,19 +2,14 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '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')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.31'
-name = 'Arcbox File Manager v1.0.31'
-body = """## 🚀 Novidades da Versão v1.0.31
+tag = 'v1.0.32'
+name = 'Arcbox File Manager v1.0.32'
+body = """## 🚀 Novidades da Versão v1.0.32
 
-- 🎴 **Detecção Multinível e Conexão de Cartão SD e Drives OTG**:
-  - Integração nativa com a API `android.os.storage.StorageManager.storageVolumes` (API 24+) para identificação imediata de cartões de memória externos e pendrives USB em todas as versões do Android (10 a 16).
-  - Medição de espaço e leitura garantida via `getExternalFilesDirs` no caminho do aplicativo no cartão SD, operando com 100% de precisão mesmo antes do processamento de permissões restritivas do Android 11+.
-  - Fallbacks inteligentes com `/proc/mounts`, `/storage/` e `/mnt/media_rw/`.
-- 📊 **Cálculo Resiliente e Visualização Completa de Espaço de Armazenamento**:
-  - Correção da exibição no menu lateral (Drawer): os valores de gigabytes e porcentagem (*"X GB de Y GB usados (Z%)"*) são calculados dinamicamente e nunca mais aparecem em branco.
-  - Implementada cadeia quádrupla de medição para o armazenamento interno (`StatFs` emulado ➜ `/data` ➜ `context.filesDir` ➜ `StorageStatsManager`).
-- 🔄 **Sincronização no Ciclo de Vida (`onResume`)**:
-  - Reconhecimento e atualização instantânea de unidades de armazenamento e cartões SD inseridos ao retornar de configurações ou alternar aplicativos.
+- ☁️ **Remoção Completa de Mocks e Sincronização Pura no MEGA**:
+  - Eliminação total de arquivos e pastas simulados (`ArcBox_MEGA_Note.txt`, `Documentos`, `Downloads`, `Imagens` e notas do MediaFire).
+  - O aplicativo lista e exibe exclusivamente os nós e arquivos reais mantidos na sua conta remota do MEGA via `MegaApiClient`.
+  - Limpeza automática de quaisquer resquícios de arquivos mock legados armazenados no cache da aplicação.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

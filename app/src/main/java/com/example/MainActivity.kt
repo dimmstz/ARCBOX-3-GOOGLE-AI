@@ -43,6 +43,17 @@ class MainActivity : FragmentActivity() {
                     if (legacyMockPhoto.exists()) legacyMockPhoto.delete()
                     if (legacyMockVideo.exists()) legacyMockVideo.delete()
                 }
+                val megaCache = File(cacheDir, "cloud_storage/mega")
+                if (megaCache.exists()) {
+                    val noteFile = File(megaCache, "ArcBox_MEGA_Note.txt")
+                    if (noteFile.exists()) noteFile.delete()
+                    val docDir = File(megaCache, "Documentos")
+                    if (docDir.exists() && docDir.listFiles().isNullOrEmpty()) docDir.delete()
+                    val imgDir = File(megaCache, "Imagens")
+                    if (imgDir.exists() && imgDir.listFiles().isNullOrEmpty()) imgDir.delete()
+                    val downDir = File(megaCache, "Downloads")
+                    if (downDir.exists() && downDir.listFiles().isNullOrEmpty()) downDir.delete()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.31-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.31"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.32-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.32"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,21 +18,25 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.31
+## 🚀 Novidades da Versão v1.0.32
 
-- 🎴 **Detecção Multinível e Conexão de Cartão SD e Drives OTG**:
-  - Integração nativa com a API `android.os.storage.StorageManager.storageVolumes` (API 24+) para identificação imediata de cartões de memória externos e pendrives USB em todas as versões do Android (10 a 16).
-  - Medição de espaço e leitura garantida via `getExternalFilesDirs` no caminho do aplicativo no cartão SD, operando com 100% de precisão mesmo antes do processamento de permissões restritivas do Android 11+.
-  - Fallbacks inteligentes com `/proc/mounts`, `/storage/` e `/mnt/media_rw/`.
-- 📊 **Cálculo Resiliente e Visualização Completa de Espaço de Armazenamento**:
-  - Correção da exibição no menu lateral (Drawer): os valores de gigabytes e porcentagem (*"X GB de Y GB usados (Z%)"*) são calculados dinamicamente e nunca mais aparecem em branco.
-  - Implementada cadeia quádrupla de medição para o armazenamento interno (`StatFs` emulado ➜ `/data` ➜ `context.filesDir` ➜ `StorageStatsManager`).
-- 🔄 **Sincronização no Ciclo de Vida (`onResume`)**:
-  - Reconhecimento e atualização instantânea de unidades de armazenamento e cartões SD inseridos ao retornar de configurações ou alternar aplicativos.
+- ☁️ **Remoção Completa de Mocks e Sincronização Pura no MEGA**:
+  - Eliminação total de arquivos e pastas simulados (`ArcBox_MEGA_Note.txt`, `Documentos`, `Downloads`, `Imagens` e notas do MediaFire).
+  - O aplicativo lista e exibe exclusivamente os nós e arquivos reais mantidos na sua conta remota do MEGA via `MegaApiClient`.
+  - Limpeza automática de quaisquer resquícios de arquivos mock legados armazenados no cache da aplicação.
 
 ---
 
 ## 📋 Histórico de Versões
+
+### v1.0.31
+- 🎴 **Detecção Multinível e Conexão de Cartão SD e Drives OTG**:
+  - Integração nativa com a API `android.os.storage.StorageManager.storageVolumes` (API 24+) para identificação imediata de cartões de memória externos e pendrives USB em todas as versões do Android.
+  - Medição de espaço e leitura garantida via `getExternalFilesDirs` no caminho do aplicativo no cartão SD.
+- 📊 **Cálculo Resiliente e Visualização Completa de Espaço de Armazenamento**:
+  - Correção da exibição no menu lateral (Drawer): os valores de gigabytes e porcentagem (*"X GB de Y GB usados (Z%)"*) são calculados dinamicamente.
+- 🔄 **Sincronização no Ciclo de Vida (`onResume`)**:
+  - Reconhecimento e atualização instantânea de unidades de armazenamento ao retornar de configurações ou alternar aplicativos.
 
 ### v1.0.30
 - 🎵 **Interface Fixa e Acessível no Reprodutor de Música**:

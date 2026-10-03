@@ -849,17 +849,22 @@ class FileRepository(private val context: Context) {
                             }
                         }
 
-                        if (items.isEmpty() && !isConnected) {
-                            // If provider is not connected, clean any old dummy files
+                        // Clean any old mock or dummy files from local cache
+                        try {
                             targetDir.listFiles()?.forEach { f ->
-                                if (f.name.startsWith("Pasta_") || f.name.startsWith("Arquivo_")) {
+                                if (f.name == "ArcBox_MEGA_Note.txt" ||
+                                    f.name == "Bem-vindo ao MediaFire.txt" ||
+                                    f.name.startsWith("Pasta_") || 
+                                    f.name.startsWith("Arquivo_") ||
+                                    (f.isDirectory && (f.name == "Documentos" || f.name == "Imagens" || f.name == "Downloads") && f.listFiles().isNullOrEmpty())
+                                ) {
                                     f.deleteRecursively()
                                 }
                             }
-                        }
+                        } catch (_: Exception) {}
                     }
 
-                    if (items.isEmpty()) {
+                    if (items.isEmpty() && (!directoryPath.startsWith("/cloud/") || cloudStorageService.getProvider(directoryPath.removePrefix("/cloud/").substringBefore("/"))?.isConnected != true)) {
                         val files = if (targetDir.exists() && targetDir.isDirectory) {
                             targetDir.listFiles()
                         } else null
