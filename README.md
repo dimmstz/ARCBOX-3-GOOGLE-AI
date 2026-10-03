@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.30-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.30"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.31-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.31"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,21 +18,29 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.30
+## 🚀 Novidades da Versão v1.0.31
 
-- 🎵 **Interface Fixa e Acessível no Reprodutor de Música**:
-  - Removida a transição automática para tela cheia / modo escuro imersivo durante a reprodução de áudio. Todos os controles (Play, Pause, Avançar, Voltar, Loop, Barra de Progresso, Tempo e Botão Fechar) permanecem visíveis e acessíveis sem ocultação repentina.
-- 🔔 **Widget de Controle de Mídia nas Notificações do Android**:
-  - Adicionado player interativo na barra de notificações com botões de ação: Reproduzir/Pausar, Próxima Faixa, Faixa Anterior / Retrocesso e Fechar.
-  - Suporte completo tanto para músicas quanto para vídeos em segundo plano, com estilo de mídia nativo do Android e integração fluida.
-- 🔄 **Correção Definitiva da Verificação de Atualizações via GitHub**:
-  - Resolução da falha "Nenhuma nova versão encontrada no momento" ao verificar atualizações: o repositório oficial de releases agora possui visibilidade pública, permitindo que todas as versões instaladas (incluindo v1.0.26) localizem e baixem as novas versões instantaneamente.
-  - Implementado sistema de fallback multi-token e download direto via link CDN público (`browser_download_url`), garantindo que downloads de atualizações nunca falhem por expiração de credencial.
-  - Ajuste na interface do painel de atualizações: mensagens de status quando o app já está atualizado agora exibem confirmação com ícone de sucesso em vez de indicar falha indevida.
+- 🎴 **Detecção Multinível e Conexão de Cartão SD e Drives OTG**:
+  - Integração nativa com a API `android.os.storage.StorageManager.storageVolumes` (API 24+) para identificação imediata de cartões de memória externos e pendrives USB em todas as versões do Android (10 a 16).
+  - Medição de espaço e leitura garantida via `getExternalFilesDirs` no caminho do aplicativo no cartão SD, operando com 100% de precisão mesmo antes do processamento de permissões restritivas do Android 11+.
+  - Fallbacks inteligentes com `/proc/mounts`, `/storage/` e `/mnt/media_rw/`.
+- 📊 **Cálculo Resiliente e Visualização Completa de Espaço de Armazenamento**:
+  - Correção da exibição no menu lateral (Drawer): os valores de gigabytes e porcentagem (*"X GB de Y GB usados (Z%)"*) são calculados dinamicamente e nunca mais aparecem em branco.
+  - Implementada cadeia quádrupla de medição para o armazenamento interno (`StatFs` emulado ➜ `/data` ➜ `context.filesDir` ➜ `StorageStatsManager`).
+- 🔄 **Sincronização no Ciclo de Vida (`onResume`)**:
+  - Reconhecimento e atualização instantânea de unidades de armazenamento e cartões SD inseridos ao retornar de configurações ou alternar aplicativos.
 
 ---
 
 ## 📋 Histórico de Versões
+
+### v1.0.30
+- 🎵 **Interface Fixa e Acessível no Reprodutor de Música**:
+  - Removida a transição automática para tela cheia / modo escuro imersivo durante a reprodução de áudio. Controles de reprodução permanecem visíveis e acessíveis.
+- 🔔 **Widget de Controle de Mídia nas Notificações do Android**:
+  - Adicionado player interativo na barra de notificações com botões de ação: Reproduzir/Pausar, Próxima Faixa, Faixa Anterior e Fechar.
+- 🔄 **Correção Definitiva da Verificação de Atualizações via GitHub**:
+  - Repositório com visibilidade pública, download direto por CDN sem necessidade de token para usuários finais e tratamento adequado de status na interface.
 
 ### v1.0.29
 - 🎴 **Detecção Resiliente e Conexão de Cartão SD Externo (Android 11 a 15)**:

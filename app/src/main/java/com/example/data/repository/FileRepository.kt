@@ -163,17 +163,48 @@ class FileRepository(private val context: Context) {
     // -------------------------------------------------------------
     suspend fun getStorageVolumes(forceRefresh: Boolean = false): List<StorageVolume> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        if (!forceRefresh && cachedVolumes != null && (now - lastVolumesCheckTime) < 30_000L) {
+        if (!forceRefresh && cachedVolumes != null && (now - lastVolumesCheckTime) < 4_000L) {
             return@withContext cachedVolumes ?: emptyList()
         }
         val list = mutableListOf<StorageVolume>()
 
-        // Primary Internal Storage
+        // 1. Primary Internal Storage with resilient fallback measurement
         val primaryInternal = Environment.getExternalStorageDirectory()
         val primaryPath = primaryInternal?.absolutePath ?: "/storage/emulated/0"
-        val primaryStat = try { StatFs(primaryPath) } catch (e: Exception) { null }
-        val totalInternal = primaryStat?.totalBytes ?: 0L
-        val freeInternal = primaryStat?.availableBytes ?: 0L
+        var totalInternal = 0L
+        var freeInternal = 0L
+
+        try {
+            val stat = StatFs(primaryPath)
+            totalInternal = stat.totalBytes
+            freeInternal = stat.availableBytes
+        } catch (_: Exception) {}
+
+        if (totalInternal <= 0L) {
+            try {
+                val dataStat = StatFs(Environment.getDataDirectory().absolutePath)
+                totalInternal = dataStat.totalBytes
+                freeInternal = dataStat.availableBytes
+            } catch (_: Exception) {}
+        }
+
+        if (totalInternal <= 0L) {
+            try {
+                val filesStat = StatFs(context.filesDir.absolutePath)
+                totalInternal = filesStat.totalBytes
+                freeInternal = filesStat.availableBytes
+            } catch (_: Exception) {}
+        }
+
+        if (totalInternal <= 0L && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val ssm = context.getSystemService(Context.STORAGE_STATS_SERVICE) as? android.app.usage.StorageStatsManager
+                if (ssm != null) {
+                    totalInternal = ssm.getTotalBytes(android.os.storage.StorageManager.UUID_DEFAULT)
+                    freeInternal = ssm.getFreeBytes(android.os.storage.StorageManager.UUID_DEFAULT)
+                }
+            } catch (_: Exception) {}
+        }
 
         list.add(
             StorageVolume(
@@ -186,7 +217,66 @@ class FileRepository(private val context: Context) {
             )
         )
 
-        // Detect secondary SD Cards or USB OTG mounted drives
+        // 2. Official Android StorageManager Detection (API 24+)
+        try {
+            val sm = context.getSystemService(Context.STORAGE_SERVICE) as? android.os.storage.StorageManager
+            if (sm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                val volumes = sm.storageVolumes
+                for (sv in volumes) {
+                    if (!sv.isPrimary) {
+                        val state = sv.state
+                        if (state == Environment.MEDIA_MOUNTED || state == Environment.MEDIA_MOUNTED_READ_ONLY) {
+                            val uuid = sv.uuid
+                            val isRemovable = sv.isRemovable
+                            val description = try { sv.getDescription(context) } catch (_: Exception) { null }
+                            
+                            val path = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                try { sv.directory?.absolutePath } catch (_: Exception) { null }
+                            } else {
+                                try {
+                                    val getPathMethod = sv.javaClass.getMethod("getPath")
+                                    getPathMethod.invoke(sv) as? String
+                                } catch (_: Exception) { null }
+                            } ?: (if (uuid != null) "/storage/$uuid" else null)
+
+                            if (path != null && list.none { it.path == path }) {
+                                var stat = try { StatFs(path) } catch (_: Exception) { null }
+                                var total = stat?.totalBytes ?: 0L
+                                var free = stat?.availableBytes ?: 0L
+
+                                // If direct path StatFs is 0, try app-specific external dir on this volume
+                                if (total <= 0L) {
+                                    val extDirs = context.getExternalFilesDirs(null)
+                                    val matchingDir = extDirs.firstOrNull { it != null && it.absolutePath.startsWith(path) }
+                                    if (matchingDir != null) {
+                                        val subStat = try { StatFs(matchingDir.absolutePath) } catch (_: Exception) { null }
+                                        total = subStat?.totalBytes ?: 0L
+                                        free = subStat?.availableBytes ?: 0L
+                                    }
+                                }
+
+                                val isOtg = isRemovable && (description?.contains("USB", ignoreCase = true) == true || path.contains("usb", ignoreCase = true) || path.contains("otg", ignoreCase = true))
+                                val volumeLabel = description?.takeIf { it.isNotBlank() }
+                                    ?: if (isOtg) "Armazenamento OTG" else if (uuid != null) "Cartão SD ($uuid)" else "Cartão SD"
+
+                                list.add(
+                                    StorageVolume(
+                                        id = if (uuid != null) "sdcard_$uuid" else "sdcard_${path.hashCode()}",
+                                        name = volumeLabel,
+                                        path = path,
+                                        totalBytes = total,
+                                        freeBytes = free,
+                                        typeKey = if (isOtg) "OTG" else "SDCARD"
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 3. Fallback: Detect secondary SD Cards or USB OTG via getExternalFilesDirs
         try {
             val externalDirs = context.getExternalFilesDirs(null)
             for (i in 1 until externalDirs.size) {
@@ -197,16 +287,24 @@ class FileRepository(private val context: Context) {
                     } else {
                         dir.absolutePath
                     }
-                    val rootFile = File(rootPath)
-                    if (rootFile.exists() && list.none { it.path == rootPath }) {
-                        val stat = try { StatFs(rootPath) } catch (e: Exception) { null }
+                    if (list.none { it.path == rootPath }) {
+                        // StatFs on dir.absolutePath succeeds even when rootPath has restricted direct permissions
+                        var stat = try { StatFs(dir.absolutePath) } catch (_: Exception) { null }
+                        if (stat == null || stat.totalBytes <= 0L) {
+                            stat = try { StatFs(rootPath) } catch (_: Exception) { null }
+                        }
                         val total = stat?.totalBytes ?: 0L
                         val free = stat?.availableBytes ?: 0L
-                        val volumeLabel = if (externalDirs.size > 2) "Cartão SD $i" else "Cartão SD"
+                        val volumeName = if (rootPath.startsWith("/storage/")) {
+                            val idPart = rootPath.removePrefix("/storage/")
+                            "Cartão SD ($idPart)"
+                        } else {
+                            if (externalDirs.size > 2) "Cartão SD $i" else "Cartão SD"
+                        }
                         list.add(
                             StorageVolume(
                                 id = "sdcard_$i",
-                                name = volumeLabel,
+                                name = volumeName,
                                 path = rootPath,
                                 totalBytes = total,
                                 freeBytes = free,
@@ -218,7 +316,39 @@ class FileRepository(private val context: Context) {
             }
         } catch (_: Exception) {}
 
-        // Scan /storage/ for mounted SD Cards and USB OTG drives
+        // 4. Fallback: Check /proc/mounts for external block devices
+        try {
+            val mountsFile = File("/proc/mounts")
+            if (mountsFile.exists() && mountsFile.canRead()) {
+                val lines = mountsFile.readLines()
+                for (line in lines) {
+                    val parts = line.split("\\s+".toRegex())
+                    if (parts.size >= 2) {
+                        val mountPoint = parts[1]
+                        if (mountPoint.startsWith("/storage/") && mountPoint != "/storage/emulated" && mountPoint != "/storage/self" && !mountPoint.contains("/storage/emulated/")) {
+                            if (list.none { it.path == mountPoint }) {
+                                val stat = try { StatFs(mountPoint) } catch (_: Exception) { null }
+                                val total = stat?.totalBytes ?: 0L
+                                val free = stat?.availableBytes ?: 0L
+                                val idPart = mountPoint.removePrefix("/storage/")
+                                list.add(
+                                    StorageVolume(
+                                        id = "mount_${idPart.lowercase()}",
+                                        name = "Cartão SD ($idPart)",
+                                        path = mountPoint,
+                                        totalBytes = total,
+                                        freeBytes = free,
+                                        typeKey = "SDCARD"
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 5. Fallback: Scan /storage/ directly
         try {
             val storageDir = File("/storage")
             if (storageDir.exists() && storageDir.isDirectory) {
@@ -229,7 +359,7 @@ class FileRepository(private val context: Context) {
                         if (file.isDirectory && name != "emulated" && name != "self" && name != "knox" && !name.startsWith(".")) {
                             val path = file.absolutePath
                             if (list.none { it.path == path }) {
-                                val stat = try { StatFs(path) } catch (e: Exception) { null }
+                                val stat = try { StatFs(path) } catch (_: Exception) { null }
                                 val total = stat?.totalBytes ?: 0L
                                 val free = stat?.availableBytes ?: 0L
                                 val isOtg = name.lowercase().contains("otg") || name.lowercase().contains("usb")
@@ -251,33 +381,31 @@ class FileRepository(private val context: Context) {
             }
         } catch (_: Exception) {}
 
-        // Scan typical /mnt/ mount paths for USB/OTG
+        // 6. Scan typical /mnt/ mount paths for USB/OTG
         try {
             val mntPaths = listOf("/mnt/media_rw", "/mnt/usb", "/mnt/otg")
             for (mntPath in mntPaths) {
                 val mntDir = File(mntPath)
                 if (mntDir.exists() && mntDir.isDirectory) {
-                    val files = mntDir.listFiles()
+                    val files = try { mntDir.listFiles() } catch (_: Exception) { null }
                     if (files != null) {
                         for (file in files) {
-                            if (file.isDirectory && !file.name.startsWith(".") && file.canRead()) {
+                            if (file.isDirectory && !file.name.startsWith(".")) {
                                 val path = file.absolutePath
                                 if (list.none { it.path == path }) {
                                     val stat = try { StatFs(path) } catch (e: Exception) { null }
                                     val total = stat?.totalBytes ?: 0L
                                     val free = stat?.availableBytes ?: 0L
-                                    if (total > 0L) {
-                                        list.add(
-                                            StorageVolume(
-                                                id = "mnt_${file.name.lowercase()}",
-                                                name = "USB/OTG (${file.name})",
-                                                path = path,
-                                                totalBytes = total,
-                                                freeBytes = free,
-                                                typeKey = "OTG"
-                                            )
+                                    list.add(
+                                        StorageVolume(
+                                            id = "mnt_${file.name.lowercase()}",
+                                            name = "USB/OTG (${file.name})",
+                                            path = path,
+                                            totalBytes = total,
+                                            freeBytes = free,
+                                            typeKey = "OTG"
                                         )
-                                    }
+                                    )
                                 }
                             }
                         }

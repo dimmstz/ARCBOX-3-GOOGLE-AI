@@ -2,19 +2,19 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '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')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.30'
-name = 'Arcbox File Manager v1.0.30'
-body = """## 🚀 Novidades da Versão v1.0.30
+tag = 'v1.0.31'
+name = 'Arcbox File Manager v1.0.31'
+body = """## 🚀 Novidades da Versão v1.0.31
 
-- 🎵 **Interface Fixa e Acessível no Reprodutor de Música**:
-  - Removida a transição automática para tela cheia / modo escuro imersivo durante a reprodução de áudio. Todos os controles (Play, Pause, Avançar, Voltar, Loop, Barra de Progresso, Tempo e Botão Fechar) permanecem visíveis e acessíveis sem ocultação repentina.
-- 🔔 **Widget de Controle de Mídia nas Notificações do Android**:
-  - Adicionado player interativo na barra de notificações com botões de ação: Reproduzir/Pausar, Próxima Faixa, Faixa Anterior / Retrocesso e Fechar.
-  - Suporte completo tanto para músicas quanto para vídeos em segundo plano, com estilo de mídia nativo do Android e integração fluida.
-- 🔄 **Correção Definitiva da Verificação de Atualizações via GitHub**:
-  - Resolução da falha "Nenhuma nova versão encontrada no momento" ao verificar atualizações: o repositório oficial de releases agora possui visibilidade pública, permitindo que todas as versões instaladas (incluindo v1.0.26) localizem e baixem as novas versões instantaneamente.
-  - Implementado sistema de fallback multi-token e download direto via link CDN público (`browser_download_url`), garantindo que downloads de atualizações nunca falhem por expiração de credencial.
-  - Ajuste na interface do painel de atualizações: mensagens de status quando o app já está atualizado agora exibem confirmação com ícone de sucesso em vez de indicar falha indevida.
+- 🎴 **Detecção Multinível e Conexão de Cartão SD e Drives OTG**:
+  - Integração nativa com a API `android.os.storage.StorageManager.storageVolumes` (API 24+) para identificação imediata de cartões de memória externos e pendrives USB em todas as versões do Android (10 a 16).
+  - Medição de espaço e leitura garantida via `getExternalFilesDirs` no caminho do aplicativo no cartão SD, operando com 100% de precisão mesmo antes do processamento de permissões restritivas do Android 11+.
+  - Fallbacks inteligentes com `/proc/mounts`, `/storage/` e `/mnt/media_rw/`.
+- 📊 **Cálculo Resiliente e Visualização Completa de Espaço de Armazenamento**:
+  - Correção da exibição no menu lateral (Drawer): os valores de gigabytes e porcentagem (*"X GB de Y GB usados (Z%)"*) são calculados dinamicamente e nunca mais aparecem em branco.
+  - Implementada cadeia quádrupla de medição para o armazenamento interno (`StatFs` emulado ➜ `/data` ➜ `context.filesDir` ➜ `StorageStatsManager`).
+- 🔄 **Sincronização no Ciclo de Vida (`onResume`)**:
+  - Reconhecimento e atualização instantânea de unidades de armazenamento e cartões SD inseridos ao retornar de configurações ou alternar aplicativos.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

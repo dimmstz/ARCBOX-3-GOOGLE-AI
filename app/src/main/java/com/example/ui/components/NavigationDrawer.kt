@@ -127,12 +127,33 @@ fun ArcboxNavigationDrawerContent(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        localUnits.forEach { volume ->
-                            val isSelected = selectedVolume?.id == volume.id && !isFavoritesOnly && !isRecentsOnly && currentFilterCategory == null
+                        localUnits.forEach { rawVolume ->
+                            val isSelected = selectedVolume?.id == rawVolume.id && !isFavoritesOnly && !isRecentsOnly && currentFilterCategory == null
+
+                            // Fallback calculation for volume display if totalBytes is 0
+                            val volume = if (rawVolume.totalBytes <= 0L) {
+                                var tot = 0L
+                                var free = 0L
+                                try {
+                                    val st = android.os.StatFs(rawVolume.path)
+                                    tot = st.totalBytes
+                                    free = st.availableBytes
+                                } catch (_: Exception) {}
+                                if (tot <= 0L && rawVolume.typeKey == "INTERNAL") {
+                                    try {
+                                        val st = android.os.StatFs(android.os.Environment.getDataDirectory().absolutePath)
+                                        tot = st.totalBytes
+                                        free = st.availableBytes
+                                    } catch (_: Exception) {}
+                                }
+                                rawVolume.copy(totalBytes = tot, freeBytes = free)
+                            } else {
+                                rawVolume
+                            }
 
                             Surface(
                                 onClick = {
-                                    onSelectVolume(volume)
+                                    onSelectVolume(rawVolume)
                                     onCloseDrawer()
                                 },
                                 shape = RoundedCornerShape(12.dp),

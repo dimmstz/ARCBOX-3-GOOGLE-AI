@@ -31,14 +31,33 @@ import java.util.UUID
 
 val DEFAULT_INITIAL_PATH = android.os.Environment.getExternalStorageDirectory()?.absolutePath ?: "/storage/emulated/0"
 
-val DEFAULT_INTERNAL_STORAGE_VOLUME = StorageVolume(
-    id = "internal",
-    name = "Armazenamento Interno",
-    path = DEFAULT_INITIAL_PATH,
-    totalBytes = 0L,
-    freeBytes = 0L,
-    typeKey = "INTERNAL"
-)
+fun getInitialInternalStorageVolume(): StorageVolume {
+    val path = DEFAULT_INITIAL_PATH
+    var total = 0L
+    var free = 0L
+    try {
+        val stat = android.os.StatFs(path)
+        total = stat.totalBytes
+        free = stat.availableBytes
+    } catch (_: Exception) {}
+    if (total <= 0L) {
+        try {
+            val stat = android.os.StatFs(android.os.Environment.getDataDirectory().absolutePath)
+            total = stat.totalBytes
+            free = stat.availableBytes
+        } catch (_: Exception) {}
+    }
+    return StorageVolume(
+        id = "internal",
+        name = "Armazenamento Interno",
+        path = path,
+        totalBytes = total,
+        freeBytes = free,
+        typeKey = "INTERNAL"
+    )
+}
+
+val DEFAULT_INTERNAL_STORAGE_VOLUME = getInitialInternalStorageVolume()
 
 val DEFAULT_INITIAL_TAB = TabItem(
     id = "tab_main",
@@ -280,8 +299,8 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 } catch (_: Exception) {}
             }
             
-            val volumes = repository.getStorageVolumes()
-            val primary = volumes.firstOrNull()
+            val volumes = repository.getStorageVolumes(forceRefresh = true)
+            val primary = volumes.firstOrNull { it.typeKey == "INTERNAL" } ?: volumes.firstOrNull()
             val initialPath = primary?.path ?: "/storage/emulated/0"
 
             val initialTab = TabItem(
@@ -417,7 +436,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
         fetchMutex.withLock {
             val state = uiState.value
             startDirectoryWatcher(state.currentPath)
-            val volumes = state.storageVolumes.ifEmpty { repository.getStorageVolumes() }
+            val volumes = repository.getStorageVolumes()
             val files = if (state.isFavoritesOnly) {
                 repository.getFavoriteFiles(
                     sortOption = state.sortOption,
@@ -453,10 +472,15 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                     parallelDirectoryReading = state.parallelDirectoryReading
                 )
             }
+            val currentSelected = state.selectedVolume
+            val matchedSelected = volumes.firstOrNull { it.id == currentSelected?.id || it.path == currentSelected?.path }
+                ?: currentSelected ?: volumes.firstOrNull()
+
             _uiState.update { 
                 it.copy(
                     currentFiles = files,
                     storageVolumes = volumes,
+                    selectedVolume = matchedSelected,
                     isLoading = false
                 )
             }
@@ -473,6 +497,13 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 repository.cloudStorageService.invalidateCache()
             }
+            val freshVolumes = repository.getStorageVolumes(forceRefresh = true)
+            val currentSelected = _uiState.value.selectedVolume
+            val matchedSelected = freshVolumes.firstOrNull { it.id == currentSelected?.id || it.path == currentSelected?.path }
+                ?: currentSelected ?: freshVolumes.firstOrNull()
+            _uiState.update {
+                it.copy(storageVolumes = freshVolumes, selectedVolume = matchedSelected)
+            }
             fetchFilesInternal()
         }
     }
@@ -483,6 +514,13 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
             if (currentPath.startsWith("/cloud/")) {
                 val providerSegment = currentPath.removePrefix("/cloud/").substringBefore("/").lowercase()
                 repository.cloudStorageService.invalidateCache(providerSegment)
+            }
+            val freshVolumes = repository.getStorageVolumes(forceRefresh = true)
+            val currentSelected = _uiState.value.selectedVolume
+            val matchedSelected = freshVolumes.firstOrNull { it.id == currentSelected?.id || it.path == currentSelected?.path }
+                ?: currentSelected ?: freshVolumes.firstOrNull()
+            _uiState.update {
+                it.copy(storageVolumes = freshVolumes, selectedVolume = matchedSelected)
             }
             fetchFilesInternal()
         }
