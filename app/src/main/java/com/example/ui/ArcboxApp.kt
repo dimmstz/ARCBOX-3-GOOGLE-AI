@@ -545,9 +545,44 @@ fun ArcboxApp(
                     .padding(innerPadding)
             ) {
                 if (uiState.isLoading && uiState.currentFiles.isEmpty()) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(54.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 4.5.dp
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Text(
+                                text = if (uiState.currentPath.startsWith("/cloud/mega", ignoreCase = true)) {
+                                    "Aguardando conexão e carregando pastas do MEGA..."
+                                } else if (uiState.currentPath.startsWith("/cloud/", ignoreCase = true)) {
+                                    "Aguardando conexão e carregando arquivos da nuvem..."
+                                } else {
+                                    "Carregando arquivos..."
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Aguarde um instante enquanto conectamos e sincronizamos os diretórios.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 } else {
                     ArcboxFileGridList(
                         files = uiState.currentFiles,

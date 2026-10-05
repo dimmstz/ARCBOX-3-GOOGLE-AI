@@ -568,6 +568,7 @@ class MegaApiClient(
                 put(JSONObject().apply {
                     put("a", "f")
                     put("c", 1)
+                    put("r", 1)
                 })
             }
 
@@ -1009,37 +1010,51 @@ class MegaApiClient(
         var extractedName: String? = null
 
         if (currentMasterKey != null && kStr.isNotBlank()) {
-            try {
-                // kStr format can be "user_handle:enc_key", "enc_key", or "h1:k1/h2:k2"
-                val encKeyStr = kStr.split("/").firstOrNull { it.contains(":") }?.substringAfter(":")
-                    ?: (if (kStr.contains(":")) kStr.substringAfter(":") else kStr)
+            // kStr format can be "user_handle:enc_key", "enc_key", or multiple "h1:k1/h2:k2"
+            val candidates = kStr.split("/").map { segment ->
+                if (segment.contains(":")) segment.substringAfter(":") else segment
+            }.filter { it.isNotBlank() }
 
-                val encKeyBytes = base64UrlDecode(encKeyStr)
-                if (encKeyBytes.isNotEmpty()) {
-                    val paddedLen = ((encKeyBytes.size + 15) / 16) * 16
-                    val paddedKeyBytes = if (encKeyBytes.size != paddedLen) encKeyBytes.copyOf(paddedLen) else encKeyBytes
+            for (encKeyStr in candidates) {
+                try {
+                    val encKeyBytes = base64UrlDecode(encKeyStr)
+                    if (encKeyBytes.isNotEmpty()) {
+                        val paddedLen = ((encKeyBytes.size + 15) / 16) * 16
+                        val paddedKeyBytes = if (encKeyBytes.size != paddedLen) encKeyBytes.copyOf(paddedLen) else encKeyBytes
 
-                    val cipherKey = Cipher.getInstance("AES/ECB/NoPadding")
-                    cipherKey.init(Cipher.DECRYPT_MODE, SecretKeySpec(currentMasterKey, "AES"))
-                    extractedKeyBytes = cipherKey.doFinal(paddedKeyBytes)
+                        val cipherKey = Cipher.getInstance("AES/ECB/NoPadding")
+                        cipherKey.init(Cipher.DECRYPT_MODE, SecretKeySpec(currentMasterKey, "AES"))
+                        val dec = cipherKey.doFinal(paddedKeyBytes)
+                        if (dec != null && dec.isNotEmpty()) {
+                            extractedKeyBytes = dec
+                            break
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.d("MegaApiClient", "Key candidate decryption fallback for $handle: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.d("MegaApiClient", "Key decryption fallback for $handle: ${e.message}")
             }
         }
 
         if (attrStr.isBlank()) {
-            return Pair(if (type == 1) "Pasta_$handle" else "Arquivo_$handle", extractedKeyBytes)
+            val defaultName = if (type == 1) "Pasta_$handle" else "Arquivo_$handle"
+            val result = Pair(defaultName, extractedKeyBytes)
+            decryptedAttrCache[cacheKey] = result
+            return result
         }
 
-        if (extractedKeyBytes != null) {
+        val keysToTry = mutableListOf<ByteArray>()
+        extractedKeyBytes?.let { keysToTry.add(it) }
+        currentMasterKey?.let { keysToTry.add(it) }
+
+        for (candidateKey in keysToTry) {
             try {
-                val nodeAesKey = if (extractedKeyBytes.size >= 32) {
-                    ByteArray(16) { i -> (extractedKeyBytes[i].toInt() xor extractedKeyBytes[i + 16].toInt()).toByte() }
-                } else if (extractedKeyBytes.size >= 16) {
-                    extractedKeyBytes.copyOfRange(0, 16)
+                val nodeAesKey = if (candidateKey.size >= 32) {
+                    ByteArray(16) { i -> (candidateKey[i].toInt() xor candidateKey[i + 16].toInt()).toByte() }
+                } else if (candidateKey.size >= 16) {
+                    candidateKey.copyOfRange(0, 16)
                 } else {
-                    currentMasterKey
+                    candidateKey
                 }
 
                 val encAttrBytes = base64UrlDecode(attrStr)
@@ -1055,22 +1070,31 @@ class MegaApiClient(
                     try {
                         val jsonObj = JSONObject(jsonSub)
                         val name = jsonObj.optString("n")
-                        if (name.isNotBlank()) extractedName = name
+                        if (name.isNotBlank()) {
+                            extractedName = name
+                            break
+                        }
                     } catch (_: Exception) {
                         if (jsonSub.contains("\"n\":\"")) {
                             val name = jsonSub.substringAfter("\"n\":\"").substringBefore("\"")
-                            if (name.isNotBlank()) extractedName = name
+                            if (name.isNotBlank()) {
+                                extractedName = name
+                                break
+                            }
                         }
                     }
                 } else if (decStr.startsWith("MEGA")) {
                     val json = decStr.removePrefix("MEGA").trim()
                     try {
                         val name = JSONObject(json).optString("n")
-                        if (name.isNotBlank()) extractedName = name
+                        if (name.isNotBlank()) {
+                            extractedName = name
+                            break
+                        }
                     } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
-                Log.d("MegaApiClient", "Attr decryption fallback for $handle: ${e.message}")
+                Log.d("MegaApiClient", "Attr decryption attempt failed for $handle: ${e.message}")
             }
         }
 

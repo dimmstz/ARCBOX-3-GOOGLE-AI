@@ -173,7 +173,9 @@ class MegaProvider(
             }
         }
 
-        val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mega").removePrefix("/cloud/MEGA").removePrefix("/").removeSuffix("/")
+        val cleanSub = remoteSubPath.trim()
+            .replace(Regex("(?i)^/?cloud/mega/?"), "")
+            .trim('/')
         val cloudDir = getCacheDir()
         val targetLocalDir = if (cleanSub.isBlank()) cloudDir else File(cloudDir, cleanSub)
         if (!targetLocalDir.exists()) targetLocalDir.mkdirs()
@@ -184,26 +186,38 @@ class MegaProvider(
         // 1. If we have active remote nodes from MEGA API, map them
         if (nodeCache.isNotEmpty()) {
             val targetHandle = resolveHandleFromPath(remoteSubPath)
-            if (targetHandle != null) {
-                val children = nodeCache.values.filter { it.parentHandle == targetHandle }
-                for (node in children) {
-                    val isDir = node.type == 1 || node.type == 2
-                    val relativePath = if (cleanSub.isBlank()) node.name else "$cleanSub/${node.name}"
-                    val count = if (isDir) nodeCache.values.count { it.parentHandle == node.handle } else 0
-                    results.add(
-                        RemoteCloudFile(
-                            name = node.name,
-                            path = "/cloud/mega/$relativePath".replace("//", "/"),
-                            isDirectory = isDir,
-                            size = if (isDir) 0L else node.size,
-                            lastModified = node.timestamp,
-                            mimeType = if (isDir) "resource/folder" else getMimeType(node.name),
-                            remoteId = node.handle,
-                            childCount = count
-                        )
+            val children = if (cleanSub.isBlank()) {
+                // At root level: Include children of rootHandle, plus any orphan folders/files without known parents
+                nodeCache.values.filter { node ->
+                    node.handle != rootHandle && node.type != 4 && (
+                        node.parentHandle == rootHandle ||
+                        node.parentHandle.isNullOrBlank() ||
+                        node.parentHandle !in nodeCache.keys
                     )
-                    seenNames.add(node.name.lowercase())
                 }
+            } else if (targetHandle != null) {
+                nodeCache.values.filter { it.parentHandle == targetHandle && it.handle != targetHandle }
+            } else {
+                emptyList()
+            }
+
+            for (node in children) {
+                val isDir = node.type == 1 || node.type == 2 || node.type == 3
+                val relativePath = if (cleanSub.isBlank()) node.name else "$cleanSub/${node.name}"
+                val count = if (isDir) nodeCache.values.count { it.parentHandle == node.handle } else 0
+                results.add(
+                    RemoteCloudFile(
+                        name = node.name,
+                        path = "/cloud/mega/$relativePath".replace("//", "/"),
+                        isDirectory = isDir,
+                        size = if (isDir) 0L else node.size,
+                        lastModified = node.timestamp,
+                        mimeType = if (isDir) "resource/folder" else getMimeType(node.name),
+                        remoteId = node.handle,
+                        childCount = count
+                    )
+                )
+                seenNames.add(node.name.lowercase())
             }
         }
 
@@ -382,7 +396,9 @@ class MegaProvider(
     }
 
     private fun resolveHandleFromPath(path: String): String? {
-        val clean = path.trim().removePrefix("/cloud/mega").removePrefix("/cloud/MEGA").removePrefix("/").removeSuffix("/")
+        val clean = path.trim()
+            .replace(Regex("(?i)^/?cloud/mega/?"), "")
+            .trim('/')
         if (clean.isBlank()) return rootHandle
 
         if (nodeCache.containsKey(clean)) return clean
@@ -390,17 +406,36 @@ class MegaProvider(
         val decodedClean = try { java.net.URLDecoder.decode(clean, "UTF-8") } catch (_: Exception) { clean }
         if (nodeCache.containsKey(decodedClean)) return decodedClean
 
-        val parts = decodedClean.split('/')
+        val parts = decodedClean.split('/').map { it.trim() }.filter { it.isNotBlank() }
         var currentHandle = rootHandle
+        var matchedAll = true
         for (part in parts) {
-            val match = nodeCache.values.find { it.parentHandle == currentHandle && it.name.equals(part, ignoreCase = true) }
+            val match = nodeCache.values.find {
+                (it.parentHandle == currentHandle || (currentHandle == rootHandle && (it.parentHandle.isNullOrBlank() || it.parentHandle !in nodeCache.keys))) &&
+                it.name.trim().equals(part, ignoreCase = true)
+            }
             if (match != null) {
                 currentHandle = match.handle
             } else {
-                return null
+                matchedAll = false
+                break
             }
         }
-        return currentHandle
+        if (matchedAll && currentHandle != rootHandle) return currentHandle
+
+        // Fallback: search for leaf folder directly in cache by name
+        val leafName = parts.lastOrNull() ?: clean
+        val folderMatch = nodeCache.values.find {
+            (it.type == 1 || it.type == 2 || it.type == 3) &&
+            it.name.trim().equals(leafName, ignoreCase = true)
+        }
+        if (folderMatch != null) return folderMatch.handle
+
+        // Fallback: any node matching leaf name
+        val anyMatch = nodeCache.values.find {
+            it.name.trim().equals(leafName, ignoreCase = true)
+        }
+        return anyMatch?.handle
     }
 
     private suspend fun ensureNodesLoaded() {
@@ -420,7 +455,9 @@ class MegaProvider(
         ensureNodesLoaded()
 
         // 1. Check if path is directly a handle in cache
-        val rawTrim = path.trim().removePrefix("/cloud/mega").removePrefix("/cloud/MEGA").removePrefix("/")
+        val rawTrim = path.trim()
+            .replace(Regex("(?i)^/?cloud/mega/?"), "")
+            .trim('/')
         if (nodeCache.containsKey(rawTrim)) return rawTrim
         if (nodeCache.containsKey(path.trim())) return path.trim()
 
@@ -429,7 +466,7 @@ class MegaProvider(
         if (h != null && h != rootHandle && nodeCache.containsKey(h)) return h
 
         // 3. Try by file name match
-        val clean = path.trim().removePrefix("/cloud/mega").removePrefix("/cloud/MEGA").removePrefix("/")
+        val clean = path.trim().replace(Regex("(?i)^/?cloud/mega/?"), "").trim('/')
         val name = clean.substringAfterLast('/')
         val decodedName = try { java.net.URLDecoder.decode(name, "UTF-8") } catch (_: Exception) { name }
         if (name.isNotBlank()) {

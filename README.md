@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.33-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.33"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.34-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.34"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,18 +18,26 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.33
+## 🚀 Novidades da Versão v1.0.34
 
+- ☁️ **Exibição Completa de Todas as Pastas do MEGA**:
+  - **Varredura Completa da Árvore de Diretórios**: Algoritmo aprimorado para decodificar, mapear e listar todas as pastas e subpastas no MEGA, incluindo pastas raiz, compartilhamentos e nós órfãos.
+  - **Decriptografia Multichave Aprimorada**: Suporte a chaves de múltiplos usuários em pastas compartilhadas e resolução de nomes hierárquicos sem perdas.
+- ⏳ **Círculo de Carregamento Centralizado com Espera de Conexão**:
+  - **Feedback Visual Claro**: Indicador de progresso circular (`CircularProgressIndicator`) no meio da tela acompanhado de mensagens informativas enquanto o aplicativo aguarda a conexão e sincroniza as pastas do MEGA e das demais nuvens.
+  - **Transição Fluida**: Navegação instantânea e sincronização em tempo real ao alternar entre unidades de armazenamento e navegar por subpastas.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.33
 - ☁️ **Auditoria Completa e Correção na Listagem de Nuvens**:
   - **Exibição Garantida de Arquivos e Pastas**: Resolução definitiva da visualização de arquivos e subpastas em todas as contas conectadas (MEGA, Google Drive, OneDrive, Dropbox, MediaFire e WebDAV).
   - **Mesclagem Inteligente de Arquivos Remotos e Locais**: O repositório agora combina arquivos remotos recebidos via API com pastas e arquivos criados localmente pelo usuário.
   - **Preservação Integral de Diretórios do Usuário**: Removida qualquer exclusão indevida de pastas locais, mantendo seguras todas as estruturas de diretórios criadas.
 - 🔑 **Conexão com Senha Salva / Autofill do Android**:
   - Captura automática de credenciais do gerenciador de senhas do Google no WebView e suporte a sessões web em todos os provedores.
-
----
-
-## 📋 Histórico de Versões
 
 ### v1.0.32
 - ☁️ **Remoção Completa de Mocks e Sincronização Pura no MEGA**:

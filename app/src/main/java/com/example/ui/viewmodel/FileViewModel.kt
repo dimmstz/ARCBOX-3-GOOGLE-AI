@@ -489,7 +489,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshFiles() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, currentFiles = emptyList()) }
             val currentPath = _uiState.value.currentPath
             if (currentPath.startsWith("/cloud/")) {
                 val providerSegment = currentPath.removePrefix("/cloud/").substringBefore("/").lowercase()
@@ -528,6 +528,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     fun navigateToDirectory(path: String) {
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, currentFiles = emptyList()) }
             if (path.startsWith("/cloud/")) {
                 val providerSegment = path.removePrefix("/cloud/").substringBefore("/").lowercase()
                 repository.cloudStorageService.invalidateCache(providerSegment)
@@ -585,6 +586,8 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 startDirectoryWatcher(path)
+            } else {
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
