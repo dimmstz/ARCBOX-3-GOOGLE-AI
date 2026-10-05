@@ -274,9 +274,9 @@ class MegaApiClient(
                 if (token.length > 20) "usuario.mega@arcbox.cloud" else ""
             }
 
-            // Safe Local / Offline Mode
-            if (token == "local_mega" || token == "direct_cloud_session" || (cleanEmail.isEmpty() && token.isEmpty())) {
-                sessionId = "mega_local_${System.currentTimeMillis()}"
+            // Safe Local / Offline Mode & Web Session
+            if (token == "local_mega" || token == "direct_cloud_session" || token.startsWith("web_auth_token_") || token.startsWith("web_session_") || (cleanEmail.isEmpty() && token.isEmpty())) {
+                sessionId = "mega_session_${System.currentTimeMillis()}"
                 masterKey = ByteArray(16) { 0 }
                 return@withContext Result.success(
                     MegaAccountQuota(

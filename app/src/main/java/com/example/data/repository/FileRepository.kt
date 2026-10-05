@@ -416,11 +416,11 @@ class FileRepository(private val context: Context) {
 
         // Append connected Cloud volumes
         val prefs = context.getSharedPreferences("arcbox_prefs", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("cloud_connected_mega", false)) {
+        if (prefs.getBoolean("cloud_connected_mega", false) || cloudStorageService.megaProvider.isConnected) {
             val megaDir = resolveFile("/cloud/mega")
-            megaDir.mkdirs()
-            val total = 50 * 1024 * 1024 * 1024L
-            val used = getFolderSize(megaDir)
+            if (!megaDir.exists()) megaDir.mkdirs()
+            val total = cloudStorageService.megaProvider.totalSpace.takeIf { it > 0 } ?: (50L * 1024 * 1024 * 1024L)
+            val used = cloudStorageService.megaProvider.usedSpace
             list.add(
                 StorageVolume(
                     id = "cloud_mega",
@@ -432,11 +432,11 @@ class FileRepository(private val context: Context) {
                 )
             )
         }
-        if (prefs.getBoolean("cloud_connected_drive", false)) {
+        if (prefs.getBoolean("cloud_connected_drive", false) || cloudStorageService.googleDriveProvider.isConnected) {
             val driveDir = resolveFile("/cloud/drive")
-            driveDir.mkdirs()
-            val total = 15 * 1024 * 1024 * 1024L
-            val used = getFolderSize(driveDir)
+            if (!driveDir.exists()) driveDir.mkdirs()
+            val total = cloudStorageService.googleDriveProvider.totalSpace.takeIf { it > 0 } ?: (15L * 1024 * 1024 * 1024L)
+            val used = cloudStorageService.googleDriveProvider.usedSpace
             list.add(
                 StorageVolume(
                     id = "cloud_drive",
@@ -448,11 +448,11 @@ class FileRepository(private val context: Context) {
                 )
             )
         }
-        if (prefs.getBoolean("cloud_connected_onedrive", false)) {
+        if (prefs.getBoolean("cloud_connected_onedrive", false) || cloudStorageService.oneDriveProvider.isConnected) {
             val odDir = resolveFile("/cloud/onedrive")
-            odDir.mkdirs()
-            val total = 5 * 1024 * 1024 * 1024L
-            val used = getFolderSize(odDir)
+            if (!odDir.exists()) odDir.mkdirs()
+            val total = cloudStorageService.oneDriveProvider.totalSpace.takeIf { it > 0 } ?: (5L * 1024 * 1024 * 1024L)
+            val used = cloudStorageService.oneDriveProvider.usedSpace
             list.add(
                 StorageVolume(
                     id = "cloud_onedrive",
@@ -464,11 +464,11 @@ class FileRepository(private val context: Context) {
                 )
             )
         }
-        if (prefs.getBoolean("cloud_connected_dropbox", false)) {
+        if (prefs.getBoolean("cloud_connected_dropbox", false) || cloudStorageService.dropboxProvider.isConnected) {
             val dbxDir = resolveFile("/cloud/dropbox")
-            dbxDir.mkdirs()
-            val total = 2 * 1024 * 1024 * 1024L
-            val used = getFolderSize(dbxDir)
+            if (!dbxDir.exists()) dbxDir.mkdirs()
+            val total = cloudStorageService.dropboxProvider.totalSpace.takeIf { it > 0 } ?: (2L * 1024 * 1024 * 1024L)
+            val used = cloudStorageService.dropboxProvider.usedSpace
             list.add(
                 StorageVolume(
                     id = "cloud_dropbox",
@@ -480,11 +480,11 @@ class FileRepository(private val context: Context) {
                 )
             )
         }
-        if (prefs.getBoolean("cloud_connected_mediafire", false)) {
+        if (prefs.getBoolean("cloud_connected_mediafire", false) || cloudStorageService.mediaFireProvider.isConnected) {
             val mfDir = resolveFile("/cloud/mediafire")
-            mfDir.mkdirs()
-            val total = 10 * 1024 * 1024 * 1024L
-            val used = getFolderSize(mfDir)
+            if (!mfDir.exists()) mfDir.mkdirs()
+            val total = cloudStorageService.mediaFireProvider.totalSpace.takeIf { it > 0 } ?: (10L * 1024 * 1024 * 1024L)
+            val used = cloudStorageService.mediaFireProvider.usedSpace
             list.add(
                 StorageVolume(
                     id = "cloud_mediafire",
@@ -496,11 +496,11 @@ class FileRepository(private val context: Context) {
                 )
             )
         }
-        if (prefs.getBoolean("cloud_connected_webdav", false)) {
+        if (prefs.getBoolean("cloud_connected_webdav", false) || cloudStorageService.webDavProvider.isConnected) {
             val webdavDir = resolveFile("/cloud/webdav")
-            webdavDir.mkdirs()
-            val total = 100 * 1024 * 1024 * 1024L
-            val used = getFolderSize(webdavDir)
+            if (!webdavDir.exists()) webdavDir.mkdirs()
+            val total = cloudStorageService.webDavProvider.totalSpace.takeIf { it > 0 } ?: (100L * 1024 * 1024 * 1024L)
+            val used = cloudStorageService.webDavProvider.usedSpace
             list.add(
                 StorageVolume(
                     id = "cloud_webdav",
@@ -849,63 +849,61 @@ class FileRepository(private val context: Context) {
                             }
                         }
 
-                        // Clean any old mock or dummy files from local cache
+                        // Clean old dummy files from local cache without touching user folders
                         try {
                             targetDir.listFiles()?.forEach { f ->
-                                if (f.name == "ArcBox_MEGA_Note.txt" ||
-                                    f.name == "Bem-vindo ao MediaFire.txt" ||
-                                    f.name.startsWith("Pasta_") || 
-                                    f.name.startsWith("Arquivo_") ||
-                                    (f.isDirectory && (f.name == "Documentos" || f.name == "Imagens" || f.name == "Downloads") && f.listFiles().isNullOrEmpty())
-                                ) {
-                                    f.deleteRecursively()
+                                if (f.isFile && (f.name == "ArcBox_MEGA_Note.txt" || f.name == "Bem-vindo ao MediaFire.txt")) {
+                                    f.delete()
                                 }
                             }
                         } catch (_: Exception) {}
                     }
 
-                    if (items.isEmpty() && (!directoryPath.startsWith("/cloud/") || cloudStorageService.getProvider(directoryPath.removePrefix("/cloud/").substringBefore("/"))?.isConnected != true)) {
-                        val files = if (targetDir.exists() && targetDir.isDirectory) {
-                            targetDir.listFiles()
-                        } else null
+                    val files = if (targetDir.exists() && targetDir.isDirectory) {
+                        targetDir.listFiles()
+                    } else null
 
-                        if (files != null) {
-                            val filteredFiles = if (!showHiddenFiles) files.filter { !it.name.startsWith(".") } else files.toList()
-                            val mapped = filteredFiles.map { file ->
-                                val isDir = file.isDirectory
-                                val name = file.name
-                                val ext = file.extension.lowercase()
-                                val mime = getMimeTypeFromExtension(ext)
-                                val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
-                                val size = if (isDir) 0L else file.length()
-                                val count = if (isDir) getDirectoryChildCount(file) else 0
-
-                                val itemPath = if (directoryPath.startsWith("/cloud/")) {
-                                    directoryPath.removeSuffix("/") + "/" + name
-                                } else {
-                                    file.absolutePath
-                                }
-
-                                FileItem(
-                                    id = itemPath,
-                                    name = name,
-                                    path = itemPath,
-                                    size = size,
-                                    lastModified = file.lastModified(),
-                                    isDirectory = isDir,
-                                    fileType = type,
-                                    extension = ext,
-                                    isFavorite = favoritePaths.contains(itemPath),
-                                    childCount = count,
-                                    mimeType = mime
-                                )
-                            }
-                            items.addAll(mapped)
-                        } else if (com.example.util.RootHelper.isRootAvailable() && !directoryPath.startsWith("/cloud/")) {
-                            // Fallback to superuser root listing for protected system directories
-                            val rootItems = com.example.util.RootHelper.listDirectory(directoryPath, favoritePaths)
-                            items.addAll(rootItems)
+                    if (files != null && files.isNotEmpty()) {
+                        val existingNames = items.map { it.name.lowercase() }.toSet()
+                        val filteredFiles = if (!showHiddenFiles) {
+                            files.filter { !it.name.startsWith(".") && !existingNames.contains(it.name.lowercase()) }
+                        } else {
+                            files.filter { !existingNames.contains(it.name.lowercase()) }
                         }
+                        val mapped = filteredFiles.map { file ->
+                            val isDir = file.isDirectory
+                            val name = file.name
+                            val ext = file.extension.lowercase()
+                            val mime = getMimeTypeFromExtension(ext)
+                            val type = if (isDir) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                            val size = if (isDir) 0L else file.length()
+                            val count = if (isDir) getDirectoryChildCount(file) else 0
+
+                            val itemPath = if (directoryPath.startsWith("/cloud/")) {
+                                directoryPath.removeSuffix("/") + "/" + name
+                            } else {
+                                file.absolutePath
+                            }
+
+                            FileItem(
+                                id = itemPath,
+                                name = name,
+                                path = itemPath,
+                                size = size,
+                                lastModified = file.lastModified(),
+                                isDirectory = isDir,
+                                fileType = type,
+                                extension = ext,
+                                isFavorite = favoritePaths.contains(itemPath),
+                                childCount = count,
+                                mimeType = mime
+                            )
+                        }
+                        items.addAll(mapped)
+                    } else if (items.isEmpty() && com.example.util.RootHelper.isRootAvailable() && !directoryPath.startsWith("/cloud/")) {
+                        // Fallback to superuser root listing for protected system directories
+                        val rootItems = com.example.util.RootHelper.listDirectory(directoryPath, favoritePaths)
+                        items.addAll(rootItems)
                     }
                 }
             }

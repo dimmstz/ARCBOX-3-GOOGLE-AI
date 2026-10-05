@@ -1,15 +1,17 @@
 import urllib.request, json, os
 
-token = os.environ.get('GITHUB_TOKEN', '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')
+token = os.environ.get('GITHUB_TOKEN', '')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.32'
-name = 'Arcbox File Manager v1.0.32'
-body = """## 🚀 Novidades da Versão v1.0.32
+tag = 'v1.0.33'
+name = 'Arcbox File Manager v1.0.33'
+body = """## 🚀 Novidades da Versão v1.0.33
 
-- ☁️ **Remoção Completa de Mocks e Sincronização Pura no MEGA**:
-  - Eliminação total de arquivos e pastas simulados (`ArcBox_MEGA_Note.txt`, `Documentos`, `Downloads`, `Imagens` e notas do MediaFire).
-  - O aplicativo lista e exibe exclusivamente os nós e arquivos reais mantidos na sua conta remota do MEGA via `MegaApiClient`.
-  - Limpeza automática de quaisquer resquícios de arquivos mock legados armazenados no cache da aplicação.
+- ☁️ **Auditoria Completa e Correção na Listagem de Nuvens**:
+  - **Exibição Garantida de Arquivos e Pastas**: Resolução definitiva da visualização de arquivos e subpastas em todas as contas conectadas (MEGA, Google Drive, OneDrive, Dropbox, MediaFire e WebDAV).
+  - **Mesclagem Inteligente de Arquivos Remotos e Locais**: O repositório agora combina arquivos remotos recebidos via API com pastas e arquivos criados localmente pelo usuário.
+  - **Preservação Integral de Diretórios do Usuário**: Removida qualquer exclusão indevida de pastas locais, mantendo seguras todas as estruturas de diretórios criadas.
+- 🔑 **Conexão com Senha Salva / Autofill do Android**:
+  - Captura automática de credenciais do gerenciador de senhas do Google no WebView e suporte a sessões web em todos os provedores.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

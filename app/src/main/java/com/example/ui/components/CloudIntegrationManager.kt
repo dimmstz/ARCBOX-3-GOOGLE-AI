@@ -179,6 +179,7 @@ fun CloudWebAutofillLoginDialog(
     onDismiss: () -> Unit
 ) {
     var detectedEmail by remember { mutableStateOf("") }
+    var detectedPassword by remember { mutableStateOf("") }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var isLoading by remember { mutableStateOf(true) }
 
@@ -250,20 +251,44 @@ fun CloudWebAutofillLoginDialog(
                                 cookieManager.setAcceptCookie(true)
                                 cookieManager.setAcceptThirdPartyCookies(this, true)
 
+                                addJavascriptInterface(object {
+                                    @android.webkit.JavascriptInterface
+                                    fun onCredentialsCaptured(email: String, pass: String) {
+                                        val cleanE = email.trim()
+                                        val cleanP = pass.trim()
+                                        if (cleanE.isNotBlank() && (cleanE.contains("@") || cleanE.length >= 3)) {
+                                            detectedEmail = cleanE
+                                        }
+                                        if (cleanP.isNotBlank()) {
+                                            detectedPassword = cleanP
+                                        }
+                                    }
+                                }, "ArcBoxAuth")
+
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                         isLoading = true
                                     }
                                     override fun onPageFinished(view: WebView?, url: String?) {
                                         isLoading = false
-                                        view?.evaluateJavascript(
-                                            "(function() { var el = document.querySelector('input[type=\"email\"], input[type=\"text\"][name*=\"user\"], input[name*=\"email\"], input[name*=\"login\"]'); return el ? el.value : ''; })()"
-                                        ) { value ->
-                                            val clean = value?.replace("\"", "")?.trim() ?: ""
-                                            if (clean.isNotBlank() && clean.contains("@")) {
-                                                detectedEmail = clean
-                                            }
-                                        }
+                                        val jsInjector = """
+                                            (function() {
+                                                function checkInputs() {
+                                                    var e = document.querySelector('input[type="email"], input[type="text"][name*="user"], input[name*="email"], input[name*="login"], input[id*="email"], input[id*="user"]');
+                                                    var p = document.querySelector('input[type="password"], input[name*="pass"], input[name*="pwd"], input[id*="pass"], input[id*="password"]');
+                                                    var ev = e ? e.value : '';
+                                                    var pv = p ? p.value : '';
+                                                    if (window.ArcBoxAuth) {
+                                                        window.ArcBoxAuth.onCredentialsCaptured(ev, pv);
+                                                    }
+                                                }
+                                                checkInputs();
+                                                setInterval(checkInputs, 500);
+                                                document.addEventListener('input', checkInputs);
+                                                document.addEventListener('change', checkInputs);
+                                            })();
+                                        """.trimIndent()
+                                        view?.evaluateJavascript(jsInjector, null)
                                     }
                                 }
 
@@ -314,9 +339,9 @@ fun CloudWebAutofillLoginDialog(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "Toque abaixo para vincular sua conta ao ArcBox",
+                                    text = if (detectedPassword.isNotBlank()) "Senha capturada do preenchimento" else "Toque abaixo para vincular sua conta ao ArcBox",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = if (detectedPassword.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 11.sp
                                 )
                             }
@@ -326,8 +351,29 @@ fun CloudWebAutofillLoginDialog(
 
                         Button(
                             onClick = {
-                                val emailToUse = detectedEmail.ifBlank { "${provider.id.lowercase()}@account" }
-                                onLoginSuccess(emailToUse, "web_auth_token_${System.currentTimeMillis()}")
+                                val jsExtractor = """
+                                    (function() {
+                                        var e = document.querySelector('input[type="email"], input[type="text"][name*="user"], input[name*="email"], input[name*="login"], input[id*="email"], input[id*="user"]');
+                                        var p = document.querySelector('input[type="password"], input[name*="pass"], input[name*="pwd"], input[id*="pass"], input[id*="password"]');
+                                        return (e ? e.value : '') + ':::' + (p ? p.value : '');
+                                    })();
+                                """.trimIndent()
+
+                                webViewInstance?.evaluateJavascript(jsExtractor) { rawResult ->
+                                    val clean = rawResult?.replace("\"", "")?.replace("\\", "")?.trim() ?: ""
+                                    val parts = clean.split(":::")
+                                    val extractedE = if (parts.isNotEmpty()) parts[0].trim() else ""
+                                    val extractedP = if (parts.size > 1) parts[1].trim() else ""
+
+                                    val finalEmail = extractedE.ifBlank { detectedEmail }.ifBlank { "${provider.id.lowercase()}@account" }
+                                    val finalPass = extractedP.ifBlank { detectedPassword }.ifBlank { "web_auth_token_${System.currentTimeMillis()}" }
+
+                                    onLoginSuccess(finalEmail, finalPass)
+                                } ?: run {
+                                    val finalEmail = detectedEmail.ifBlank { "${provider.id.lowercase()}@account" }
+                                    val finalPass = detectedPassword.ifBlank { "web_auth_token_${System.currentTimeMillis()}" }
+                                    onLoginSuccess(finalEmail, finalPass)
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
                             shape = RoundedCornerShape(12.dp),

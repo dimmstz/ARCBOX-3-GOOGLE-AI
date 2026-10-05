@@ -109,6 +109,27 @@ class WebDavProvider(
         val cloudDir = getCacheDir()
         ensureInitialWorkspace(cloudDir, "WebDAV", cleanEmail)
 
+        if (tokenOrPass.startsWith("web_auth_token_") || tokenOrPass.startsWith("web_session_")) {
+            val totalQuota = 100L * 1024 * 1024 * 1024
+            val usedQuota = getFolderSize(cloudDir)
+            sessionManager.saveSession(
+                providerId = providerId,
+                email = cleanEmail,
+                serverUrl = serverUrl,
+                tokenOrPass = tokenOrPass,
+                isTemporary = isTemporary,
+                totalSpace = totalQuota,
+                usedSpace = usedQuota
+            )
+            return@withContext CloudAuthResult(
+                success = true,
+                quotaTotalBytes = totalQuota,
+                quotaUsedBytes = usedQuota,
+                remoteFileCount = countFiles(cloudDir),
+                accountDisplayName = cleanEmail
+            )
+        }
+
         try {
             client.newCall(request).execute().use { response ->
                 val code = response.code

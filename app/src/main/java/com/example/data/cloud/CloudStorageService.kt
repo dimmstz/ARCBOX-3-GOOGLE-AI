@@ -82,18 +82,28 @@ class CloudStorageService private constructor(private val context: Context) {
     )
 
     fun getProvider(providerId: String): CloudStorageProvider? {
-        return providers[providerId.lowercase()]
+        val clean = providerId.lowercase().trim()
+            .removePrefix("cloud_")
+            .removePrefix("/cloud/")
+            .removePrefix("cloud/")
+            .removePrefix("/")
+        return providers[clean] ?: when (clean) {
+            "google_drive", "googledrive", "gdrive", "google" -> googleDriveProvider
+            "one_drive", "microsoft_onedrive", "microsoft" -> oneDriveProvider
+            "web_dav", "server" -> webDavProvider
+            else -> null
+        }
     }
 
     fun getProviderByPath(path: String): CloudStorageProvider? {
-        val lower = path.lowercase()
+        val lower = path.lowercase().trim()
         return when {
-            lower.startsWith("/cloud/mega") -> megaProvider
-            lower.startsWith("/cloud/drive") -> googleDriveProvider
-            lower.startsWith("/cloud/onedrive") -> oneDriveProvider
-            lower.startsWith("/cloud/dropbox") -> dropboxProvider
-            lower.startsWith("/cloud/mediafire") -> mediaFireProvider
-            lower.startsWith("/cloud/webdav") -> webDavProvider
+            lower.startsWith("/cloud/mega") || lower.startsWith("cloud/mega") -> megaProvider
+            lower.startsWith("/cloud/drive") || lower.startsWith("cloud/drive") || lower.startsWith("/cloud/google_drive") -> googleDriveProvider
+            lower.startsWith("/cloud/onedrive") || lower.startsWith("cloud/onedrive") -> oneDriveProvider
+            lower.startsWith("/cloud/dropbox") || lower.startsWith("cloud/dropbox") -> dropboxProvider
+            lower.startsWith("/cloud/mediafire") || lower.startsWith("cloud/mediafire") -> mediaFireProvider
+            lower.startsWith("/cloud/webdav") || lower.startsWith("cloud/webdav") -> webDavProvider
             else -> null
         }
     }

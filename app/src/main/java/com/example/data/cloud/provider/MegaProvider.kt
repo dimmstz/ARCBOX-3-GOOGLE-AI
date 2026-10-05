@@ -45,12 +45,8 @@ class MegaProvider(
             val cache = getCacheDir()
             if (cache.exists()) {
                 cache.listFiles()?.forEach { file ->
-                    if (file.name == "ArcBox_MEGA_Note.txt" ||
-                        file.name.startsWith("Pasta_") || 
-                        file.name.startsWith("Arquivo_") ||
-                        (file.isDirectory && (file.name == "Documentos" || file.name == "Imagens" || file.name == "Downloads") && file.listFiles().isNullOrEmpty())
-                    ) {
-                        file.deleteRecursively()
+                    if (file.isFile && (file.name == "ArcBox_MEGA_Note.txt" || file.name == "Bem-vindo ao MediaFire.txt")) {
+                        file.delete()
                     }
                 }
             }
@@ -177,32 +173,63 @@ class MegaProvider(
             }
         }
 
-        // If we have an active MEGA session, return ONLY real remote nodes from MEGA
-        if (apiClient.sessionId != null) {
+        val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mega").removePrefix("/cloud/MEGA").removePrefix("/").removeSuffix("/")
+        val cloudDir = getCacheDir()
+        val targetLocalDir = if (cleanSub.isBlank()) cloudDir else File(cloudDir, cleanSub)
+        if (!targetLocalDir.exists()) targetLocalDir.mkdirs()
+
+        val results = mutableListOf<RemoteCloudFile>()
+        val seenNames = mutableSetOf<String>()
+
+        // 1. If we have active remote nodes from MEGA API, map them
+        if (nodeCache.isNotEmpty()) {
             val targetHandle = resolveHandleFromPath(remoteSubPath)
             if (targetHandle != null) {
                 val children = nodeCache.values.filter { it.parentHandle == targetHandle }
-                val cleanSub = remoteSubPath.trim().removePrefix("/cloud/mega").removePrefix("/cloud/MEGA").removePrefix("/").removeSuffix("/")
-                return@withContext children.map { node ->
+                for (node in children) {
                     val isDir = node.type == 1 || node.type == 2
                     val relativePath = if (cleanSub.isBlank()) node.name else "$cleanSub/${node.name}"
                     val count = if (isDir) nodeCache.values.count { it.parentHandle == node.handle } else 0
-                    RemoteCloudFile(
-                        name = node.name,
-                        path = "/cloud/mega/$relativePath".replace("//", "/"),
-                        isDirectory = isDir,
-                        size = if (isDir) 0L else node.size,
-                        lastModified = node.timestamp,
-                        mimeType = if (isDir) "resource/folder" else getMimeType(node.name),
-                        remoteId = node.handle,
-                        childCount = count
+                    results.add(
+                        RemoteCloudFile(
+                            name = node.name,
+                            path = "/cloud/mega/$relativePath".replace("//", "/"),
+                            isDirectory = isDir,
+                            size = if (isDir) 0L else node.size,
+                            lastModified = node.timestamp,
+                            mimeType = if (isDir) "resource/folder" else getMimeType(node.name),
+                            remoteId = node.handle,
+                            childCount = count
+                        )
                     )
-                }.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+                    seenNames.add(node.name.lowercase())
+                }
             }
-            return@withContext emptyList()
         }
 
-        emptyList()
+        // 2. Include any local cached or user-created files/folders
+        val localFiles = targetLocalDir.listFiles()
+        if (localFiles != null) {
+            for (f in localFiles) {
+                if (!seenNames.contains(f.name.lowercase()) && !f.name.startsWith(".")) {
+                    val isDir = f.isDirectory
+                    val relativePath = if (cleanSub.isBlank()) f.name else "$cleanSub/${f.name}"
+                    results.add(
+                        RemoteCloudFile(
+                            name = f.name,
+                            path = "/cloud/mega/$relativePath".replace("//", "/"),
+                            isDirectory = isDir,
+                            size = if (isDir) getFolderSize(f) else f.length(),
+                            lastModified = f.lastModified(),
+                            mimeType = if (isDir) "resource/folder" else getMimeType(f.name),
+                            childCount = if (isDir) (f.listFiles()?.size ?: 0) else 0
+                        )
+                    )
+                }
+            }
+        }
+
+        results.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
     }
 
     override suspend fun createFolder(remoteParentPath: String, folderName: String): Boolean = withContext(Dispatchers.IO) {
