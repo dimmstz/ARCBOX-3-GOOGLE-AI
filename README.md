@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.35-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.35"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.36-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.36"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,7 +18,17 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.35
+## 🚀 Novidades da Versão v1.0.36
+
+- ✅ **Correção de Testes Unitários e CI no GitHub (`Android CI / CD`)**:
+  - **Atualização do `MediaFireProviderTest`**: Ajuste do teste de ciclo completo para validar a rejeição de tokens sintéticos/inválidos e exercitar criação de pastas, upload, download com progresso, renomeação, movimentação, exclusão e desconexão no modo offline seguro (`local_mediafire`).
+  - **Limpeza do Repositório**: Remoção dos scripts temporários residuais (`clean_conflicts.py`) para manter a árvore de código-fonte limpa e padronizada.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.35
 
 - ☁️ **Auditoria Completa e Correção de Sincronização nas Nuvens**:
   - **Criptografia de Sessão Reforçada**: Migração para `AES/GCM/NoPadding` com IV aleatório no `CloudSessionManager`, remoção de credenciais em texto claro e rejeição de tokens sintéticos.
@@ -28,10 +38,6 @@
   - Corrigida falha `IllegalStateException: closed` ao tratar desafios HTTP `402` e otimizado o solver `X-Hashcash` (redução de alocação de ~50 MB para ~1,5 MB compartilhados e limite de 30s) para evitar timeouts durante a autenticação.
 - 📦 **Identificador de Pacote Atualizado**:
   - Atualização do `applicationId` do aplicativo para `com.dimm.arcbox`.
-
----
-
-## 📋 Histórico de Versões
 
 ### v1.0.34
 - ☁️ **Exibição Completa de Todas as Pastas do MEGA**:

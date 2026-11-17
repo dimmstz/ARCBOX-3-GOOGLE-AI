@@ -31,24 +31,39 @@ class MediaFireProviderTest {
 
     @Test
     fun testMediaFireFullConnectionLifecycle() = runBlocking {
-        // 1. Authenticate / Connect
-        val authResult = mediaFireProvider.authenticate(
+        // 0. Synthetic / short invalid tokens must be rejected cleanly
+        val syntheticResult = mediaFireProvider.authenticate(
+            email = "user@mediafire.com",
+            serverUrl = "https://www.mediafire.com/api",
+            tokenOrPass = "direct_cloud_session",
+            isTemporary = false
+        )
+        assertFalse("Synthetic session token must be rejected", syntheticResult.success)
+
+        val shortTokenResult = mediaFireProvider.authenticate(
             email = "user@mediafire.com",
             serverUrl = "https://www.mediafire.com/api",
             tokenOrPass = "test_token_123",
             isTemporary = false
         )
+        assertFalse("Short non-session token must be rejected", shortTokenResult.success)
 
-        assertTrue("Authentication should succeed", authResult.success)
+        // 1. Authenticate / Connect in explicit offline workspace mode
+        val authResult = mediaFireProvider.authenticate(
+            email = "user@mediafire.com",
+            serverUrl = "local://mediafire",
+            tokenOrPass = "local_mediafire",
+            isTemporary = false
+        )
+
+        assertTrue("Authentication should succeed in local_mediafire mode", authResult.success)
         assertTrue("MediaFire should be connected", mediaFireProvider.isConnected)
         assertEquals("user@mediafire.com", mediaFireProvider.accountEmail)
 
-        // 2. List Files at Root
+        // 2. List Files at Root (must not generate mock welcome stubs)
         val rootFiles = mediaFireProvider.listFiles("/cloud/mediafire")
         assertNotNull("Root files should not be null", rootFiles)
-        assertTrue("Root should contain initial files or workspace", rootFiles.isNotEmpty())
-        val welcomeFile = rootFiles.find { it.name == "Bem-vindo ao MediaFire.txt" }
-        assertNotNull("Welcome file should exist in root", welcomeFile)
+        assertNull("Mock welcome file must not exist", rootFiles.find { it.name == "Bem-vindo ao MediaFire.txt" })
 
         // 3. Create Folder
         val created = mediaFireProvider.createFolder("/cloud/mediafire", "Documentos")
@@ -77,6 +92,7 @@ class MediaFireProviderTest {
             onProgress = { p -> progressReported = p > 0f }
         )
         assertTrue("Download should succeed", downloaded)
+        assertTrue("Download progress should be reported", progressReported)
         assertTrue("Downloaded file should exist locally", downloadDest.exists())
         assertEquals("Conteúdo de teste para upload no MediaFire", downloadDest.readText())
 

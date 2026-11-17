@@ -2,17 +2,13 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.35'
-name = 'Arcbox File Manager v1.0.35'
-body = """## 🚀 Novidades da Versão v1.0.35
+tag = 'v1.0.36'
+name = 'Arcbox File Manager v1.0.36'
+body = """## 🚀 Novidades da Versão v1.0.36
 
-- ☁️ **Auditoria Completa e Correção de Sincronização nas Nuvens**:
-  - Criptografia `AES/GCM/NoPadding` no `CloudSessionManager`, remoção de credenciais em texto claro e rejeição de tokens sintéticos.
-  - Paginação, operações remotas (upload, download, cópia, movimentação, renomeação, exclusão, cota e link público) e propagação real de erros no MEGA, Google Drive, OneDrive, Dropbox, MediaFire (API v1.5) e WebDAV.
-  - Correção do fluxo `/cloud/` no `FileRepository` e `FileViewModel` (sem stubs de 0 bytes, restauração de lixeira na nuvem e download prévio antes de compartilhamento/edição externa).
-- ⚡ **Correção do Login MEGA (`X-Hashcash` / HTTP 402)**:
-  - Corrigida exceção `IllegalStateException: closed` ao tratar desafio `402` e otimizado o solver `X-Hashcash` para evitar timeouts.
-- 📦 **Pacote Atualizado**: `com.dimm.arcbox`.
+- ✅ **Correção de Testes Unitários e CI no GitHub (`Android CI / CD`)**:
+  - Ajuste no `MediaFireProviderTest` para validar a rejeição de tokens sintéticos/inválidos e cobrir o ciclo completo no modo `local_mediafire`.
+  - Remoção de scripts temporários residuais (`clean_conflicts.py`) do repositório.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'
