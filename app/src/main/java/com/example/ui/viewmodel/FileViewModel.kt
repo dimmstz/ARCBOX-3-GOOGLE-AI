@@ -15,6 +15,7 @@ import com.example.data.models.*
 import com.example.data.repository.FileRepository
 import com.example.data.update.*
 import com.example.ui.theme.AccentColorOption
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -163,6 +164,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences("arcbox_prefs", android.content.Context.MODE_PRIVATE)
     private val updateManager = GitHubUpdateManager(application.applicationContext)
     private var downloadUpdateJob: Job? = null
+    private var hasCheckedStartupUpdate = false
     private var downloadedApkFile: File? = null
     private val _uiState = MutableStateFlow(buildInitialUiState(application, prefs))
     val uiState: StateFlow<FileUiState> = _uiState.asStateFlow()
@@ -2646,6 +2648,8 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
     // ==========================================
 
     private suspend fun checkUpdatesSilentlyOnStartup() {
+        if (hasCheckedStartupUpdate) return
+        hasCheckedStartupUpdate = true
         if (!updateManager.isAutoCheckEnabled()) return
         val lastChecked = updateManager.getLastCheckedTime()
         val now = System.currentTimeMillis()
@@ -2661,8 +2665,7 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         updateStatus = UpdateStatus.UpdateAvailable(info),
-                        updateLastCheckedTime = updatedLastCheck,
-                        snackbarMessage = "Nova versão do ArcBox disponível (v${info.targetVersionName})!"
+                        updateLastCheckedTime = updatedLastCheck
                     )
                 }
             } else {
@@ -2725,7 +2728,8 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
 
     fun downloadAndInstallUpdate(releaseInfo: UpdateReleaseInfo) {
         downloadUpdateJob?.cancel()
-        downloadUpdateJob = viewModelScope.launch {
+        val job = viewModelScope.launch {
+            val currentJob = coroutineContext[Job]
             _uiState.update {
                 it.copy(
                     updateStatus = UpdateStatus.Downloading(
@@ -2737,18 +2741,26 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            val result = updateManager.downloadApk(releaseInfo) { percent, downloaded, total ->
-                _uiState.update {
-                    it.copy(
-                        updateStatus = UpdateStatus.Downloading(
-                            releaseInfo = releaseInfo,
-                            progressPercent = percent,
-                            downloadedBytes = downloaded,
-                            totalBytes = total
-                        )
-                    )
+            val result = try {
+                updateManager.downloadApk(releaseInfo) { percent, downloaded, total ->
+                    if (isActive && downloadUpdateJob === currentJob) {
+                        _uiState.update {
+                            it.copy(
+                                updateStatus = UpdateStatus.Downloading(
+                                    releaseInfo = releaseInfo,
+                                    progressPercent = percent,
+                                    downloadedBytes = downloaded,
+                                    totalBytes = total
+                                )
+                            )
+                        }
+                    }
                 }
+            } catch (e: CancellationException) {
+                throw e
             }
+
+            if (!isActive || downloadUpdateJob !== currentJob) return@launch
 
             result.onSuccess { file ->
                 downloadedApkFile = file
@@ -2761,29 +2773,42 @@ class FileViewModel(application: Application) : AndroidViewModel(application) {
                 // Tenta acionar a instalação se a permissão já estiver concedida
                 installDownloadedUpdate()
             }.onFailure { err ->
-                _uiState.update {
-                    it.copy(
-                        updateStatus = UpdateStatus.Error(err.message ?: "Falha ao baixar atualização do ArcBox")
-                    )
+                if (isActive && downloadUpdateJob === currentJob) {
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = UpdateStatus.Error(err.message ?: "Falha ao baixar atualização do ArcBox")
+                        )
+                    }
                 }
             }
         }
+        downloadUpdateJob = job
     }
 
     fun dismissUpdateDialog() {
-        _uiState.update {
-            it.copy(updateStatus = UpdateStatus.Idle)
-        }
+        cancelAndDismissUpdate(showToast = false)
     }
 
     fun cancelUpdateDownload() {
+        cancelAndDismissUpdate(showToast = true)
+    }
+
+    fun cancelAndDismissUpdate(showToast: Boolean = false) {
+        val hadActiveDownload = downloadUpdateJob?.isActive == true ||
+            _uiState.value.updateStatus is UpdateStatus.Downloading
         downloadUpdateJob?.cancel()
         downloadUpdateJob = null
+        downloadedApkFile = null
         updateManager.cleanOldUpdates()
+        updateManager.recordLastCheckedTime()
         _uiState.update {
             it.copy(
                 updateStatus = UpdateStatus.Idle,
-                snackbarMessage = "Download da atualização cancelado."
+                snackbarMessage = if (showToast && hadActiveDownload) {
+                    "Download da atualização cancelado."
+                } else {
+                    it.snackbarMessage
+                }
             )
         }
     }

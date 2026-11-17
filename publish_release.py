@@ -2,13 +2,13 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.36'
-name = 'Arcbox File Manager v1.0.36'
-body = """## 🚀 Novidades da Versão v1.0.36
+tag = 'v1.0.37'
+name = 'Arcbox File Manager v1.0.37'
+body = """## 🚀 Novidades da Versão v1.0.37
 
-- ✅ **Correção de Testes Unitários e CI no GitHub (`Android CI / CD`)**:
-  - Ajuste no `MediaFireProviderTest` para validar a rejeição de tokens sintéticos/inválidos e cobrir o ciclo completo no modo `local_mediafire`.
-  - Remoção de scripts temporários residuais (`clean_conflicts.py`) do repositório.
+- 🔔 **Aviso de Atualização Não-Forçado e Cancelamento Completo**:
+  - A verificação automática de atualização solicita apenas uma vez no início do aplicativo, sem reabrir após dispensada.
+  - Os botões **Cancelar** e **Fechar (X)** (assim como voltar/tocar fora) cancelam imediatamente tanto o pedido de atualização quanto qualquer download em andamento, limpando arquivos temporários.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

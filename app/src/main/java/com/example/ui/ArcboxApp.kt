@@ -56,7 +56,6 @@ fun ArcboxApp(
 
     var inputName by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<com.example.data.models.FileItem?>(null) }
-    var dismissedUpdateTag by remember { mutableStateOf<String?>(null) }
     val localFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val localKeyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
@@ -94,13 +93,12 @@ fun ArcboxApp(
         is UpdateStatus.UpdateAvailable -> {
             val installedVName = UpdateConfig.getInstalledVersionName(context)
             val installedVCode = UpdateConfig.getInstalledVersionCode(context)
-            val isReallyNewer = GitHubUpdateManager.isRemoteVersionNewer(
+            GitHubUpdateManager.isRemoteVersionNewer(
                 installedVersionCode = installedVCode,
                 installedVersionName = installedVName,
                 remoteExplicitCode = GitHubUpdateManager.extractExplicitVersionCode(s.releaseInfo.tagName, s.releaseInfo.releaseName),
                 remoteVersionName = s.releaseInfo.targetVersionName
             )
-            isReallyNewer && dismissedUpdateTag != s.releaseInfo.tagName
         }
         is UpdateStatus.Downloading -> true
         is UpdateStatus.DownloadCompleted -> true
@@ -160,10 +158,8 @@ fun ArcboxApp(
     BackHandler(enabled = hasActiveModalOrOverlay || canGoBackInFiles) {
         when {
             isUpdateModalActive -> {
-                if (uiState.updateStatus is UpdateStatus.UpdateAvailable) {
-                    dismissedUpdateTag = (uiState.updateStatus as UpdateStatus.UpdateAvailable).releaseInfo.tagName
-                }
-                viewModel.dismissUpdateDialog()
+                val wasDownloading = uiState.updateStatus is UpdateStatus.Downloading
+                viewModel.cancelAndDismissUpdate(showToast = wasDownloading)
             }
             drawerState.isOpen -> scope.launch { drawerState.close() }
             showNewFolderDialog -> showNewFolderDialog = false
@@ -1312,6 +1308,7 @@ fun ArcboxApp(
 
         // Modal de Atualização de Versão (GitHub Releases)
         if (isUpdateModalActive) {
+            val wasDownloading = uiState.updateStatus is UpdateStatus.Downloading
             UpdateNotificationModal(
                 updateStatus = uiState.updateStatus,
                 onDownloadAndInstall = { releaseInfo ->
@@ -1320,14 +1317,8 @@ fun ArcboxApp(
                 onInstallDownloadedApk = {
                     viewModel.installDownloadedUpdate()
                 },
-                onCancelDownload = {
-                    viewModel.cancelUpdateDownload()
-                },
-                onDismiss = {
-                    if (uiState.updateStatus is UpdateStatus.UpdateAvailable) {
-                        dismissedUpdateTag = (uiState.updateStatus as UpdateStatus.UpdateAvailable).releaseInfo.tagName
-                    }
-                    viewModel.dismissUpdateDialog()
+                onCancelAndDismiss = {
+                    viewModel.cancelAndDismissUpdate(showToast = wasDownloading)
                 }
             )
         }

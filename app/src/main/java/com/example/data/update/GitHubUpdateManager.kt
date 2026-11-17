@@ -6,7 +6,11 @@ import android.net.NetworkCapabilities
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -15,6 +19,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.coroutineContext
 
 class GitHubUpdateManager(private val context: Context) {
 
@@ -340,7 +345,7 @@ class GitHubUpdateManager(private val context: Context) {
             // Version comparison
             val remoteVersionName = cleanVersionName(tagName)
             val explicitRemoteCode = extractExplicitVersionCode(tagName, releaseTitle)
-            val isMandatory = body.contains("[MANDATORY]", ignoreCase = true) || body.contains("OBRIGATÓRIA", ignoreCase = true)
+            val isMandatory = false
 
             val isNewer = isRemoteVersionNewer(
                 installedVersionCode = installedVersionCode,
@@ -394,7 +399,16 @@ class GitHubUpdateManager(private val context: Context) {
         onProgress: (percent: Int, downloaded: Long, total: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         var tempFile: File? = null
+        var activeCall: Call? = null
+        val job = coroutineContext[Job]
+        val cancelHandle = job?.invokeOnCompletion {
+            try {
+                activeCall?.cancel()
+            } catch (_: Exception) {}
+        }
         try {
+            coroutineContext.ensureActive()
+
             // Garantir diretório de atualizações limpo
             val updateDir = File(context.cacheDir, UpdateConfig.UPDATE_DIR_NAME).apply {
                 if (!exists()) mkdirs()
@@ -424,16 +438,19 @@ class GitHubUpdateManager(private val context: Context) {
 
             val request = requestBuilder.build()
 
-            var response = httpClient.newCall(request).execute()
+            activeCall = httpClient.newCall(request)
+            var response = activeCall.execute()
             if (!response.isSuccessful && isPrivateAsset) {
                 // Se a API de asset privada falhar, tenta o link direto de download público
                 response.close()
+                coroutineContext.ensureActive()
                 Log.d(TAG, "Tentando download público direto via browser download URL: ${releaseInfo.apkDownloadUrl}")
                 val fallbackRequest = Request.Builder()
                     .url(releaseInfo.apkDownloadUrl)
                     .header("User-Agent", "Arcbox-Android/${UpdateConfig.CURRENT_VERSION_NAME}")
                     .build()
-                response = httpClient.newCall(fallbackRequest).execute()
+                activeCall = httpClient.newCall(fallbackRequest)
+                response = activeCall.execute()
             }
 
             if (!response.isSuccessful) {
@@ -461,6 +478,7 @@ class GitHubUpdateManager(private val context: Context) {
                 var lastReportedPercent = -1
 
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    coroutineContext.ensureActive()
                     outputStream.write(buffer, 0, bytesRead)
                     downloadedBytes += bytesRead
 
@@ -481,6 +499,8 @@ class GitHubUpdateManager(private val context: Context) {
                 try { inputStream?.close() } catch (_: Exception) {}
                 response.close()
             }
+
+            coroutineContext.ensureActive()
 
             // Validação de Integridade SHA-256
             if (!releaseInfo.expectedSha256.isNullOrBlank()) {
@@ -515,9 +535,16 @@ class GitHubUpdateManager(private val context: Context) {
             try { tempFile?.delete() } catch (_: Exception) {}
             throw e
         } catch (e: Exception) {
+            if (!coroutineContext.isActive || activeCall?.isCanceled() == true) {
+                Log.d(TAG, "Download abortado por cancelamento.")
+                try { tempFile?.delete() } catch (_: Exception) {}
+                throw CancellationException("Download cancelado pelo usuário", e)
+            }
             Log.e(TAG, "Erro durante download do APK", e)
             try { tempFile?.delete() } catch (_: Exception) {}
             Result.failure(e)
+        } finally {
+            cancelHandle?.dispose()
         }
     }
 

@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,8 +31,7 @@ fun UpdateNotificationModal(
     updateStatus: UpdateStatus,
     onDownloadAndInstall: (UpdateReleaseInfo) -> Unit,
     onInstallDownloadedApk: () -> Unit,
-    onCancelDownload: () -> Unit,
-    onDismiss: () -> Unit
+    onCancelAndDismiss: () -> Unit
 ) {
     val releaseInfo = when (updateStatus) {
         is UpdateStatus.UpdateAvailable -> updateStatus.releaseInfo
@@ -42,11 +42,10 @@ fun UpdateNotificationModal(
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val installedVersion = UpdateConfig.getInstalledVersionName(context)
-    val isMandatory = releaseInfo.isMandatory
     var showFullChangelog by remember { mutableStateOf(false) }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onCancelAndDismiss,
         properties = DialogProperties(
             dismissOnBackPress = true,
             dismissOnClickOutside = true,
@@ -66,6 +65,7 @@ fun UpdateNotificationModal(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp)
             ) {
                 // Header Icon, Title & Close Button
@@ -75,17 +75,15 @@ fun UpdateNotificationModal(
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = if (isMandatory) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                        color = MaterialTheme.colorScheme.primaryContainer,
                         modifier = Modifier.size(48.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = if (updateStatus is UpdateStatus.DownloadCompleted) Icons.Default.CheckCircle
-                                else if (isMandatory) Icons.Default.Warning
                                 else Icons.Default.SystemUpdate,
                                 contentDescription = null,
                                 tint = if (updateStatus is UpdateStatus.DownloadCompleted) Color(0xFF10B981)
-                                else if (isMandatory) MaterialTheme.colorScheme.error
                                 else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(26.dp)
                             )
@@ -96,8 +94,7 @@ fun UpdateNotificationModal(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isMandatory) "Atualização Obrigatória"
-                            else if (updateStatus is UpdateStatus.DownloadCompleted) "Pronto para Instalar"
+                            text = if (updateStatus is UpdateStatus.DownloadCompleted) "Pronto para Instalar"
                             else "Nova Versão Disponível",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
@@ -111,12 +108,14 @@ fun UpdateNotificationModal(
                     }
 
                     IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(36.dp)
+                        onClick = onCancelAndDismiss,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("update_modal_close_button")
                     ) {
                         Icon(
                             Icons.Default.Close,
-                            contentDescription = "Fechar modal",
+                            contentDescription = "Fechar",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -193,7 +192,7 @@ fun UpdateNotificationModal(
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .fillMaxWidth()
                             .padding(12.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
@@ -275,8 +274,11 @@ fun UpdateNotificationModal(
                             )
 
                             TextButton(
-                                onClick = onCancelDownload,
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                onClick = onCancelAndDismiss,
+                                modifier = Modifier
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .testTag("update_modal_cancel_download_button"),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text("Cancelar", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                             }
@@ -298,7 +300,8 @@ fun UpdateNotificationModal(
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .defaultMinSize(minHeight = 48.dp),
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .testTag("update_modal_install_button"),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
                             ) {
                                 Icon(Icons.Default.InstallMobile, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -307,13 +310,14 @@ fun UpdateNotificationModal(
                             }
 
                             OutlinedButton(
-                                onClick = onDismiss,
+                                onClick = onCancelAndDismiss,
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .defaultMinSize(minHeight = 44.dp)
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .testTag("update_modal_cancel_completed_button")
                             ) {
-                                Text("Lembrar Mais Tarde / Voltar")
+                                Text("Cancelar")
                             }
                         }
                     }
@@ -326,35 +330,35 @@ fun UpdateNotificationModal(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (!isMandatory) {
-                                OutlinedButton(
-                                    onClick = onDismiss,
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier
-                                        .weight(0.75f)
-                                        .defaultMinSize(minHeight = 48.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp)
-                                ) {
-                                    Text(
-                                        text = "Depois",
-                                        maxLines = 1,
-                                        style = MaterialTheme.typography.labelLarge
-                                    )
-                                }
+                            OutlinedButton(
+                                onClick = onCancelAndDismiss,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(0.85f)
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .testTag("update_modal_cancel_button"),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp)
+                            ) {
+                                Text(
+                                    text = "Cancelar",
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
                             }
 
                             Button(
                                 onClick = { onDownloadAndInstall(releaseInfo) },
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
-                                    .weight(if (isMandatory) 1f else 1.6f)
-                                    .defaultMinSize(minHeight = 48.dp),
+                                    .weight(1.5f)
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .testTag("update_modal_download_button"),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
                             ) {
                                 Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isMandatory) "Atualizar Agora" else "Baixar Atualização",
+                                    text = "Baixar Atualização",
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                     softWrap = false,
