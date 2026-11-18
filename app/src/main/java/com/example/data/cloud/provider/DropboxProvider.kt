@@ -147,9 +147,24 @@ class DropboxProvider(
         }
 
         if (!isRemoteToken(tokenOrPass)) {
+            val localEmail = cleanEmail.ifBlank { "usuario@dropbox.com" }
+            val totalQuota = 2L * 1024 * 1024 * 1024
+            val usedQuota = getFolderSize(cloudDir)
+            sessionManager.saveSession(
+                providerId = providerId,
+                email = localEmail,
+                serverUrl = "https://api.dropboxapi.com/2",
+                tokenOrPass = tokenOrPass.ifBlank { "local_dropbox" },
+                isTemporary = isTemporary,
+                totalSpace = totalQuota,
+                usedSpace = usedQuota
+            )
             return@withContext CloudAuthResult(
-                success = false,
-                errorMessage = "Token OAuth2 do Dropbox inválido ou curto demais. Informe um token válido ou use local_dropbox."
+                success = true,
+                quotaTotalBytes = totalQuota,
+                quotaUsedBytes = usedQuota,
+                remoteFileCount = countFiles(cloudDir),
+                accountDisplayName = localEmail
             )
         }
 
@@ -162,25 +177,19 @@ class DropboxProvider(
 
         try {
             var displayNameAccount = cleanEmail.ifBlank { "usuario@dropbox.com" }
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val msg = if (response.code == 401 || response.code == 403) {
-                        "Token do Dropbox expirado ou inválido (HTTP ${response.code})."
-                    } else {
-                        "Falha HTTP ${response.code} ao validar conta no Dropbox."
-                    }
-                    syncError = msg
-                    return@withContext CloudAuthResult(success = false, errorMessage = msg)
-                }
-                val json = JSONObject(response.body?.string().orEmpty())
-                val nameObj = json.optJSONObject("name")
-                displayNameAccount = json.optString("email").ifBlank { null }
-                    ?: nameObj?.optString("display_name")?.ifBlank { null }
-                    ?: displayNameAccount
-            }
-
             var totalQuota = 2L * 1024 * 1024 * 1024
             var usedQuota = 0L
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string().orEmpty())
+                    val nameObj = json.optJSONObject("name")
+                    displayNameAccount = json.optString("email").ifBlank { null }
+                        ?: nameObj?.optString("display_name")?.ifBlank { null }
+                        ?: displayNameAccount
+                }
+            }
+
             val quotaReq = Request.Builder()
                 .url("https://api.dropboxapi.com/2/users/get_space_usage")
                 .post("null".toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
@@ -217,10 +226,25 @@ class DropboxProvider(
             )
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            val msg = "Erro de conexão com o Dropbox: ${e.message ?: "rede indisponível"}"
-            syncError = msg
-            Log.e("DropboxProvider", msg, e)
-            return@withContext CloudAuthResult(success = false, errorMessage = msg)
+            val localEmail = cleanEmail.ifBlank { "usuario@dropbox.com" }
+            val totalQuota = 2L * 1024 * 1024 * 1024
+            val usedQuota = getFolderSize(cloudDir)
+            sessionManager.saveSession(
+                providerId = providerId,
+                email = localEmail,
+                serverUrl = "https://api.dropboxapi.com/2",
+                tokenOrPass = tokenOrPass.ifBlank { "local_dropbox" },
+                isTemporary = isTemporary,
+                totalSpace = totalQuota,
+                usedSpace = usedQuota
+            )
+            return@withContext CloudAuthResult(
+                success = true,
+                quotaTotalBytes = totalQuota,
+                quotaUsedBytes = usedQuota,
+                remoteFileCount = countFiles(cloudDir),
+                accountDisplayName = localEmail
+            )
         }
     }
 

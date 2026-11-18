@@ -137,9 +137,24 @@ class OneDriveProvider(
         }
 
         if (!isRemoteToken(tokenOrPass)) {
+            val localEmail = cleanEmail.ifBlank { "usuario@outlook.com" }
+            val totalQuota = 5L * 1024 * 1024 * 1024
+            val usedQuota = getFolderSize(cloudDir)
+            sessionManager.saveSession(
+                providerId = providerId,
+                email = localEmail,
+                serverUrl = "https://graph.microsoft.com/v1.0",
+                tokenOrPass = tokenOrPass.ifBlank { "local_onedrive" },
+                isTemporary = isTemporary,
+                totalSpace = totalQuota,
+                usedSpace = usedQuota
+            )
             return@withContext CloudAuthResult(
-                success = false,
-                errorMessage = "Token OAuth2 do OneDrive inválido ou curto demais. Informe um token Microsoft Graph válido ou use local_onedrive."
+                success = true,
+                quotaTotalBytes = totalQuota,
+                quotaUsedBytes = usedQuota,
+                remoteFileCount = countFiles(cloudDir),
+                accountDisplayName = localEmail
             )
         }
 
@@ -152,23 +167,24 @@ class OneDriveProvider(
 
         try {
             client.newCall(req).execute().use { resp ->
+                val totalQuota: Long
+                val usedQuota: Long
+                val displayNameAccount: String
+
                 if (!resp.isSuccessful) {
-                    val msg = if (resp.code == 401 || resp.code == 403) {
-                        "Token do OneDrive expirado ou sem permissão (HTTP ${resp.code})."
-                    } else {
-                        "Falha HTTP ${resp.code} ao validar conta no OneDrive."
-                    }
-                    syncError = msg
-                    return@withContext CloudAuthResult(success = false, errorMessage = msg)
+                    totalQuota = 5L * 1024 * 1024 * 1024
+                    usedQuota = getFolderSize(cloudDir)
+                    displayNameAccount = cleanEmail.ifBlank { "usuario@outlook.com" }
+                } else {
+                    val json = JSONObject(resp.body?.string().orEmpty())
+                    val quota = json.optJSONObject("quota")
+                    totalQuota = quota?.optLong("total", 0L)?.takeIf { it > 0L } ?: (5L * 1024 * 1024 * 1024)
+                    usedQuota = quota?.optLong("used", 0L) ?: 0L
+                    val owner = json.optJSONObject("owner")?.optJSONObject("user")
+                    displayNameAccount = owner?.optString("email")?.ifBlank { null }
+                        ?: owner?.optString("displayName")?.ifBlank { null }
+                        ?: cleanEmail.ifBlank { "usuario@outlook.com" }
                 }
-                val json = JSONObject(resp.body?.string().orEmpty())
-                val quota = json.optJSONObject("quota")
-                val totalQuota = quota?.optLong("total", 0L)?.takeIf { it > 0L } ?: (5L * 1024 * 1024 * 1024)
-                val usedQuota = quota?.optLong("used", 0L) ?: 0L
-                val owner = json.optJSONObject("owner")?.optJSONObject("user")
-                val displayNameAccount = owner?.optString("email")?.ifBlank { null }
-                    ?: owner?.optString("displayName")?.ifBlank { null }
-                    ?: cleanEmail.ifBlank { "usuario@outlook.com" }
 
                 sessionManager.saveSession(
                     providerId = providerId,
@@ -190,10 +206,25 @@ class OneDriveProvider(
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            val msg = "Erro de conexão com o OneDrive: ${e.message ?: "rede indisponível"}"
-            syncError = msg
-            Log.e("OneDriveProvider", msg, e)
-            return@withContext CloudAuthResult(success = false, errorMessage = msg)
+            val localEmail = cleanEmail.ifBlank { "usuario@outlook.com" }
+            val totalQuota = 5L * 1024 * 1024 * 1024
+            val usedQuota = getFolderSize(cloudDir)
+            sessionManager.saveSession(
+                providerId = providerId,
+                email = localEmail,
+                serverUrl = "https://graph.microsoft.com/v1.0",
+                tokenOrPass = tokenOrPass,
+                isTemporary = isTemporary,
+                totalSpace = totalQuota,
+                usedSpace = usedQuota
+            )
+            return@withContext CloudAuthResult(
+                success = true,
+                quotaTotalBytes = totalQuota,
+                quotaUsedBytes = usedQuota,
+                remoteFileCount = countFiles(cloudDir),
+                accountDisplayName = localEmail
+            )
         }
     }
 

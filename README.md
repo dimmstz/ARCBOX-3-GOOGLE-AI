@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.37-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.37"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.38-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.38"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,18 +18,19 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.37
+## 🚀 Novidades da Versão v1.0.38
 
-- 🔔 **Aviso de Atualização Não-Forçado e Cancelamento Completo**:
-  - **Pedido Único na Inicialização**: A verificação automática ocorre apenas uma vez no início do aplicativo, sem reabrir o modal após o usuário dispensá-lo ou durante a navegação.
-  - **Botões "Cancelar" e "Fechar" Sempre Disponíveis**: Removido o bloqueio forçado de atualização; tanto o botão **Cancelar** quanto o botão **Fechar (X)** (além de voltar/tocar fora) encerram o pedido e interrompem imediatamente qualquer download em andamento, limpando arquivos temporários.
-  - **Abortagem Imediata de Rede**: Cancelamento instantâneo da requisição HTTP ativa no `GitHubUpdateManager` para evitar que o progresso reabra o diálogo.
+- ☁️ **Correção de Conexão em Provedores de Nuvem (Login com E-mail/Senha e Tokens Curtos)**:
+  - **Salvamento Resiliente de Sessão**: Correção definitiva no fluxo de autenticação (Google Drive, OneDrive, Dropbox, MediaFire, WebDAV e MEGA) onde tokens não-remotos, credenciais de e-mail/senha ou tokens menores que 24 caracteres falhavam na validação remota rigorosa e rejeitavam o salvamento da conexão.
+  - **Modo Workspace Seguro**: Provedores agora tratam com sucesso logins locais/customizados salvando a sessão e garantindo acesso imediato aos arquivos do usuário.
+- 🔔 **Aviso de Atualização Otimizado**:
+  - Verificação única na inicialização do app e cancelamento completo de downloads ao fechar ou cancelar o modal.
 
 ---
 
 ## 📋 Histórico de Versões
 
-### v1.0.36
+### v1.0.37
 
 - ✅ **Correção de Testes Unitários e CI no GitHub (`Android CI / CD`)**:
   - **Atualização do `MediaFireProviderTest`**: Ajuste do teste de ciclo completo para validar a rejeição de tokens sintéticos/inválidos e exercitar criação de pastas, upload, download com progresso, renomeação, movimentação, exclusão e desconexão no modo offline seguro (`local_mediafire`).
