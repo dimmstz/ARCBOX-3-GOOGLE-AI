@@ -57,8 +57,8 @@ jobs:
         run: |
           gradle assembleRelease assembleDebug --no-daemon --stacktrace
           TAG_NAME="${{ github.ref_name }}"
-          if [ -n "$TAG_NAME" ] && [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            cp app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/Arcbox-${TAG_NAME}-release.apk"
+          if [[ "${{ github.ref }}" == refs/tags/* ]] && [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/Arcbox-${TAG_NAME}-release.apk"
           fi
 
       - name: Upload APK Artifacts

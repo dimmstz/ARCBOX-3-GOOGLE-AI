@@ -83,7 +83,6 @@ if upload_url:
 
     if os.path.exists(release_apk):
         upload_asset(upload_url, release_apk, f'Arcbox-{tag}-release.apk')
-        upload_asset(upload_url, release_apk, 'app-release.apk')
     else:
         print(f'Release APK not found at {release_apk}')
 
