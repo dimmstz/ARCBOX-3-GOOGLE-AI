@@ -1,33 +1,34 @@
 package com.example.ui.components
 
-import android.annotation.SuppressLint
+import android.graphics.Rect as AndroidRect
 import android.net.Uri
-import android.webkit.CookieManager
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Build
+import android.view.autofill.AutofillManager
+import android.view.autofill.AutofillValue
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.AutofillNode
 import androidx.compose.ui.autofill.AutofillType
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInWindow
@@ -35,22 +36,26 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalAutofill
 import androidx.compose.ui.platform.LocalAutofillTree
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.cloud.CloudStorageService
 import com.example.data.cloud.SafCloudDrive
 import com.example.data.models.StorageVolume
 import com.example.data.models.formatFileSize
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 enum class CloudProvider(
     val id: String,
@@ -171,270 +176,7 @@ enum class CloudProvider(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CloudWebAutofillLoginDialog(
-    provider: CloudProvider,
-    onLoginSuccess: (email: String, tokenOrPassword: String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var detectedEmail by remember { mutableStateOf("") }
-    var detectedPassword by remember { mutableStateOf("") }
-    var detectedAccessToken by remember { mutableStateOf("") }
-    var autofillError by remember { mutableStateOf<String?>(null) }
-    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    fun extractTokenFromUrl(rawUrl: String?): String? {
-        if (rawUrl.isNullOrBlank()) return null
-        val fragment = rawUrl.substringAfter('#', "")
-        val query = rawUrl.substringAfter('?', "").substringBefore('#')
-        for (part in listOf(fragment, query)) {
-            if (part.isNotBlank()) {
-                val pairs = part.split('&')
-                for (pair in pairs) {
-                    val key = pair.substringBefore('=')
-                    val value = pair.substringAfter('=', "")
-                    if ((key == "access_token" || key == "token") && value.isNotBlank()) {
-                        return Uri.decode(value)
-                    }
-                }
-            }
-        }
-        return null
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(
-                                text = "Login ${provider.displayName}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Usar a senha salva do Google / Android",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 11.sp
-                            )
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Default.Close, contentDescription = "Fechar")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { webViewInstance?.reload() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Recarregar")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-                )
-
-                if (isLoading) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = provider.primaryColor
-                    )
-                }
-
-                Box(modifier = Modifier.weight(1f)) {
-                    AndroidView(
-                        factory = { context ->
-                            WebView(context).apply {
-                                layoutParams = android.view.ViewGroup.LayoutParams(
-                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                                )
-                                @SuppressLint("SetJavaScriptEnabled")
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                settings.databaseEnabled = true
-                                settings.saveFormData = true
-                                settings.useWideViewPort = true
-                                settings.loadWithOverviewMode = true
-
-                                val cookieManager = CookieManager.getInstance()
-                                cookieManager.setAcceptCookie(true)
-                                cookieManager.setAcceptThirdPartyCookies(this, true)
-
-                                addJavascriptInterface(object {
-                                    @android.webkit.JavascriptInterface
-                                    fun onCredentialsCaptured(email: String, pass: String) {
-                                        val cleanE = email.trim()
-                                        val cleanP = pass.trim()
-                                        if (cleanE.isNotBlank() && (cleanE.contains("@") || cleanE.length >= 3)) {
-                                            detectedEmail = cleanE
-                                        }
-                                        if (cleanP.isNotBlank()) {
-                                            detectedPassword = cleanP
-                                        }
-                                    }
-                                }, "ArcBoxAuth")
-
-                                webViewClient = object : WebViewClient() {
-                                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                                        isLoading = true
-                                        extractTokenFromUrl(url)?.let { detectedAccessToken = it }
-                                    }
-                                    override fun onPageFinished(view: WebView?, url: String?) {
-                                        isLoading = false
-                                        extractTokenFromUrl(url)?.let { detectedAccessToken = it }
-                                        val jsInjector = """
-                                            (function() {
-                                                function checkInputs() {
-                                                    var e = document.querySelector('input[type="email"], input[type="text"][name*="user"], input[name*="email"], input[name*="login"], input[id*="email"], input[id*="user"]');
-                                                    var p = document.querySelector('input[type="password"], input[name*="pass"], input[name*="pwd"], input[id*="pass"], input[id*="password"]');
-                                                    var ev = e ? e.value : '';
-                                                    var pv = p ? p.value : '';
-                                                    if (window.ArcBoxAuth) {
-                                                        window.ArcBoxAuth.onCredentialsCaptured(ev, pv);
-                                                    }
-                                                }
-                                                checkInputs();
-                                                setInterval(checkInputs, 500);
-                                                document.addEventListener('input', checkInputs);
-                                                document.addEventListener('change', checkInputs);
-                                            })();
-                                        """.trimIndent()
-                                        view?.evaluateJavascript(jsInjector, null)
-                                    }
-                                }
-
-                                webViewInstance = this
-                                loadUrl(provider.webLoginUrl)
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 6.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = provider.primaryColor.copy(alpha = 0.12f),
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.VpnKey,
-                                        contentDescription = null,
-                                        tint = provider.primaryColor,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (detectedEmail.isNotBlank()) "Conta: $detectedEmail" else "Após preencher ou fazer login:",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = if (detectedPassword.isNotBlank()) "Senha capturada do preenchimento" else "Toque abaixo para vincular sua conta ao ArcBox",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (detectedPassword.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-
-                        if (autofillError != null) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.errorContainer,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 10.dp)
-                            ) {
-                                Text(
-                                    text = autofillError ?: "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    modifier = Modifier.padding(10.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Button(
-                            onClick = {
-                                autofillError = null
-                                val jsExtractor = """
-                                    (function() {
-                                        var e = document.querySelector('input[type="email"], input[type="text"][name*="user"], input[name*="email"], input[name*="login"], input[id*="email"], input[id*="user"]');
-                                        var p = document.querySelector('input[type="password"], input[name*="pass"], input[name*="pwd"], input[id*="pass"], input[id*="password"]');
-                                        return (e ? e.value : '') + ':::' + (p ? p.value : '');
-                                    })();
-                                """.trimIndent()
-
-                                fun handleCaptured(extractedE: String, extractedP: String) {
-                                    val urlToken = extractTokenFromUrl(webViewInstance?.url) ?: detectedAccessToken
-                                    val finalEmail = extractedE.ifBlank { detectedEmail }.ifBlank { "${provider.id.lowercase()}@account" }
-                                    val finalCredential = extractedP.ifBlank { detectedPassword }.ifBlank { urlToken }
-                                    if (finalCredential.isBlank()) {
-                                        autofillError = "Nenhuma senha ou token foi detectado no navegador. Digite sua senha no formulário acima ou use E-mail e Senha / Chave na tela anterior."
-                                    } else {
-                                        onLoginSuccess(finalEmail, finalCredential)
-                                    }
-                                }
-
-                                webViewInstance?.evaluateJavascript(jsExtractor) { rawResult ->
-                                    val clean = rawResult?.replace("\"", "")?.replace("\\", "")?.trim() ?: ""
-                                    val parts = clean.split(":::")
-                                    val extractedE = if (parts.isNotEmpty()) parts[0].trim() else ""
-                                    val extractedP = if (parts.size > 1) parts[1].trim() else ""
-                                    handleCaptured(extractedE, extractedP)
-                                } ?: handleCaptured("", "")
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Concluir e Conectar ao ArcBox", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun OAuthCloudConnectModal(
     provider: CloudProvider,
@@ -442,10 +184,10 @@ fun OAuthCloudConnectModal(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val hostView = LocalView.current
     val cloudService = remember(context) { CloudStorageService.getInstance(context) }
 
-    var showWebAutofillLogin by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Email/Password, 1 = Token/Key/Passkey
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = E-mail e Senha, 1 = Chave / Token
     var serverUrlInput by remember { mutableStateOf(provider.defaultServerUrl) }
     var emailInput by remember { mutableStateOf(provider.defaultEmail) }
     var passwordInput by remember { mutableStateOf("") }
@@ -456,45 +198,156 @@ fun OAuthCloudConnectModal(
     var authStepText by remember { mutableStateOf("") }
     var authError by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val emailFocusRequester = remember { FocusRequester() }
+    val passwordFocusRequester = remember { FocusRequester() }
 
-    if (showWebAutofillLogin) {
-        CloudWebAutofillLoginDialog(
-            provider = provider,
-            onLoginSuccess = { email, token ->
-                showWebAutofillLogin = false
-                isAuthenticating = true
-                authError = null
-                authStepText = "Conectando conta autenticada do ${provider.displayName}..."
-                coroutineScope.launch {
-                    val result = cloudService.authenticateAndConnect(
-                        providerId = provider.id,
-                        serverUrl = provider.defaultServerUrl,
-                        usernameOrEmail = email,
-                        passwordOrToken = token,
-                        isTemporary = false
-                    )
-                    isAuthenticating = false
-                    if (result.success) {
-                        onAuthorize(result.accountDisplayName.ifBlank { email }, provider.defaultServerUrl, token)
-                    } else {
-                        authError = result.errorMessage ?: "Falha ao conectar com a conta."
-                    }
-                }
-            },
-            onDismiss = { showWebAutofillLogin = false }
+    // Native Android Autofill integration
+    val autofill = LocalAutofill.current
+    val autofillTree = LocalAutofillTree.current
+    val systemAutofillManager = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                context.getSystemService(AutofillManager::class.java)
+            } catch (_: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+    }
+
+    val currentOnEmailFill by rememberUpdatedState<(String) -> Unit> { filled ->
+        emailInput = filled
+        authError = null
+    }
+    val currentOnPasswordFill by rememberUpdatedState<(String) -> Unit> { filled ->
+        passwordInput = filled
+        authError = null
+    }
+
+    val emailAutofillNode = remember {
+        AutofillNode(
+            autofillTypes = listOf(AutofillType.EmailAddress, AutofillType.Username),
+            onFill = { currentOnEmailFill(it) }
+        )
+    }
+    val passwordAutofillNode = remember {
+        AutofillNode(
+            autofillTypes = listOf(AutofillType.Password),
+            onFill = { currentOnPasswordFill(it) }
         )
     }
 
-    Dialog(
-        onDismissRequest = {
-            if (!isAuthenticating) {
-                focusManager.clearFocus(force = true)
-                keyboardController?.hide()
-                onDismiss()
+    DisposableEffect(autofillTree, selectedTab, isAuthenticating) {
+        if (selectedTab == 0 && !isAuthenticating) {
+            autofillTree += emailAutofillNode
+            autofillTree += passwordAutofillNode
+        } else {
+            autofillTree.children.remove(emailAutofillNode.id)
+            autofillTree.children.remove(passwordAutofillNode.id)
+        }
+        onDispose {
+            autofillTree.children.remove(emailAutofillNode.id)
+            autofillTree.children.remove(passwordAutofillNode.id)
+        }
+    }
+
+    fun triggerAutofillPickerForEmail() {
+        emailFocusRequester.requestFocus()
+        val box = emailAutofillNode.boundingBox
+        if (box != null) {
+            autofill?.requestAutofillForNode(emailAutofillNode)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && systemAutofillManager?.isEnabled == true) {
+                try {
+                    val rect = AndroidRect(
+                        box.left.roundToInt(),
+                        box.top.roundToInt(),
+                        box.right.roundToInt(),
+                        box.bottom.roundToInt()
+                    )
+                    systemAutofillManager.requestAutofill(hostView, emailAutofillNode.id, rect)
+                } catch (_: Exception) {}
             }
-        },
+        }
+    }
+
+    fun dismissSafely() {
+        if (isAuthenticating) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                systemAutofillManager?.cancel()
+            } catch (_: Exception) {}
+        }
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+        onDismiss()
+    }
+
+    fun submitAuth() {
+        val email = if (selectedTab == 1 && emailInput.isBlank()) {
+            "${provider.id.lowercase()}@cloud.storage"
+        } else {
+            emailInput.trim()
+        }
+        val passOrToken = if (selectedTab == 0) passwordInput.trim() else tokenInput.trim()
+
+        if (selectedTab == 0 && email.isBlank()) {
+            authError = "Por favor, digite seu e-mail do ${provider.displayName}."
+            return
+        }
+        if (passOrToken.isBlank()) {
+            authError = if (selectedTab == 0) {
+                "Por favor, digite a senha do usuário."
+            } else {
+                "Por favor, cole sua chave ou token de acesso."
+            }
+            return
+        }
+
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+        isAuthenticating = true
+        authError = null
+        authStepText = "Conectando ao ${provider.displayName}..."
+
+        coroutineScope.launch {
+            val result = cloudService.authenticateAndConnect(
+                providerId = provider.id,
+                serverUrl = serverUrlInput.trim(),
+                usernameOrEmail = email,
+                passwordOrToken = passOrToken,
+                isTemporary = false
+            )
+
+            if (result.success) {
+                if (selectedTab == 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && systemAutofillManager?.isEnabled == true) {
+                    try {
+                        systemAutofillManager.notifyValueChanged(
+                            hostView,
+                            emailAutofillNode.id,
+                            AutofillValue.forText(email)
+                        )
+                        systemAutofillManager.notifyValueChanged(
+                            hostView,
+                            passwordAutofillNode.id,
+                            AutofillValue.forText(passOrToken)
+                        )
+                        systemAutofillManager.commit()
+                    } catch (_: Exception) {}
+                }
+                isAuthenticating = false
+                onAuthorize(result.accountDisplayName.ifBlank { email }, serverUrlInput.trim(), passOrToken)
+            } else {
+                isAuthenticating = false
+                authError = result.errorMessage ?: "Falha ao conectar com o ${provider.displayName}."
+            }
+        }
+    }
+
+    Dialog(
+        onDismissRequest = { dismissSafely() },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         DisposableEffect(Unit) {
@@ -506,17 +359,20 @@ fun OAuthCloudConnectModal(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
-                .wrapContentHeight(),
+                .widthIn(max = 460.dp)
+                .wrapContentHeight()
+                .imePadding(),
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp)
                     .fillMaxWidth()
             ) {
-                // Header
+                // Compact Header
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
@@ -524,7 +380,7 @@ fun OAuthCloudConnectModal(
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = provider.primaryColor.copy(alpha = 0.12f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, provider.primaryColor.copy(alpha = 0.3f)),
+                        border = BorderStroke(1.dp, provider.primaryColor.copy(alpha = 0.3f)),
                         modifier = Modifier.size(44.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -540,19 +396,24 @@ fun OAuthCloudConnectModal(
                             text = "Conectar ao ${provider.displayName}",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "Navegue em seus arquivos diretamente no ArcBox",
+                            text = provider.authTypeLabel,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     IconButton(
-                        onClick = onDismiss,
+                        onClick = { dismissSafely() },
                         enabled = !isAuthenticating,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("cloud_close_button")
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Fechar")
                     }
@@ -590,78 +451,50 @@ fun OAuthCloudConnectModal(
                 }
 
                 if (!isAuthenticating) {
-                    // Google Autofill / Saved Password Action Card
+                    // Clean segmented method selector
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = provider.primaryColor.copy(alpha = 0.10f),
-                        border = androidx.compose.foundation.BorderStroke(1.2.dp, provider.primaryColor.copy(alpha = 0.45f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showWebAutofillLogin = true }
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = provider.primaryColor,
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.VpnKey,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.surface,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                            listOf("E-mail e Senha", "Chave / Token").forEachIndexed { index, title ->
+                                val isSelected = selectedTab == index
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                                    shadowElevation = if (isSelected) 1.dp else 0.dp,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 44.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            selectedTab = index
+                                            authError = null
+                                        }
+                                        .testTag(if (index == 0) "cloud_tab_credentials" else "cloud_tab_token")
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = title,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) provider.primaryColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Usar a Senha Salva do Google",
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Preenchimento automático do Android",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = provider.primaryColor,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 11.sp
-                                )
-                            }
-                            Icon(
-                                Icons.Default.ChevronRight,
-                                contentDescription = null,
-                                tint = provider.primaryColor
-                            )
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Method selection tabs
-                    TabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        contentColor = provider.primaryColor,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                    ) {
-                        Tab(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0; authError = null },
-                            text = { Text("E-mail e Senha", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
-                        )
-                        Tab(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1; authError = null },
-                            text = { Text("Chave / Token", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
-                        )
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -670,43 +503,119 @@ fun OAuthCloudConnectModal(
                         OutlinedTextField(
                             value = serverUrlInput,
                             onValueChange = { serverUrlInput = it; authError = null },
-                            label = { Text("URL do Servidor") },
+                            label = { Text("URL do Servidor", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null) },
                             singleLine = true,
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Uri,
+                                autoCorrectEnabled = false,
+                                imeAction = ImeAction.Next
                             ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            keyboardActions = KeyboardActions(
+                                onNext = {
+                                    if (selectedTab == 0) emailFocusRequester.requestFocus()
+                                }
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("cloud_server_url_input")
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                     }
 
                     if (selectedTab == 0) {
-                        // Email field
+                        val isAutofillSupported = remember(systemAutofillManager) {
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                                (systemAutofillManager?.isAutofillSupported == true)
+                        }
+
+                        // Email field with Android Autofill support
                         OutlinedTextField(
                             value = emailInput,
                             onValueChange = { emailInput = it; authError = null },
-                            label = { Text("E-mail da conta ${provider.displayName}") },
-                            placeholder = { Text("exemplo@email.com") },
+                            label = {
+                                Text(
+                                    text = "E-mail da conta ${provider.displayName}",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            placeholder = {
+                                Text("exemplo@email.com", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            },
                             leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            trailingIcon = when {
+                                emailInput.isNotEmpty() -> {
+                                    {
+                                        IconButton(onClick = { emailInput = ""; authError = null }) {
+                                            Icon(
+                                                Icons.Default.Clear,
+                                                contentDescription = "Limpar e-mail"
+                                            )
+                                        }
+                                    }
+                                }
+                                isAutofillSupported -> {
+                                    {
+                                        IconButton(
+                                            onClick = { triggerAutofillPickerForEmail() },
+                                            modifier = Modifier.testTag("cloud_autofill_button")
+                                        ) {
+                                            Icon(
+                                                Icons.Default.VpnKey,
+                                                contentDescription = "Preencher automaticamente",
+                                                tint = provider.primaryColor
+                                            )
+                                        }
+                                    }
+                                }
+                                else -> null
+                            },
+                            keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Email,
-                                imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                                autoCorrectEnabled = false,
+                                imeAction = ImeAction.Next
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onNext = { passwordFocusRequester.requestFocus() }
                             ),
                             singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(emailFocusRequester)
+                                .onGloballyPositioned { coordinates ->
+                                    emailAutofillNode.boundingBox = coordinates.boundsInWindow()
+                                }
+                                .onFocusChanged { focusState ->
+                                    if (focusState.isFocused) {
+                                        if (emailAutofillNode.boundingBox != null) {
+                                            autofill?.requestAutofillForNode(emailAutofillNode)
+                                        }
+                                    } else {
+                                        autofill?.cancelAutofillForNode(emailAutofillNode)
+                                    }
+                                }
+                                .testTag("cloud_email_input")
                         )
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Password field
+                        // Password field ("Senha do usuário") with Android Autofill support
                         OutlinedTextField(
                             value = passwordInput,
                             onValueChange = { passwordInput = it; authError = null },
-                            label = { Text("Senha da conta ou Senha de App") },
-                            placeholder = { Text("Digite sua senha") },
+                            label = {
+                                Text(
+                                    text = "Senha do usuário",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            placeholder = {
+                                Text("Digite sua senha", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            },
                             leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                             trailingIcon = {
                                 IconButton(onClick = { showPassword = !showPassword }) {
@@ -717,22 +626,34 @@ fun OAuthCloudConnectModal(
                                 }
                             },
                             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Password,
-                                imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                                autoCorrectEnabled = false,
+                                imeAction = ImeAction.Done
                             ),
-                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                                onDone = {
-                                    focusManager.clearFocus(force = true)
-                                    keyboardController?.hide()
-                                }
+                            keyboardActions = KeyboardActions(
+                                onDone = { submitAuth() }
                             ),
                             singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(passwordFocusRequester)
+                                .onGloballyPositioned { coordinates ->
+                                    passwordAutofillNode.boundingBox = coordinates.boundsInWindow()
+                                }
+                                .onFocusChanged { focusState ->
+                                    if (focusState.isFocused) {
+                                        if (passwordAutofillNode.boundingBox != null) {
+                                            autofill?.requestAutofillForNode(passwordAutofillNode)
+                                        }
+                                    } else {
+                                        autofill?.cancelAutofillForNode(passwordAutofillNode)
+                                    }
+                                }
+                                .testTag("cloud_password_input")
                         )
                     } else {
-                        // Key / Token / Passkey field
                         val tokenLabel = when (provider) {
                             CloudProvider.GOOGLE_DRIVE -> "Token OAuth2 (ya29...) ou Chave de Acesso"
                             CloudProvider.ONEDRIVE -> "Access Token ou Chave Microsoft Graph"
@@ -745,115 +666,56 @@ fun OAuthCloudConnectModal(
                         OutlinedTextField(
                             value = tokenInput,
                             onValueChange = { tokenInput = it; authError = null },
-                            label = { Text(tokenLabel) },
+                            label = { Text(tokenLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             placeholder = { Text("Cole aqui sua chave de acesso ou token") },
                             leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
                             singleLine = false,
                             maxLines = 3,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Autenticação direta com chave de API, access token ou credencial permanente.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp
+                            keyboardOptions = KeyboardOptions(
+                                autoCorrectEnabled = false,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = { submitAuth() }
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("cloud_token_input")
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
-                    // Buttons
+                    // Action buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(
-                            onClick = onDismiss,
-                            shape = RoundedCornerShape(12.dp)
+                            onClick = { dismissSafely() },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("cloud_cancel_button")
                         ) {
                             Text("Cancelar")
                         }
 
                         Button(
-                            onClick = {
-                                val email = if (selectedTab == 1 && emailInput.isBlank()) "${provider.id.lowercase()}@cloud.storage" else emailInput.trim()
-                                val passOrToken = if (selectedTab == 0) passwordInput.trim() else tokenInput.trim()
-
-                                if (selectedTab == 0 && email.isBlank()) {
-                                    authError = "Por favor, digite seu e-mail do ${provider.displayName}."
-                                    return@Button
-                                }
-                                if (passOrToken.isBlank()) {
-                                    authError = if (selectedTab == 0) "Por favor, digite sua senha." else "Por favor, cole sua chave ou token de acesso."
-                                    return@Button
-                                }
-
-                                isAuthenticating = true
-                                authError = null
-                                authStepText = "Conectando aos servidores do ${provider.displayName}..."
-
-                                coroutineScope.launch {
-                                    val result = cloudService.authenticateAndConnect(
-                                        providerId = provider.id,
-                                        serverUrl = serverUrlInput.trim(),
-                                        usernameOrEmail = email,
-                                        passwordOrToken = passOrToken,
-                                        isTemporary = false
-                                    )
-
-                                    if (result.success) {
-                                        isAuthenticating = false
-                                        onAuthorize(result.accountDisplayName.ifBlank { email }, serverUrlInput.trim(), passOrToken)
-                                    } else {
-                                        isAuthenticating = false
-                                        authError = result.errorMessage ?: "Falha ao conectar com o ${provider.displayName}."
-                                    }
-                                }
-                            },
+                            onClick = { submitAuth() },
                             colors = ButtonDefaults.buttonColors(containerColor = provider.primaryColor),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("cloud_connect_button")
                         ) {
                             Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Conectar", fontWeight = FontWeight.Bold)
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Offline safe storage option
-                    OutlinedButton(
-                        onClick = {
-                            val email = if (emailInput.isNotBlank()) emailInput.trim() else "local@${provider.id}.storage"
-                            isAuthenticating = true
-                            authError = null
-                            authStepText = "Criando armazenamento seguro local..."
-                            coroutineScope.launch {
-                                val result = cloudService.authenticateAndConnect(
-                                    providerId = provider.id,
-                                    serverUrl = serverUrlInput.trim(),
-                                    usernameOrEmail = email,
-                                    passwordOrToken = "local_${provider.id}",
-                                    isTemporary = false
-                                )
-                                isAuthenticating = false
-                                if (result.success) {
-                                    onAuthorize(email, serverUrlInput.trim(), "local_${provider.id}")
-                                } else {
-                                    authError = result.errorMessage ?: "Erro ao inicializar pasta local."
-                                }
-                            }
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.FolderShared, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Criar Pasta Segura Offline (${provider.displayName})", fontSize = 12.sp)
                     }
                 } else {
                     // Authenticating progress view

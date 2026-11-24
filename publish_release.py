@@ -2,15 +2,16 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.39'
-name = 'Arcbox File Manager v1.0.39'
-body = """## 🚀 Novidades da Versão v1.0.39
+tag = 'v1.0.40'
+name = 'Arcbox File Manager v1.0.40'
+body = """## 🚀 Novidades da Versão v1.0.40
 
-- 🔍 **Pesquisas e Filtros Restritos ao Local Aberto**:
-  - Os filtros de categoria (**Imagens**, **Vídeos**, **Áudios**, **Docs**, **APK**, **ZIPs**, **Código**, **Outros**) e a busca por texto agora pesquisam exclusivamente dentro da pasta atualmente aberta, sem misturar arquivos de outras pastas do armazenamento.
-  - Suporte completo para armazenamento local, SAF (`content://`) e provedores de nuvem (`/cloud/...`).
-- 🧹 **Limpeza Automática de Actions e Artefatos**:
-  - Workflows de GitHub Actions atualizados para remover execuções e artefatos antigos a cada `push`, preservando apenas os últimos 10.
+- 🔐 **Preenchimento Automático Nativo do Android no Login em Nuvem**:
+  - Suporte nativo ao gerenciador de senhas do Android (`AutofillNode`, `LocalAutofill`, `LocalAutofillTree` e `AutofillManager.requestAutofill`) diretamente nos campos de e-mail/usuário e senha do modal de conexão em nuvem, com botão rápido de preenchimento e envio/commit das credenciais ao autenticar.
+- ✨ **Interface de Autenticação Mais Limpa e Acessível**:
+  - Campo de senha renomeado para **"Senha do usuário"** em linha única, com `ImeAction.Next`/`Done`.
+  - Removidos o card redundante *"Usar a Senha Salva do Google"* e o botão *"Criar Pasta Segura Offline"*, além de melhorias de responsividade (`verticalScroll` + `imePadding`) e novo seletor de abas em pílula.
+  - Novos testes Robolectric (`OAuthCloudConnectModalTest`) validando o preenchimento automático e os elementos da interface.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

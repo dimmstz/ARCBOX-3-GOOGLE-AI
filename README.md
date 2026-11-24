@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.39-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.39"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.40-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.40"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,7 +18,20 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.39
+## 🚀 Novidades da Versão v1.0.40
+
+- 🔐 **Preenchimento Automático Nativo do Android no Login em Nuvem**:
+  - Suporte nativo ao gerenciador de senhas do Android (`AutofillNode`, `LocalAutofill`, `LocalAutofillTree` e `AutofillManager.requestAutofill`) diretamente nos campos de e-mail/usuário e senha do modal de conexão (`OAuthCloudConnectModal`), incluindo botão rápido para acionar o preenchimento e registro automático de credenciais ao concluir o login.
+- ✨ **Interface de Autenticação Mais Limpa e Acessível**:
+  - Campo de senha renomeado para **"Senha do usuário"** com layout em linha única e ações de teclado (`ImeAction.Next` / `ImeAction.Done`).
+  - Removidos o card redundante *"Usar a Senha Salva do Google"* (WebView auxiliar) e o botão *"Criar Pasta Segura Offline"*, substituindo a barra de abas por um seletor em pílula com rolagem e ajuste ao teclado (`verticalScroll` + `imePadding`).
+  - Adicionados testes de UI em Robolectric (`OAuthCloudConnectModalTest`) validando o preenchimento automático e a limpeza do modal.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.39
 
 - 🔍 **Pesquisas e Filtros Restritos ao Local Aberto**:
   - Os filtros de categoria (**Imagens**, **Vídeos**, **Áudios**, **Docs**, **APK**, **ZIPs**, **Código**, **Outros**) e a busca por texto agora pesquisam exclusivamente dentro da pasta atualmente aberta (`directoryPath`), evitando misturar arquivos de outras pastas ou da raiz do armazenamento.
@@ -26,10 +39,6 @@
   - Adicionados testes automatizados (`ScopedCategoryAndSearchTest`) para validar o isolamento de busca e filtros por pasta.
 - 🧹 **Limpeza Automática de Actions e Artefatos no GitHub**:
   - Os workflows de CI/CD (`.github/workflows/android.yml` e `.github/workflows/build-release.yml`) agora executam limpeza automática a cada `push`, preservando apenas os **10 últimos** workflow runs e os **10 últimos** artefatos.
-
----
-
-## 📋 Histórico de Versões
 
 ### v1.0.38
 
