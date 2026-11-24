@@ -13,6 +13,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   build:
@@ -84,3 +85,81 @@ jobs:
           path: app/build/reports/tests/testDebugUnitTest/
           if-no-files-found: ignore
           retention-days: 7
+
+  cleanup:
+    name: Cleanup Old Actions & Artifacts
+    runs-on: ubuntu-latest
+    needs: build
+    if: always() && github.event_name == 'push'
+    permissions:
+      actions: write
+    steps:
+      - name: Preserve Only Last 10 Runs and Artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'EOF'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          token = os.environ["GITHUB_TOKEN"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          current_run_id = int(os.environ.get("CURRENT_RUN_ID", "0"))
+          keep_count = 10
+          base_url = f"https://api.github.com/repos/{repo}/actions"
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "arcbox-actions-cleanup",
+          }
+
+          def api_request(url, method="GET"):
+              req = urllib.request.Request(url, method=method, headers=headers)
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  body = resp.read().decode("utf-8")
+                  return json.loads(body) if body else {}
+
+          def fetch_all(endpoint, key):
+              items = []
+              for page in range(1, 11):
+                  data = api_request(f"{base_url}/{endpoint}?per_page=100&page={page}")
+                  batch = data.get(key, [])
+                  if not batch:
+                      break
+                  items.extend(batch)
+                  if len(batch) < 100:
+                      break
+              items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+              return items
+
+          # 1. Clean old artifacts (keep 10 most recent)
+          artifacts = fetch_all("artifacts", "artifacts")
+          deleted_artifacts = 0
+          for artifact in artifacts[keep_count:]:
+              aid = artifact["id"]
+              try:
+                  api_request(f"{base_url}/artifacts/{aid}", method="DELETE")
+                  deleted_artifacts += 1
+              except urllib.error.HTTPError as e:
+                  print(f"Skipping artifact {aid}: HTTP {e.code}")
+          print(f"Artifacts preserved: {min(len(artifacts), keep_count)}, deleted: {deleted_artifacts}")
+
+          # 2. Clean old workflow runs (keep 10 most recent)
+          runs = fetch_all("runs", "workflow_runs")
+          deleted_runs = 0
+          for run in runs[keep_count:]:
+              rid = run["id"]
+              if rid == current_run_id or run.get("status") != "completed":
+                  continue
+              try:
+                  api_request(f"{base_url}/runs/{rid}", method="DELETE")
+                  deleted_runs += 1
+              except urllib.error.HTTPError as e:
+                  print(f"Skipping run {rid}: HTTP {e.code}")
+          print(f"Workflow runs preserved: {min(len(runs), keep_count)}, deleted: {deleted_runs}")
+          EOF

@@ -619,112 +619,123 @@ class FileRepository(private val context: Context) {
         }
         val items = mutableListOf<FileItem>()
 
-        if (filterCategory != null) {
-            if (safUriString != null && safUriString.startsWith("content://")) {
-                // Read recursively via SAF DocumentFile
-                val treeUri = Uri.parse(safUriString)
-                val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
-                if (rootDoc != null && rootDoc.isDirectory) {
-                    suspend fun traverseDoc(doc: DocumentFile) {
-                        val name = doc.name ?: "Sem nome"
-                        if (name == "Android" || name.startsWith(".")) {
-                            return
-                        }
-                        if (doc.isDirectory) {
-                            val children = doc.listFiles()
-                            for (child in children) {
-                                traverseDoc(child)
-                            }
-                        } else {
-                            val ext = name.substringAfterLast('.', "").lowercase()
-                            val type = getFileTypeFromExtension(ext, doc.type)
-                            val matchesSearch = searchQuery.isBlank() || FileSearchMatcher.matches(name, searchQuery)
-                            if (matchesSearch && (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL))) {
-                                val item = FileItem(
-                                    id = doc.uri.toString(),
-                                    name = name,
-                                    path = doc.uri.toString(),
-                                    safUriString = doc.uri.toString(),
-                                    size = doc.length(),
-                                    lastModified = doc.lastModified(),
-                                    isDirectory = false,
-                                    fileType = type,
-                                    extension = ext,
-                                    isFavorite = favoritePaths.contains(doc.uri.toString()),
-                                    childCount = 0,
-                                    mimeType = doc.type ?: "*/*"
-                                )
-                                items.add(item)
-                            }
-                        }
+        val matchedSafUri = if (directoryPath.startsWith("/cloud/") && safUriString == null) {
+            val providerSegment = directoryPath.removePrefix("/cloud/").substringBefore("/").lowercase()
+            val sub = directoryPath.removePrefix("/cloud/$providerSegment").trim('/')
+            if (sub.isEmpty()) {
+                safCloudManager.getRegisteredDrives().find {
+                    when (providerSegment) {
+                        "drive" -> it.providerType == "GOOGLE_DRIVE" || it.name.contains("Drive", ignoreCase = true)
+                        "onedrive" -> it.providerType == "ONEDRIVE" || it.name.contains("OneDrive", ignoreCase = true)
+                        "dropbox" -> it.providerType == "DROPBOX" || it.name.contains("Dropbox", ignoreCase = true)
+                        "mediafire" -> it.providerType == "MEDIAFIRE" || it.name.contains("MediaFire", ignoreCase = true) || it.name.contains("mediafire", ignoreCase = true)
+                        else -> false
                     }
-                    traverseDoc(rootDoc)
-                }
-            } else {
-                // Read recursively via standard Java File
-                val activeVolumePath = getStorageVolumes()
-                    .sortedByDescending { it.path.length }
-                    .find { directoryPath.startsWith(it.path) }?.path ?: directoryPath
-                val startDir = File(activeVolumePath)
-                if (startDir.exists() && startDir.isDirectory) {
-                    suspend fun traverse(dir: File) {
-                        if (dir.name == "Android" || dir.name.startsWith(".")) {
-                            return
+                }?.uriString
+            } else null
+        } else null
+
+        val effectiveSafUri = safUriString ?: matchedSafUri
+        val isSafTarget = directoryPath.startsWith("content://") || (effectiveSafUri != null && effectiveSafUri.startsWith("content://"))
+
+        if (filterCategory != null) {
+            if (isSafTarget) {
+                val safTargetUriStr = if (directoryPath.startsWith("content://")) directoryPath else (effectiveSafUri ?: "")
+                if (safTargetUriStr.isNotBlank()) {
+                    val targetUri = Uri.parse(safTargetUriStr)
+                    val rootDoc = try {
+                        if (safTargetUriStr.contains("/tree/")) {
+                            DocumentFile.fromTreeUri(context, targetUri) ?: DocumentFile.fromSingleUri(context, targetUri)
+                        } else {
+                            DocumentFile.fromSingleUri(context, targetUri) ?: DocumentFile.fromTreeUri(context, targetUri)
                         }
-                        val files = dir.listFiles() ?: return
-                        for (file in files) {
-                            if (file.isDirectory) {
-                                traverse(file)
-                            } else {
-                                val name = file.name
-                                if (name.startsWith(".")) {
-                                    continue
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (rootDoc != null && rootDoc.isDirectory) {
+                        val visited = mutableSetOf<String>()
+                        suspend fun traverseDoc(doc: DocumentFile, depth: Int = 0) {
+                            if (depth > 25) return
+                            val uriStr = doc.uri.toString()
+                            if (!visited.add(uriStr)) return
+                            val name = doc.name ?: "Sem nome"
+                            if (doc != rootDoc) {
+                                if (!showHiddenFiles && name.startsWith(".")) return
+                                if (name == "Android") return
+                            }
+                            if (doc.isDirectory) {
+                                val children = try { doc.listFiles() } catch (_: Exception) { emptyArray() }
+                                for (child in children) {
+                                    traverseDoc(child, depth + 1)
                                 }
-                                val ext = file.extension.lowercase()
-                                val mime = getMimeType(file)
-                                val type = getFileTypeFromExtension(ext, mime)
+                            } else {
+                                val ext = name.substringAfterLast('.', "").lowercase()
+                                val type = getFileTypeFromExtension(ext, doc.type)
                                 val matchesSearch = searchQuery.isBlank() || FileSearchMatcher.matches(name, searchQuery)
                                 if (matchesSearch && (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL))) {
                                     val item = FileItem(
-                                        id = file.absolutePath,
+                                        id = uriStr,
                                         name = name,
-                                        path = file.absolutePath,
-                                        size = file.length(),
-                                        lastModified = file.lastModified(),
+                                        path = uriStr,
+                                        safUriString = uriStr,
+                                        size = doc.length(),
+                                        lastModified = doc.lastModified(),
                                         isDirectory = false,
                                         fileType = type,
                                         extension = ext,
-                                        isFavorite = favoritePaths.contains(file.absolutePath),
+                                        isFavorite = favoritePaths.contains(uriStr),
                                         childCount = 0,
-                                        mimeType = mime
+                                        mimeType = doc.type ?: "*/*"
                                     )
                                     items.add(item)
                                 }
                             }
                         }
+                        traverseDoc(rootDoc)
                     }
-                    traverse(startDir)
                 }
+            } else if (directoryPath.startsWith("/cloud/")) {
+                val (providerSegment, subPath) = parseCloudPath(directoryPath)
+                val isConnected = prefs.getBoolean("cloud_connected_$providerSegment", false) ||
+                    (cloudStorageService.getProvider(providerSegment)?.isConnected == true)
+                if (isConnected) {
+                    items.addAll(
+                        searchRemoteCloudRecursive(
+                            providerSegment = providerSegment,
+                            startSubPath = subPath,
+                            query = searchQuery,
+                            favoritePaths = favoritePaths,
+                            showHiddenFiles = showHiddenFiles,
+                            filterCategory = filterCategory
+                        )
+                    )
+                } else {
+                    val startDir = resolveFile(directoryPath)
+                    items.addAll(
+                        searchLocalCategory(
+                            startDir = startDir,
+                            virtualBasePath = directoryPath,
+                            searchQuery = searchQuery,
+                            filterCategory = filterCategory,
+                            favoritePaths = favoritePaths,
+                            showHiddenFiles = showHiddenFiles
+                        )
+                    )
+                }
+            } else {
+                val startDir = resolveFile(directoryPath)
+                items.addAll(
+                    searchLocalCategory(
+                        startDir = startDir,
+                        virtualBasePath = null,
+                        searchQuery = searchQuery,
+                        filterCategory = filterCategory,
+                        favoritePaths = favoritePaths,
+                        showHiddenFiles = showHiddenFiles
+                    )
+                )
             }
         } else {
-            val matchedSafUri = if (directoryPath.startsWith("/cloud/") && safUriString == null) {
-                val providerSegment = directoryPath.removePrefix("/cloud/").substringBefore("/").lowercase()
-                val sub = directoryPath.removePrefix("/cloud/$providerSegment").trim('/')
-                if (sub.isEmpty()) {
-                    safCloudManager.getRegisteredDrives().find {
-                        when (providerSegment) {
-                            "drive" -> it.providerType == "GOOGLE_DRIVE" || it.name.contains("Drive", ignoreCase = true)
-                            "onedrive" -> it.providerType == "ONEDRIVE" || it.name.contains("OneDrive", ignoreCase = true)
-                            "dropbox" -> it.providerType == "DROPBOX" || it.name.contains("Dropbox", ignoreCase = true)
-                            "mediafire" -> it.providerType == "MEDIAFIRE" || it.name.contains("MediaFire", ignoreCase = true) || it.name.contains("mediafire", ignoreCase = true)
-                            else -> false
-                        }
-                    }?.uriString
-                } else null
-            } else null
-
-            val effectiveSafUri = safUriString ?: matchedSafUri
-            val isSafTarget = directoryPath.startsWith("content://") || (effectiveSafUri != null && effectiveSafUri.startsWith("content://"))
             if (isSafTarget) {
                 val safTargetUriStr = if (directoryPath.startsWith("content://")) directoryPath else (effectiveSafUri ?: "")
                 if (safTargetUriStr.isNotBlank()) {
@@ -748,7 +759,7 @@ class FileRepository(private val context: Context) {
                             val files = try { dir.listFiles() } catch (_: Exception) { emptyArray() }
                             for (doc in files) {
                                 val docName = doc.name ?: continue
-                                if (docName.startsWith(".")) continue
+                                if (!showHiddenFiles && docName.startsWith(".")) continue
                                 if (FileSearchMatcher.matches(docName, searchQuery)) {
                                     val isDir = doc.isDirectory
                                     val ext = docName.substringAfterLast('.', "").lowercase()
@@ -826,20 +837,26 @@ class FileRepository(private val context: Context) {
                                 )
                             )
                         } else {
-                            val searchDir = resolveFile("/cloud/$providerSegment")
-                            items.addAll(searchRecursiveCloudOrLocal(searchDir, "/cloud/$providerSegment", searchQuery, favoritePaths))
+                            val searchDir = resolveFile(directoryPath)
+                            items.addAll(
+                                searchRecursiveCloudOrLocal(
+                                    dir = searchDir,
+                                    virtualPath = directoryPath,
+                                    query = searchQuery,
+                                    favoritePaths = favoritePaths,
+                                    showHiddenFiles = showHiddenFiles
+                                )
+                            )
                         }
                     } else {
-                        val volumes = getStorageVolumes()
-                        val rootDirPath = volumes.sortedByDescending { it.path.length }
-                            .find { directoryPath.startsWith(it.path) }?.path
-                            ?: if (directoryPath.startsWith("/storage/emulated/0") || directoryPath.startsWith("/sdcard")) {
-                                Environment.getExternalStorageDirectory()?.absolutePath ?: "/storage/emulated/0"
-                            } else {
-                                volumes.firstOrNull()?.path ?: directoryPath
-                            }
-                        val searchDir = resolveFile(rootDirPath)
-                        val searchResults = searchRecursiveCloudOrLocal(searchDir, rootDirPath, searchQuery, favoritePaths)
+                        val searchDir = resolveFile(directoryPath)
+                        val searchResults = searchRecursiveCloudOrLocal(
+                            dir = searchDir,
+                            virtualPath = searchDir.absolutePath,
+                            query = searchQuery,
+                            favoritePaths = favoritePaths,
+                            showHiddenFiles = showHiddenFiles
+                        )
                         items.addAll(searchResults)
                     }
                 } else {
@@ -952,8 +969,8 @@ class FileRepository(private val context: Context) {
 
         // Apply category filter if present
         if (filterCategory != null) {
-            filtered = filtered.filter { 
-                it.isDirectory || it.fileType == filterCategory || (filterCategory == FileType.OTHER && it.fileType == FileType.TEMP_RESIDUAL) 
+            filtered = filtered.filter {
+                !it.isDirectory && (it.fileType == filterCategory || (filterCategory == FileType.OTHER && it.fileType == FileType.TEMP_RESIDUAL))
             }
         }
 
@@ -976,12 +993,74 @@ class FileRepository(private val context: Context) {
         dirs + nonDirs
     }
 
+    private fun searchLocalCategory(
+        startDir: File,
+        virtualBasePath: String?,
+        searchQuery: String,
+        filterCategory: FileType,
+        favoritePaths: Set<String>,
+        showHiddenFiles: Boolean
+    ): List<FileItem> {
+        val result = mutableListOf<FileItem>()
+        if (!startDir.exists() || !startDir.isDirectory) return result
+        val visited = mutableSetOf<String>()
+
+        fun traverse(dir: File, currentVirtualPath: String?) {
+            val canonical = try { dir.canonicalPath } catch (_: Exception) { dir.absolutePath }
+            if (!visited.add(canonical)) return
+
+            if (dir != startDir) {
+                if (!showHiddenFiles && dir.name.startsWith(".")) return
+                val isRestrictedAndroidSubdir = dir.name.equals("Android", ignoreCase = true) &&
+                    (dir.parentFile?.absolutePath == "/storage/emulated/0" || dir.parentFile?.name == "0")
+                if (isRestrictedAndroidSubdir) return
+            }
+
+            val files = try { dir.listFiles() } catch (_: Exception) { null } ?: return
+            for (file in files) {
+                val name = file.name
+                if (!showHiddenFiles && name.startsWith(".")) continue
+                val childVirtualPath = currentVirtualPath?.let { it.removeSuffix("/") + "/" + name }
+                if (file.isDirectory) {
+                    traverse(file, childVirtualPath)
+                } else {
+                    val ext = file.extension.lowercase()
+                    val mime = getMimeType(file)
+                    val type = getFileTypeFromExtension(ext, mime)
+                    val matchesSearch = searchQuery.isBlank() || FileSearchMatcher.matches(name, searchQuery)
+                    if (matchesSearch && (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL))) {
+                        val itemPath = childVirtualPath ?: file.absolutePath
+                        result.add(
+                            FileItem(
+                                id = itemPath,
+                                name = name,
+                                path = itemPath,
+                                size = file.length(),
+                                lastModified = file.lastModified(),
+                                isDirectory = false,
+                                fileType = type,
+                                extension = ext,
+                                isFavorite = favoritePaths.contains(itemPath),
+                                childCount = 0,
+                                mimeType = mime
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        traverse(startDir, virtualBasePath)
+        return result
+    }
+
     private fun searchRecursiveCloudOrLocal(
         dir: File,
         virtualPath: String,
         query: String,
         favoritePaths: Set<String>,
-        visitedPaths: MutableSet<String> = mutableSetOf()
+        showHiddenFiles: Boolean = false,
+        visitedPaths: MutableSet<String> = mutableSetOf(),
+        isRootCall: Boolean = true
     ): List<FileItem> {
         val result = mutableListOf<FileItem>()
         if (!dir.exists() || !dir.isDirectory) return result
@@ -992,7 +1071,7 @@ class FileRepository(private val context: Context) {
         val files = try { dir.listFiles() } catch (_: Exception) { null } ?: return result
         for (file in files) {
             val name = file.name
-            if (name.startsWith(".")) continue
+            if (!showHiddenFiles && name.startsWith(".")) continue
             val itemVirtualPath = if (virtualPath.startsWith("/cloud/")) {
                 virtualPath.removeSuffix("/") + "/" + name
             } else {
@@ -1025,7 +1104,17 @@ class FileRepository(private val context: Context) {
                 val isRestrictedAndroidSubdir = name.equals("Android", ignoreCase = true) && 
                     (file.parentFile?.absolutePath == "/storage/emulated/0" || file.parentFile?.name == "0")
                 if (!isRestrictedAndroidSubdir) {
-                    result.addAll(searchRecursiveCloudOrLocal(file, itemVirtualPath, query, favoritePaths, visitedPaths))
+                    result.addAll(
+                        searchRecursiveCloudOrLocal(
+                            dir = file,
+                            virtualPath = itemVirtualPath,
+                            query = query,
+                            favoritePaths = favoritePaths,
+                            showHiddenFiles = showHiddenFiles,
+                            visitedPaths = visitedPaths,
+                            isRootCall = false
+                        )
+                    )
                 }
             }
         }
@@ -1038,6 +1127,7 @@ class FileRepository(private val context: Context) {
         query: String,
         favoritePaths: Set<String>,
         showHiddenFiles: Boolean,
+        filterCategory: FileType? = null,
         maxDepth: Int = 5
     ): List<FileItem> {
         val result = mutableListOf<FileItem>()
@@ -1059,10 +1149,13 @@ class FileRepository(private val context: Context) {
                 if (!showHiddenFiles && rf.name.startsWith(".")) continue
                 val childSub = if (subPath.isBlank()) rf.name else "$subPath/${rf.name}"
                 val itemPath = "/cloud/$providerSegment/$childSub"
-                if (FileSearchMatcher.matches(rf.name, query)) {
-                    val ext = rf.name.substringAfterLast('.', "").lowercase()
-                    val mime = rf.mimeType.ifBlank { getMimeTypeFromExtension(ext) }
-                    val type = if (rf.isDirectory) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                val ext = rf.name.substringAfterLast('.', "").lowercase()
+                val mime = rf.mimeType.ifBlank { getMimeTypeFromExtension(ext) }
+                val type = if (rf.isDirectory) FileType.FOLDER else getFileTypeFromExtension(ext, mime)
+                val matchesQuery = query.isBlank() || FileSearchMatcher.matches(rf.name, query)
+                val matchesCategory = filterCategory == null || (!rf.isDirectory && (type == filterCategory || (filterCategory == FileType.OTHER && type == FileType.TEMP_RESIDUAL)))
+
+                if (matchesQuery && matchesCategory) {
                     result.add(
                         FileItem(
                             id = itemPath,

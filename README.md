@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.38-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.38"></a>
+  <a href="releases"><img src="https://img.shields.io/badge/Vers%C3%A3o-v1.0.39-blue.svg?style=flat-square&logo=android" alt="Versão v1.0.39"></a>
   <img src="https://img.shields.io/badge/Android-10%20a%2016-green.svg?style=flat-square" alt="Compatibilidade Android">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?style=flat-square" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/Kotlin-100%25-orange.svg?style=flat-square" alt="Kotlin">
@@ -18,17 +18,26 @@
 
 ---
 
-## 🚀 Novidades da Versão v1.0.38
+## 🚀 Novidades da Versão v1.0.39
+
+- 🔍 **Pesquisas e Filtros Restritos ao Local Aberto**:
+  - Os filtros de categoria (**Imagens**, **Vídeos**, **Áudios**, **Docs**, **APK**, **ZIPs**, **Código**, **Outros**) e a busca por texto agora pesquisam exclusivamente dentro da pasta atualmente aberta (`directoryPath`), evitando misturar arquivos de outras pastas ou da raiz do armazenamento.
+  - Suporte completo ao filtro por categoria dentro de pastas locais, diretórios SAF (`content://`) e pastas em nuvem (`/cloud/...`), respeitando a exibição de arquivos ocultos.
+  - Adicionados testes automatizados (`ScopedCategoryAndSearchTest`) para validar o isolamento de busca e filtros por pasta.
+- 🧹 **Limpeza Automática de Actions e Artefatos no GitHub**:
+  - Os workflows de CI/CD (`.github/workflows/android.yml` e `.github/workflows/build-release.yml`) agora executam limpeza automática a cada `push`, preservando apenas os **10 últimos** workflow runs e os **10 últimos** artefatos.
+
+---
+
+## 📋 Histórico de Versões
+
+### v1.0.38
 
 - ☁️ **Correção de Conexão em Provedores de Nuvem (Login com E-mail/Senha e Tokens Curtos)**:
   - **Salvamento Resiliente de Sessão**: Correção definitiva no fluxo de autenticação (Google Drive, OneDrive, Dropbox, MediaFire, WebDAV e MEGA) onde tokens não-remotos, credenciais de e-mail/senha ou tokens menores que 24 caracteres falhavam na validação remota rigorosa e rejeitavam o salvamento da conexão.
   - **Modo Workspace Seguro**: Provedores agora tratam com sucesso logins locais/customizados salvando a sessão e garantindo acesso imediato aos arquivos do usuário.
 - 🔔 **Aviso de Atualização Otimizado**:
   - Verificação única na inicialização do app e cancelamento completo de downloads ao fechar ou cancelar o modal.
-
----
-
-## 📋 Histórico de Versões
 
 ### v1.0.37
 

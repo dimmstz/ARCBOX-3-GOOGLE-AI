@@ -2,14 +2,15 @@ import urllib.request, json, os
 
 token = os.environ.get('GITHUB_TOKEN', '')
 repo = 'dimmstz/ARCBOX-3-GOOGLE-AI'
-tag = 'v1.0.38'
-name = 'Arcbox File Manager v1.0.38'
-body = """## 🚀 Novidades da Versão v1.0.38
+tag = 'v1.0.39'
+name = 'Arcbox File Manager v1.0.39'
+body = """## 🚀 Novidades da Versão v1.0.39
 
-- ☁️ **Correção de Conexão em Provedores de Nuvem (Login com E-mail/Senha e Tokens Curtos)**:
-  - Salvamento resiliente de sessão para conexões de nuvem ao utilizar e-mail/senha ou tokens curtos.
-- 🔔 **Aviso de Atualização Otimizado**:
-  - Verificação única na inicialização e cancelamento completo de downloads ao fechar ou cancelar o modal.
+- 🔍 **Pesquisas e Filtros Restritos ao Local Aberto**:
+  - Os filtros de categoria (**Imagens**, **Vídeos**, **Áudios**, **Docs**, **APK**, **ZIPs**, **Código**, **Outros**) e a busca por texto agora pesquisam exclusivamente dentro da pasta atualmente aberta, sem misturar arquivos de outras pastas do armazenamento.
+  - Suporte completo para armazenamento local, SAF (`content://`) e provedores de nuvem (`/cloud/...`).
+- 🧹 **Limpeza Automática de Actions e Artefatos**:
+  - Workflows de GitHub Actions atualizados para remover execuções e artefatos antigos a cada `push`, preservando apenas os últimos 10.
 """
 
 url = f'https://api.github.com/repos/{repo}/releases'

@@ -1403,7 +1403,7 @@ fun EmptySearchState(
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Não encontramos nenhum arquivo para \"$searchQuery\" nesta unidade.",
+            text = "Não encontramos nenhum arquivo para \"$searchQuery\" neste local.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
